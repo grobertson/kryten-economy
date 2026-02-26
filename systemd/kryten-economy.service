@@ -1,0 +1,32 @@
+[Unit]
+Description=kryten-economy — Channel engagement currency system
+After=network-online.target nats-server.service
+Wants=network-online.target nats-server.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=kryten
+Group=kryten
+WorkingDirectory=/opt/kryten/economy
+ExecStart=/opt/kryten/economy/.venv/bin/python -m kryten_economy
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kryten-economy
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=50%
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/kryten/economy
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

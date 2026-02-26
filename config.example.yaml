@@ -1,0 +1,567 @@
+# ══════════════════════════════════════════════════════════════
+#  kryten-economy — Configuration Reference
+# ══════════════════════════════════════════════════════════════
+# All values shown are defaults. Every rate, threshold, reward,
+# cost, and behavior is tunable here without code changes.
+#
+# Environment variable expansion: ${VAR} and ${VAR:-default}
+# ══════════════════════════════════════════════════════════════
+
+# ── NATS Connection (standard kryten-py) ─────────────────────
+nats:
+  servers: ["nats://localhost:4222"]
+
+# ── Channel(s) to operate in ─────────────────────────────────
+channels:
+  - domain: cytu.be
+    channel: mychannel
+
+# ── Service Identity (standard kryten-py) ────────────────────
+service:
+  name: economy
+  version: "1.0.0"
+  enable_lifecycle: true
+  enable_heartbeat: true
+  heartbeat_interval: 30
+
+# ── Prometheus Metrics (standard kryten-py) ──────────────────
+metrics:
+  port: 28286
+
+# ── Persistence ──────────────────────────────────────────────
+database:
+  path: economy.db
+
+# ── Currency Identity ────────────────────────────────────────
+currency:
+  name: "Z-Coin"
+  symbol: "Z"
+  plural: "Z-Coins"
+
+# ── Bot Account ──────────────────────────────────────────────
+bot:
+  username: "ZCoinBot"
+
+# ── Ignored Users ────────────────────────────────────────────
+# Usernames listed here are completely invisible to the economy.
+# They do not earn, do not count as "present" for rain/events,
+# do not trigger social rewards (e.g. greeting a newcomer),
+# and are excluded from "first message" / "first after media"
+# type triggers. Use this for other bots in the channel.
+ignored_users:
+  - "CyTubeBot"
+  - "NepBot"
+  # Add any other bot accounts or service accounts here.
+  # Matching is case-insensitive.
+
+# ── Onboarding ───────────────────────────────────────────────
+onboarding:
+  welcome_wallet: 100
+  welcome_message: >
+    Welcome! You've got {amount} {currency}.
+    Stick around and you'll earn more. Try 'help' to see what you can do.
+  min_account_age_minutes: 0
+  min_messages_to_earn: 0
+
+# ── Presence Earning ─────────────────────────────────────────
+# DESIGN PRINCIPLE: Base presence rate is equal for AFK and active.
+# Active chatting earns BONUS Z on top. We never punish idling.
+presence:
+  base_rate_per_minute: 1       # Everyone earns this just for being connected
+  active_bonus_per_minute: 0    # Additional bonus for non-AFK users (0 = equal rates)
+  afk_threshold_minutes: 5     # Minutes without chat to be considered AFK
+
+  # Join debounce — protects against CyTube WebSocket instability.
+  # CyTube's WS connections are unstable; rapid disconnect/reconnect cycles
+  # ("bouncing") should not trigger join-based actions.
+  join_debounce_minutes: 5       # Minimum absence before a join counts as a "real" arrival
+  greeting_absence_minutes: 30   # Custom greetings require this much absence (session-level)
+
+  # Hourly dwell milestones (cumulative minutes within a calendar day)
+  # These reward sustained presence with escalating bonuses.
+  hourly_milestones:
+    1: 10       # 1 hour  → 10 Z
+    3: 30       # 3 hours → 30 Z
+    6: 75       # 6 hours → 75 Z
+    12: 200     # 12 hours → 200 Z
+    24: 1000    # 24 hours → 1,000 Z (aspirational, social flex)
+
+  # Night watch: bonus multiplier during configured off-peak hours.
+  # Rewards people who leave a tab open overnight.
+  night_watch:
+    enabled: true
+    hours: [2, 3, 4, 5, 6, 7]   # 24h format, UTC
+    multiplier: 1.5
+
+# ── Streaks ──────────────────────────────────────────────────
+streaks:
+  daily:
+    enabled: true
+    min_presence_minutes: 15     # Must be present this long to count a day
+    rewards:
+      2: 10
+      3: 20
+      4: 30
+      5: 50
+      6: 75
+      7: 100
+    milestone_7_bonus: 200       # On top of daily streak rewards
+    milestone_30_bonus: 2000
+
+  weekend_weekday_bridge:
+    enabled: true
+    bonus: 500
+    announce_on_weekend: true
+    message: "Connect any weekday this week for a {amount} {currency} bridge bonus!"
+
+# ── Rain Drops (Ambient Random Bonuses) ──────────────────────
+# Periodic random Z bonus to all connected users.
+# Creates a passive lottery that rewards presence.
+rain:
+  enabled: true
+  interval_minutes: 45           # Average (randomized ±30%)
+  min_amount: 5
+  max_amount: 25
+  pm_notification: true
+  message: "☔ Rain drop! You received {amount} {currency} just for being here."
+
+# ── Balance Maintenance (Interest or Decay) ──────────────────
+balance_maintenance:
+  mode: "interest"               # "interest", "decay", or "none"
+
+  interest:
+    daily_rate: 0.001
+    max_daily_interest: 10
+    min_balance_to_earn: 100
+
+  decay:
+    enabled: false
+    daily_rate: 0.005
+    exempt_below: 50000
+    label: "Vault maintenance fee"
+
+# ── Retention ────────────────────────────────────────────────
+retention:
+  welcome_back:
+    enabled: true
+    days_absent: 7
+    bonus: 100
+    message: "Welcome back! Here's {amount} {currency}. You've been missed. 💚"
+
+  inactivity_nudge:
+    enabled: false
+    days_absent: 14
+    message: "We miss you! Your balance of {balance} {currency} is waiting."
+
+# ══════════════════════════════════════════════════════════════
+#  Sprint 3+ — Defined in config.py with defaults, not yet used
+# ══════════════════════════════════════════════════════════════
+
+# ── Chat Earning Triggers ────────────────────────────────────
+# Active chat earns BONUS Z on top of passive presence.
+# Each trigger has: enabled, reward, cooldown/cap, hidden flag.
+chat_triggers:
+  long_message:
+    enabled: true
+    min_chars: 30
+    reward: 1
+    max_per_hour: 30
+    hidden: true
+
+  laugh_received:
+    enabled: true
+    reward_per_laugher: 2
+    max_laughers_per_joke: 10
+    self_excluded: true
+    hidden: true
+
+  kudos_received:
+    enabled: true
+    reward: 3
+    self_excluded: true
+    hidden: true
+
+  first_message_of_day:
+    enabled: true
+    reward: 5
+    hidden: true
+
+  conversation_starter:
+    enabled: true
+    min_silence_minutes: 10
+    reward: 10
+    hidden: true
+
+  first_after_media_change:
+    enabled: true
+    window_seconds: 30
+    reward: 3
+    hidden: true
+
+# ── Content Engagement ───────────────────────────────────────
+content_triggers:
+  comment_during_media:
+    enabled: true
+    reward_per_message: 0.5
+    max_per_item_base: 10
+    scale_with_duration: true
+    hidden: true
+
+  like_current:
+    enabled: true
+    reward: 2
+    hidden: true
+
+  survived_full_media:
+    enabled: true
+    min_presence_percent: 80
+    reward: 5
+    hidden: true
+
+  present_at_event_start:
+    enabled: true
+    default_reward: 100
+    hidden: true
+
+# ── Social Triggers ──────────────────────────────────────────
+social_triggers:
+  greeted_newcomer:
+    enabled: true
+    window_seconds: 60
+    reward: 3
+    bot_joins_excluded: true
+    hidden: true
+
+  mentioned_by_other:
+    enabled: true
+    reward: 1
+    max_per_hour_same_user: 5
+    hidden: true
+
+  bot_interaction:
+    enabled: true
+    reward: 2
+    max_per_day: 10
+    hidden: true
+
+# ── Gambling ─────────────────────────────────────────────────
+gambling:
+  enabled: true
+  min_account_age_minutes: 60
+
+  spin:
+    enabled: true
+    min_wager: 10
+    max_wager: 500
+    cooldown_seconds: 30
+    daily_limit: 50
+    payouts:
+      - { symbols: "🍒🍒🍒", multiplier: 3, probability: 0.10 }
+      - { symbols: "🍋🍋🍋", multiplier: 5, probability: 0.05 }
+      - { symbols: "💎💎💎", multiplier: 10, probability: 0.02 }
+      - { symbols: "7️⃣7️⃣7️⃣", multiplier: 50, probability: 0.002 }
+      - { symbols: "partial", multiplier: 2, probability: 0.15 }
+      - { symbols: "loss", multiplier: 0, probability: 0.678 }
+    announce_jackpots_public: true
+    jackpot_announce_threshold: 500
+
+  flip:
+    enabled: true
+    min_wager: 10
+    max_wager: 1000
+    win_chance: 0.45
+    cooldown_seconds: 15
+    daily_limit: 100
+
+  challenge:
+    enabled: true
+    min_wager: 50
+    max_wager: 5000
+    accept_timeout_seconds: 120
+    rake_percent: 5
+    announce_public: true
+
+  daily_free_spin:
+    enabled: true
+    equivalent_wager: 50
+
+  heist:
+    enabled: false
+    min_participants: 3
+    join_window_seconds: 120
+    success_chance: 0.40
+    payout_multiplier: 1.5
+    announce_public: true
+
+# ── Tipping ──────────────────────────────────────────────────
+tipping:
+  enabled: true
+  min_amount: 1
+  max_per_day: 5000
+  min_account_age_minutes: 30
+  self_tip_blocked: true
+
+# ── Spending ─────────────────────────────────────────────────
+spending:
+  queue_tiers:
+    - max_minutes: 15
+      label: "Short / Music Video"
+      cost: 250
+    - max_minutes: 35
+      label: "30-min Episode"
+      cost: 500
+    - max_minutes: 65
+      label: "60-min Episode"
+      cost: 750
+    - max_minutes: 999
+      label: "Movie"
+      cost: 1000
+
+  interrupt_play_next: 10000
+  force_play_now: 100000
+  force_play_requires_admin: true
+  max_queues_per_day: 3
+  queue_cooldown_minutes: 30
+  blackout_windows: []
+
+# ── MediaCMS Integration ─────────────────────────────────────
+mediacms:
+  base_url: "https://media.example.com"
+  api_token: "${MEDIACMS_TOKEN:-your-token-here}"
+  search_results_limit: 10
+
+# ── Vanity Shop ──────────────────────────────────────────────
+vanity_shop:
+  custom_greeting:
+    enabled: true
+    cost: 500
+    description: "Bot greets you by name when you join the channel"
+
+  custom_title:
+    enabled: true
+    cost: 1000
+    description: "Custom title shown in bot announcements"
+
+  chat_color:
+    enabled: true
+    cost: 750
+    description: "Choose a color for your chat messages from the approved palette"
+    palette:
+      - { name: "Crimson", hex: "#DC143C" }
+      - { name: "Gold", hex: "#FFD700" }
+      - { name: "Emerald", hex: "#50C878" }
+      - { name: "Royal Blue", hex: "#4169E1" }
+      - { name: "Orchid", hex: "#DA70D6" }
+      - { name: "Coral", hex: "#FF7F50" }
+      - { name: "Teal", hex: "#008080" }
+      - { name: "Silver Screen", hex: "#C0C0C0" }
+
+  channel_gif:
+    enabled: true
+    cost: 5000
+    description: "Personalized channel GIF (requires admin approval)"
+    requires_admin_approval: true
+
+  shoutout:
+    enabled: true
+    cost: 50
+    description: "Bot posts your custom message in public chat"
+    max_length: 200
+    cooldown_minutes: 60
+
+  daily_fortune:
+    enabled: true
+    cost: 10
+    description: "Receive a random fortune / horoscope"
+
+  rename_currency_personal:
+    enabled: true
+    cost: 2500
+    description: "Your balance displays with a custom currency name (e.g. 'TacoBucks')"
+
+# ── Named Ranks (B-Movie Themed) ────────────────────────────
+ranks:
+  earn_multiplier_per_rank: 0.0
+  spend_discount_per_rank: 0.02
+
+  tiers:
+    - name: "Extra"
+      min_lifetime_earned: 0
+
+    - name: "Grip"
+      min_lifetime_earned: 1000
+      perks: ["1 free daily fortune"]
+
+    - name: "Key Grip"
+      min_lifetime_earned: 5000
+      perks: ["2% spend discount"]
+
+    - name: "Gaffer"
+      min_lifetime_earned: 15000
+      perks: ["4% discount", "rain drops +20%"]
+
+    - name: "Best Boy"
+      min_lifetime_earned: 40000
+      perks: ["6% discount", "+1 queue/day"]
+
+    - name: "Associate Producer"
+      min_lifetime_earned: 100000
+      perks: ["8% discount", "premium vanity items"]
+
+    - name: "Producer"
+      min_lifetime_earned: 250000
+      perks: ["10% discount", "priority queue position"]
+
+    - name: "Director"
+      min_lifetime_earned: 500000
+      perks: ["12% discount", "+2 queues/day"]
+
+    - name: "Executive Producer"
+      min_lifetime_earned: 1000000
+      perks: ["15% discount"]
+
+    - name: "Studio Mogul"
+      min_lifetime_earned: 5000000
+      perks: ["20% discount", "custom everything", "legendary status"]
+      cytube_level_promotion: 2
+
+# ── CyTube Level 2 Promotion ────────────────────────────────
+cytube_promotion:
+  enabled: true
+  purchasable: true
+  cost: 50000
+  min_rank: "Associate Producer"
+
+# ── Achievements (One-Time Milestone Bonuses) ────────────────
+achievements:
+  - id: messages_100
+    description: "Sent 100 messages all-time"
+    condition: { type: lifetime_messages, threshold: 100 }
+    reward: 50
+    hidden: true
+
+  - id: messages_1000
+    description: "Sent 1,000 messages all-time"
+    condition: { type: lifetime_messages, threshold: 1000 }
+    reward: 500
+    hidden: true
+
+  - id: presence_24h
+    description: "24 hours cumulative presence"
+    condition: { type: lifetime_presence_hours, threshold: 24 }
+    reward: 100
+    hidden: true
+
+  - id: streak_7
+    description: "7-day login streak"
+    condition: { type: daily_streak, threshold: 7 }
+    reward: 200
+    hidden: true
+
+  - id: streak_30
+    description: "30-day login streak"
+    condition: { type: daily_streak, threshold: 30 }
+    reward: 2000
+    hidden: true
+
+# ── Competitive Daily Awards ─────────────────────────────────
+daily_competitions:
+  - id: gif_enthusiast
+    description: "Posted 5+ GIFs today"
+    condition: { type: daily_threshold, field: gifs_posted, threshold: 5 }
+    reward: 15
+    hidden: true
+
+  - id: social_butterfly
+    description: "Gave 5+ kudos today"
+    condition: { type: daily_threshold, field: kudos_given, threshold: 5 }
+    reward: 15
+    hidden: true
+
+  - id: top_earner_bonus
+    description: "Daily top earner (excluding tips received)"
+    condition: { type: daily_top, field: z_earned }
+    reward_percent_of_earnings: 25
+    hidden: true
+
+  - id: chatterbox
+    description: "Sent 50+ messages today"
+    condition: { type: daily_threshold, field: messages_sent, threshold: 50 }
+    reward: 20
+    hidden: true
+
+# ── Multiplier Events ────────────────────────────────────────
+multipliers:
+  off_peak:
+    enabled: true
+    days: [1, 2, 3, 4]          # Mon-Thu (0=Sun)
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    multiplier: 2.0
+    announce: true
+
+  high_population:
+    enabled: true
+    min_users: 10
+    multiplier: 1.5
+    hidden: true
+
+  holidays:
+    enabled: true
+    dates:
+      - { date: "12-25", name: "Christmas", multiplier: 3.0 }
+      - { date: "10-31", name: "Halloween", multiplier: 2.0 }
+    announce: true
+
+  scheduled_events:
+    - name: "Weird Wednesday"
+      cron: "0 20 * * 3"
+      duration_hours: 4
+      multiplier: 2.0
+      presence_bonus: 500
+      announce: true
+
+# ── Public Announcements ─────────────────────────────────────
+announcements:
+  queue_purchase: true
+  gambling_jackpot: true
+  jackpot_min_amount: 500
+  achievement_milestone: true
+  rank_promotion: true
+  challenge_result: true
+  heist_result: true
+  rain_drop: true
+  daily_champion: true
+  streak_milestone: true
+  custom_greeting: true
+
+  templates:
+    queue: '🎬 {user} just queued "{title}"! ({cost} {currency})'
+    jackpot: "🎰 JACKPOT! {user} just won {amount} {currency}!"
+    rank_up: "⭐ {user} is now a {rank}!"
+    streak: "🔥 {user} hit a {days}-day streak!"
+    greeting: "👋 {greeting}"
+    rain: "☔ Rain! {count} users just got free {currency}."
+    challenge_win: "⚔️ {winner} defeated {loser} and won {amount} {currency}!"
+
+# ── PM Command Rate Limiting ──────────────────────────────────
+commands:
+  rate_limit_per_minute: 10       # Max PM commands per user per minute
+
+# ── Admin ────────────────────────────────────────────────────
+admin:
+  owner_level: 4
+
+# ── Daily Digest ─────────────────────────────────────────────
+digest:
+  user_digest:
+    enabled: true
+    send_hour_utc: 4
+    message: |
+      📊 Daily Summary:
+      Earned: {earned} {currency} | Spent: {spent} | Balance: {balance}
+      Rank: {rank} | Streak: {streak} days 🔥
+      Next goal: {next_goal_description} ({days_away} days away)
+
+  admin_digest:
+    enabled: true
+    send_hour_utc: 5
