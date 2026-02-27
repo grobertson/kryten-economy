@@ -164,6 +164,11 @@ class PmHandler:
             "bounties": self._cmd_bounties,
             "events": self._cmd_events,
             "multipliers": self._cmd_events,
+            # Notification opt-out
+            "quiet": self._cmd_quiet,
+            "unquiet": self._cmd_unquiet,
+            "mute": self._cmd_quiet,
+            "unmute": self._cmd_unquiet,
         }
 
         # Admin commands (CyTube rank >= owner_level)
@@ -288,6 +293,9 @@ class PmHandler:
             "  bounty · bounties",
             "  events",
             "",
+            "🔕 Notifications",
+            "  quiet · unquiet",
+            "",
             "━" * 15,
             "Discover more as you go 🍿",
         ])
@@ -384,6 +392,28 @@ class PmHandler:
             return "Likes are currently disabled."
 
         return "Nothing playing right now."
+
+    # ══════════════════════════════════════════════════════════
+    #  Notification Opt-Out (Quiet Mode)
+    # ══════════════════════════════════════════════════════════
+
+    async def _cmd_quiet(self, username: str, channel: str, args: list[str]) -> str:
+        """Opt out of automated notifications (milestones, streaks, etc.)."""
+        await self._db.set_quiet_mode(username, channel, True)
+        return (
+            "🔕 Quiet mode ON. You won't receive automated notifications "
+            "(milestones, streaks, achievements, rank-ups, digests).\n"
+            "You'll still receive command responses and direct messages.\n"
+            "PM 'unquiet' to turn notifications back on."
+        )
+
+    async def _cmd_unquiet(self, username: str, channel: str, args: list[str]) -> str:
+        """Opt back in to automated notifications."""
+        await self._db.set_quiet_mode(username, channel, False)
+        return (
+            "🔔 Quiet mode OFF. You'll receive notifications again "
+            "(milestones, streaks, achievements, rank-ups, digests)."
+        )
 
     # ══════════════════════════════════════════════════════════
     #  Gambling Win Announcement Throttle
@@ -2334,7 +2364,10 @@ class PmHandler:
     # ──────────────────────────────────────────────────────────
 
     _PM_MAX_LEN: int = 240  # CyTube single-message character limit
-    _PM_SEND_INTERVAL: float = 3.0  # seconds between outbound PMs
+    _PM_SEND_INTERVAL: float = 10.0  # seconds between outbound PMs
+
+    # Appended to every automated trigger PM so users know how to opt out
+    QUIET_HINT: str = "(PM 'quiet' to mute notifications)"
 
     # ── PM queue lifecycle ────────────────────────────────────
 

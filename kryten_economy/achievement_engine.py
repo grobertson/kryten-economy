@@ -226,15 +226,18 @@ class AchievementEngine:
         achievement: AchievementConfig,
     ) -> None:
         """Send PM and optional public announcement for an achievement."""
-        symbol = self._config.currency.symbol
-        await self._client.send_pm(
-            channel,
-            username,
-            f"🏆 Achievement Unlocked: {achievement.description}! "
-            f"+{achievement.reward:,} {symbol}",
-        )
+        # Respect quiet mode — skip PM if user opted out
+        if not await self._db.get_quiet_mode(username, channel):
+            symbol = self._config.currency.symbol
+            await self._client.send_pm(
+                channel,
+                username,
+                f"🏆 Achievement Unlocked: {achievement.description}! "
+                f"+{achievement.reward:,} {symbol}\n"
+                f"(PM 'quiet' to mute notifications)",
+            )
 
-        # Public announcement if configured
+        # Public announcement if configured (always sent regardless of quiet)
         if self._config.announcements.achievement_milestone:
             msg = f"🏆 {username} unlocked: {achievement.description}!"
             await self._client.send_chat(channel, msg)

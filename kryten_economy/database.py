@@ -63,6 +63,7 @@ class EconomyDatabase:
                     personal_currency_name TEXT,
                     welcome_wallet_claimed BOOLEAN DEFAULT 0,
                     economy_banned BOOLEAN DEFAULT 0,
+                    quiet_mode BOOLEAN DEFAULT 0,
                     first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_active TIMESTAMP,
@@ -343,6 +344,12 @@ class EconomyDatabase:
                     UNIQUE(username, channel)
                 )
             """)
+
+            # ── Migrations: add columns if missing ────────
+            try:
+                conn.execute("ALTER TABLE accounts ADD COLUMN quiet_mode BOOLEAN DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
             conn.commit()
             self._logger.info("Database tables created/verified")
@@ -1559,6 +1566,44 @@ class EconomyDatabase:
     async def get_custom_greeting(self, username: str, channel: str) -> str | None:
         """Get custom_greeting vanity value."""
         return await self.get_vanity_item(username, channel, "custom_greeting")
+
+    # ══════════════════════════════════════════════════════════
+    #  Quiet Mode (notification opt-out)
+    # ══════════════════════════════════════════════════════════
+
+    async def get_quiet_mode(self, username: str, channel: str) -> bool:
+        """Return True if the user has opted out of trigger PMs."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> bool:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT quiet_mode FROM accounts WHERE username = ? AND channel = ?",
+                    (username, channel),
+                ).fetchone()
+                return bool(row["quiet_mode"]) if row else False
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
+    async def set_quiet_mode(self, username: str, channel: str, enabled: bool) -> None:
+        """Toggle quiet mode for a user."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    "UPDATE accounts SET quiet_mode = ? WHERE username = ? AND channel = ?",
+                    (1 if enabled else 0, username, channel),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
 
     async def get_all_vanity_items(
         self, username: str, channel: str,

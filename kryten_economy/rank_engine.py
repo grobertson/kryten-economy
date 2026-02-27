@@ -113,17 +113,21 @@ class RankEngine:
         tier: RankTierConfig,
     ) -> None:
         """PM user and buffer public announcement."""
-        perks_str = ", ".join(tier.perks) if tier.perks else "No additional perks"
-        try:
-            await self._client.send_pm(
-                channel,
-                username,
-                f"\u2b50 Rank Up! You are now a **{tier.name}**!\n"
-                f"Perks: {perks_str}",
-            )
-        except Exception as e:
-            self._logger.warning("Rank-up PM failed for %s: %s", username, e)
+        # Respect quiet mode
+        if not await self._db.get_quiet_mode(username, channel):
+            perks_str = ", ".join(tier.perks) if tier.perks else "No additional perks"
+            try:
+                await self._client.send_pm(
+                    channel,
+                    username,
+                    f"\u2b50 Rank Up! You are now a **{tier.name}**!\n"
+                    f"Perks: {perks_str}\n"
+                    f"(PM 'quiet' to mute notifications)",
+                )
+            except Exception as e:
+                self._logger.warning("Rank-up PM failed for %s: %s", username, e)
 
+        # Public announcement always buffered (regardless of quiet)
         if self._config.announcements.rank_promotion:
             self._pending_announcements.append((username, channel, tier))
 
@@ -217,12 +221,15 @@ class RankEngine:
                     username,
                     channel,
                 )
-                await self._client.send_pm(
-                    channel,
-                    username,
-                    f"🎬 You've been promoted to CyTube Level {level}! "
-                    f"Look at that shiny name in the user list!",
-                )
+                # Respect quiet mode
+                if not await self._db.get_quiet_mode(username, channel):
+                    await self._client.send_pm(
+                        channel,
+                        username,
+                        f"🎬 You've been promoted to CyTube Level {level}! "
+                        f"Look at that shiny name in the user list!\n"
+                        f"(PM 'quiet' to mute notifications)",
+                    )
             else:
                 self._logger.warning(
                     "CyTube rank change failed for %s: %s",

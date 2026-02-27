@@ -245,6 +245,11 @@ class AdminScheduler:
                 days_away=days_away,
             )
 
+            # Respect quiet mode — skip digest for opted-out users
+            if await self._db.get_quiet_mode(username, channel):
+                continue
+
+            msg += "\n(PM 'quiet' to mute notifications)"
             await self._client.send_pm(channel, username, msg)
             sent += 1
 

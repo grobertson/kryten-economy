@@ -151,7 +151,7 @@ class PresenceTracker:
                             amount=bonus,
                             currency=self._currency_name,
                         )
-                        await self._send_pm(channel, username, msg)
+                        await self._send_trigger_pm(channel, username, msg)
 
             # ── Sprint 3: Notify channel state of genuine arrival ──
             if self._channel_state is not None:
@@ -504,7 +504,7 @@ class PresenceTracker:
                         reason=f"{hours}-hour dwell milestone",
                     )
                     await self._db.mark_hourly_milestone(username, channel, date, hours)
-                    await self._send_pm(
+                    await self._send_trigger_pm(
                         channel,
                         username,
                         f"⏰ {hours}-hour milestone! +{reward} {self._currency_symbol}. Keep it up!",
@@ -551,7 +551,7 @@ class PresenceTracker:
                     trigger_id=f"streak.day{current}",
                     reason=f"Day {current} streak bonus",
                 )
-                await self._send_pm(
+                await self._send_trigger_pm(
                     channel,
                     username,
                     f"🔥 Day {current} streak! +{reward} {self._currency_symbol}!",
@@ -567,7 +567,7 @@ class PresenceTracker:
                 trigger_id="streak.milestone.7",
                 reason="7-day streak milestone",
             )
-            await self._send_pm(
+            await self._send_trigger_pm(
                 channel,
                 username,
                 f"🔥🔥 7-DAY STREAK! +{cfg.milestone_7_bonus} {self._currency_symbol}! You're on fire!",
@@ -582,7 +582,7 @@ class PresenceTracker:
                 trigger_id="streak.milestone.30",
                 reason="30-day streak milestone",
             )
-            await self._send_pm(
+            await self._send_trigger_pm(
                 channel,
                 username,
                 f"🔥🔥🔥 30-DAY STREAK! +{cfg.milestone_30_bonus} {self._currency_symbol}! LEGENDARY!",
@@ -642,7 +642,7 @@ class PresenceTracker:
                 reason="Weekend-weekday bridge bonus",
             )
             await self._db.update_bridge_fields(username, channel, bridge_claimed=True)
-            await self._send_pm(
+            await self._send_trigger_pm(
                 channel,
                 username,
                 f"🌉 Weekend→weekday bridge bonus! +{bonus} {self._currency_symbol}!",
@@ -652,6 +652,8 @@ class PresenceTracker:
     #  PM Sending
     # ══════════════════════════════════════════════════════════
 
+    _QUIET_HINT: str = "(PM 'quiet' to mute notifications)"
+
     async def _send_pm(self, channel: str, username: str, message: str) -> None:
         """Send PM via kryten-py client. Safe to call if client is None (testing)."""
         if self._client is None:
@@ -660,3 +662,19 @@ class PresenceTracker:
             await self._client.send_pm(channel, username, message)
         except Exception:
             self._logger.debug("Failed to send PM to %s: %s", username, message[:50])
+
+    async def _send_trigger_pm(self, channel: str, username: str, message: str) -> None:
+        """Send an automated trigger PM, respecting quiet mode.
+
+        Skips if user has opted out via quiet mode.
+        Appends opt-out hint to the message.
+        """
+        if self._client is None:
+            return
+        if await self._db.get_quiet_mode(username, channel):
+            return
+        full_msg = f"{message}\n{self._QUIET_HINT}"
+        try:
+            await self._client.send_pm(channel, username, full_msg)
+        except Exception:
+            self._logger.debug("Failed to send trigger PM to %s: %s", username, message[:50])
