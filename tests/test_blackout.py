@@ -114,7 +114,7 @@ async def test_forcenow_bypasses_blackout(
 ):
     """forcenow should not check blackout (by design)."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media())
-    await _seed_account(database, "Alice", 200000)
+    await _seed_account(database, "Alice", 2000000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
     # forcenow with admin gate → creates approval (but doesn't check blackout)

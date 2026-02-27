@@ -194,7 +194,7 @@ async def test_queue_daily_limit(
 ):
     """Queue past daily limit → blocked."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Song", 180))
-    await _seed_account(database, "Alice", 50000)
+    await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
     # Bypass cooldown by making get_last_queue_time return None
@@ -246,7 +246,7 @@ async def test_playnext_uses_position(
 ):
     """playnext calls add_media with position='next'."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Priority", 300))
-    await _seed_account(database, "Alice", 50000)
+    await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
@@ -263,15 +263,15 @@ async def test_playnext_higher_cost(
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
-    """playnext costs interrupt_play_next (10000) regardless of duration."""
+    """playnext costs interrupt_play_next (100000) regardless of duration."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Short", 60))
-    await _seed_account(database, "Alice", 50000)
+    await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
     account = await database.get_account("Alice", CH)
-    # Charged interrupt_play_next (10000), balance was 50000 → ~40000
-    assert account["balance"] <= 50000 - 9000  # At least 9000 charged (maybe discount)
+    # Charged interrupt_play_next (100000), balance was 500000 → ~400000
+    assert account["balance"] <= 500000 - 80000  # At least 80000 charged (maybe discount)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -286,7 +286,7 @@ async def test_forcenow_creates_approval(
 ):
     """forcenow with admin gate → creates pending approval."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Urgent", 300))
-    await _seed_account(database, "Rich", 200000)
+    await _seed_account(database, "Rich", 2000000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
     resp = await handler._cmd_forcenow("Rich", CH, ["v1"])
@@ -310,7 +310,7 @@ async def test_forcenow_without_admin_gate(
     engine = SpendingEngine(config, database, mock_media_client, logging.getLogger("test"))
 
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Direct", 300))
-    await _seed_account(database, "Rich", 200000)
+    await _seed_account(database, "Rich", 2000000)
     handler = _make_handler(config, database, engine, mock_media_client, mock_client)
 
     resp = await handler._cmd_forcenow("Rich", CH, ["v1"])

@@ -55,8 +55,9 @@ class TestPmDispatch:
         """'help' should send help text via PM."""
         event = make_pm_event("Alice", "help")
         await pm_handler.handle_pm(event)
-        mock_client.send_pm.assert_called_once()
-        args = mock_client.send_pm.call_args
+        mock_client.send_pm.assert_called()
+        # Help may be split into multiple PMs; first chunk has header
+        args = mock_client.send_pm.call_args_list[0]
         assert "Economy Bot" in args[0][2]
 
     async def test_balance_command(self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase):
@@ -108,8 +109,9 @@ class TestPmDispatch:
         """Commands should be case-insensitive."""
         event = make_pm_event("Alice", "HELP")
         await pm_handler.handle_pm(event)
-        mock_client.send_pm.assert_called_once()
-        response = mock_client.send_pm.call_args[0][2]
+        mock_client.send_pm.assert_called()
+        # Help may be split; first chunk has header
+        response = mock_client.send_pm.call_args_list[0][0][2]
         assert "Economy Bot" in response
 
     async def test_balance_shows_rank(self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase):

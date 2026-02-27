@@ -6,6 +6,7 @@ config → DB init → register handlers → connect → subscribe → metrics �
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -70,6 +71,7 @@ class EconomyApp:
         # State
         self._running = False
         self._start_time: float | None = None
+        self._counter_persistence_task: asyncio.Task | None = None
 
         # Counters (for metrics)
         self.events_processed: int = 0
@@ -96,6 +98,73 @@ class EconomyApp:
         if self._start_time is None:
             return 0.0
         return time.time() - self._start_time
+
+    # ------------------------------------------------------------------
+    # Metrics counter persistence (NATS KV)
+    # ------------------------------------------------------------------
+    _COUNTERS_KV_BUCKET = "kryten_economy_state"
+    _COUNTERS_KV_KEY = "counters"
+    _COUNTERS_SAVE_INTERVAL = 300  # seconds (5 minutes)
+    _COUNTER_NAMES = [
+        "events_processed",
+        "commands_processed",
+        "z_spent_total",
+        "tips_total",
+        "queues_total",
+        "vanity_purchases_total",
+        "achievements_awarded_total",
+        "rank_promotions_total",
+        "competition_awards_total",
+        "bounties_created_total",
+        "bounties_claimed_total",
+    ]
+
+    async def _save_counters(self) -> None:
+        """Persist volatile metrics counters to NATS KV."""
+        data = {name: getattr(self, name) for name in self._COUNTER_NAMES}
+        data["z_earned_total"] = (
+            self.presence_tracker.metrics_z_earned if self.presence_tracker else 0
+        )
+        try:
+            await self.client.kv_put(
+                self._COUNTERS_KV_BUCKET,
+                self._COUNTERS_KV_KEY,
+                data,
+                as_json=True,
+            )
+            self.logger.debug("Persisted metrics counters to KV")
+        except Exception:
+            self.logger.exception("Failed to persist metrics counters")
+
+    async def _restore_counters(self) -> None:
+        """Restore volatile metrics counters from NATS KV on startup."""
+        try:
+            data = await self.client.kv_get(
+                self._COUNTERS_KV_BUCKET,
+                self._COUNTERS_KV_KEY,
+                default={},
+                parse_json=True,
+            )
+            if not data:
+                self.logger.info("No persisted counters found — starting fresh")
+                return
+            for name in self._COUNTER_NAMES:
+                if name in data:
+                    setattr(self, name, int(data[name]))
+            if self.presence_tracker and "z_earned_total" in data:
+                self.presence_tracker.metrics_z_earned = int(data["z_earned_total"])
+            self.logger.info("Restored metrics counters from KV: %s", data)
+        except Exception:
+            self.logger.exception("Failed to restore metrics counters from KV")
+
+    async def _counter_persistence_loop(self) -> None:
+        """Periodically save counters to KV."""
+        try:
+            while True:
+                await asyncio.sleep(self._COUNTERS_SAVE_INTERVAL)
+                await self._save_counters()
+        except asyncio.CancelledError:
+            pass
 
     async def start(self) -> None:
         """Start the economy service — canonical kryten-py sequence."""
@@ -215,8 +284,10 @@ class EconomyApp:
 
         # Wire up client references
         self.presence_tracker._client = self.client
+        self.presence_tracker._rank_engine = self.rank_engine
         self.pm_handler._client = self.client
         self.pm_handler._config_path = str(self.config_path)
+        self.pm_handler.start_pm_worker()
         self.achievement_engine._client = self.client
         self.rank_engine._client = self.client
         self.competition_engine._client = self.client
@@ -325,6 +396,39 @@ class EconomyApp:
         await self.client.connect()
         self.logger.info("Connected to NATS")
 
+        # 6b. Seed presence from KV store (users already in room)
+        for ch_cfg in self.config.channels:
+            try:
+                bucket = f"kryten_{ch_cfg.channel}_userlist"
+                users = await self.client.kv_get(
+                    bucket, "users", default=[], parse_json=True,
+                )
+                if users:
+                    seeded = await self.presence_tracker.seed_initial_users(
+                        ch_cfg.channel, users,
+                    )
+                    self.logger.info(
+                        "Seeded %d users from KV for %s",
+                        seeded, ch_cfg.channel,
+                    )
+            except Exception as exc:
+                self.logger.warning(
+                    "Could not seed userlist for %s: %s",
+                    ch_cfg.channel, exc,
+                )
+
+        # 6c. Restore persisted metrics counters from KV
+        await self.client.get_or_create_kv_store(
+            self._COUNTERS_KV_BUCKET,
+            description="kryten-economy volatile metrics counters",
+        )
+        await self._restore_counters()
+
+        # 6d. Start periodic counter persistence (every 5 min)
+        self._counter_persistence_task = asyncio.create_task(
+            self._counter_persistence_loop(),
+        )
+
         # 7. Subscribe to robot startup for re-initialization
         await self.client.subscribe(
             "kryten.lifecycle.robot.startup",
@@ -396,7 +500,22 @@ class EconomyApp:
         self.logger.info("Shutting down kryten-economy...")
         self._running = False
 
+        # Cancel periodic counter persistence and do a final save
+        if self._counter_persistence_task:
+            self._counter_persistence_task.cancel()
+            try:
+                await self._counter_persistence_task
+            except asyncio.CancelledError:
+                pass
+        try:
+            await self._save_counters()
+            self.logger.info("Metrics counters saved on shutdown")
+        except Exception:
+            self.logger.exception("Failed to save counters on shutdown")
+
         # Reverse order of startup
+        if self.pm_handler:
+            await self.pm_handler.stop_pm_worker()
         if self.event_announcer:
             await self.event_announcer.stop()
         if self.admin_scheduler:
@@ -417,5 +536,11 @@ class EconomyApp:
         self.logger.info("kryten-economy stopped.")
 
     async def _handle_robot_startup(self, msg) -> None:
-        """Handle kryten-robot restart — sessions will be re-populated via adduser events."""
-        self.logger.info("Robot startup detected — awaiting fresh adduser events")
+        """Handle kryten-robot restart — re-announce ourselves and await fresh adduser events."""
+        self.logger.info("Robot startup detected — re-publishing our startup event")
+        if self.client and self.client.lifecycle:
+            try:
+                await self.client.lifecycle.publish_startup()
+                self.logger.info("Re-published economy startup event")
+            except Exception:
+                self.logger.exception("Failed to re-publish startup event")

@@ -33,7 +33,7 @@ async def test_econ_stats_format(
 
     assert "Economy Overview" in result
     assert "Accounts:" in result
-    assert "Currently present:" in result
+    assert "Present:" in result
     assert "Active today:" in result
     assert "circulation" in result.lower()
 
@@ -87,9 +87,9 @@ async def test_econ_health_inflation(
     result = await pm_handler._cmd_econ_health("admin", CH, [])
 
     assert "Economy Health" in result
-    assert "Circulation:" in result
-    assert "Median balance:" in result
-    assert "inflationary" in result.lower() or "Net:" in result
+    assert "Circ:" in result
+    assert "Median:" in result
+    assert "inflationary" in result.lower() or "Net" in result
 
 
 @pytest.mark.asyncio
@@ -121,9 +121,9 @@ async def test_econ_triggers_hot_and_dead(pm_handler: PmHandler, database: Econo
 
     result = await pm_handler._cmd_econ_triggers("admin", CH, [])
 
-    assert "Trigger Analytics" in result
-    assert "presence.base" in result
-    assert "chat.long_message" in result
+    assert "Triggers" in result
+    assert "base" in result
+    assert "long_message" in result
 
 
 @pytest.mark.asyncio

@@ -143,20 +143,23 @@ class AdminScheduler:
             circ_change = 0
 
         lines = [
-            f"📊 Weekly Economy Digest ({start} → {end})",
-            "━" * 40,
-            f"Total Z minted: {weekly.get('z_earned', 0):,}",
-            f"Total Z spent: {weekly.get('z_spent', 0):,}",
-            f"Total Z gambled: {weekly.get('z_gambled_in', 0):,}",
-            f"Net circulation change: {circ_change:+,} Z",
-            f"Current circulation: {circulation:,} Z",
+            f"📊 Weekly Digest ({start} → {end})",
+            "━" * 15,
+            "",
+            f"Minted: {weekly.get('z_earned', 0):,} Z",
+            f"Spent: {weekly.get('z_spent', 0):,} Z",
+            f"Gambled: {weekly.get('z_gambled_in', 0):,} Z",
+            "",
+            f"Circ change: {circ_change:+,} Z",
+            f"Total circ: {circulation:,} Z",
             "",
             "🏆 Top 5 Earners:",
         ]
         for i, e in enumerate(top_earners, 1):
             lines.append(f"  {i}. {e['username']} — {e['earned']:,} Z")
 
-        lines.append("\n💸 Top 5 Spenders:")
+        lines.append("")
+        lines.append("💸 Top 5 Spenders:")
         for i, s in enumerate(top_spenders, 1):
             lines.append(f"  {i}. {s['username']} — {s['spent']:,} Z")
 
@@ -164,8 +167,10 @@ class AdminScheduler:
             total_in = gambling.get("total_in", 0)
             total_out = gambling.get("total_out", 0)
             edge = ((total_in - total_out) / total_in * 100) if total_in > 0 else 0
+            lines.append("")
             lines.append(
-                f"\n🎰 Gambling: {gambling['total_games']:,} games, actual edge: {edge:.1f}%"
+                f"🎰 {gambling['total_games']:,} games, "
+                f"edge: {edge:.1f}%"
             )
 
         digest_msg = "\n".join(lines)

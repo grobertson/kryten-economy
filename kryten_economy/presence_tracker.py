@@ -51,6 +51,7 @@ class PresenceTracker:
         client: object | None = None,
         logger: logging.Logger | None = None,
         channel_state: ChannelStateTracker | None = None,
+        rank_engine: object | None = None,
     ) -> None:
         self._config: EconomyConfig = config
         self._presence_config: PresenceConfig = config.presence
@@ -60,6 +61,7 @@ class PresenceTracker:
         self._db = database
         self._client = client
         self._channel_state = channel_state
+        self._rank_engine = rank_engine
         self._logger = logger or logging.getLogger("economy.presence")
 
         # Currency info for PM messages
@@ -253,6 +255,56 @@ class PresenceTracker:
         from datetime import timedelta as _td
         return now_utc() - departure_time >= _td(minutes=minutes)
 
+    async def seed_initial_users(
+        self, channel: str, users: list[dict],
+    ) -> int:
+        """Seed presence sessions from KV-store userlist on startup.
+
+        Creates sessions for users already in the channel **without**
+        triggering welcome wallets, greetings, or other arrival logic.
+
+        Args:
+            channel: Channel name (exact case from config)
+            users: User dicts from the robot's KV ``users`` key.
+                   Each dict has ``name``, ``rank``, and optionally
+                   ``meta.afk``.
+
+        Returns:
+            Number of users seeded.
+        """
+        count = 0
+        now = now_utc()
+        for user_data in users:
+            username = user_data.get("name", "")
+            if not username or self._is_ignored(username):
+                continue
+
+            key = (username.lower(), channel)
+            if key in self._sessions:
+                continue
+
+            rank = user_data.get("rank", 0) or 0
+            meta = user_data.get("meta") or {}
+            is_afk = meta.get("afk", False)
+
+            session = UserSession(
+                username=username,
+                channel=channel,
+                connected_at=now,
+                last_tick_at=now,
+                is_afk=is_afk,
+                is_genuine_arrival=False,  # suppress arrival bonuses
+            )
+            self._sessions[key] = session
+            self.update_user_rank(channel, username, rank)
+
+            # Ensure economy account exists (no welcome wallet)
+            await self._db.get_or_create_account(username, channel)
+            await self._db.update_last_seen(username, channel)
+            count += 1
+
+        return count
+
     async def start(self) -> None:
         """Start the periodic tick task."""
         self._running = True
@@ -284,7 +336,13 @@ class PresenceTracker:
     # ══════════════════════════════════════════════════════════
 
     def _is_ignored(self, username: str) -> bool:
-        return username.lower() in self._ignored_users
+        lower = username.lower()
+        if lower in self._ignored_users:
+            return True
+        # Never track the bot itself — avoids PM-to-self errors
+        if lower == self._config.bot.username.lower():
+            return True
+        return False
 
     # ══════════════════════════════════════════════════════════
     #  Internal: Join Debounce
@@ -403,8 +461,24 @@ class PresenceTracker:
 
                     # Update metrics counter
                     self.metrics_z_earned += amount
+
+                    # ── 7. Rank promotion check ──────────────────
+                    if self._rank_engine:
+                        try:
+                            await self._rank_engine.check_rank_promotion(username, channel)
+                        except Exception:
+                            self._logger.exception(
+                                "Rank check error for %s/%s", username, channel,
+                            )
                 except Exception:
                     self._logger.exception("Presence tick error for %s/%s", username, channel)
+
+            # ── Flush any batched rank-up announcements ──────
+            if self._rank_engine:
+                try:
+                    await self._rank_engine.flush_pending_announcements()
+                except Exception:
+                    self._logger.exception("Rank announcement flush error")
 
     # ══════════════════════════════════════════════════════════
     #  Sprint 2: Hourly Milestones

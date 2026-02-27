@@ -6,6 +6,7 @@ as commands, dispatches to handlers, and sends responses via client.send_pm().
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -13,6 +14,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Awaitable
 
 from .database import EconomyDatabase
+from .gambling_engine import GambleOutcome
 from .presence_tracker import PresenceTracker
 
 if TYPE_CHECKING:
@@ -23,7 +25,7 @@ if TYPE_CHECKING:
     from .channel_state import ChannelStateTracker
     from .config import EconomyConfig
     from .earning_engine import EarningEngine
-    from .gambling_engine import GamblingEngine
+    from .gambling_engine import GamblingEngine, GambleOutcome
     from .media_client import MediaCMSClient
     from .multiplier_engine import MultiplierEngine
     from .rank_engine import RankEngine
@@ -111,10 +113,18 @@ class PmHandler:
         self._shoutout_cooldowns: dict[tuple[str, str], datetime] = {}
         self._daily_fortune_used: set[str] = set()
 
+        # Win-announcement throttle: per-channel tracker
+        # key = channel, value = (last_announce_utc, biggest_payout_today, today_date_str)
+        self._win_announce_tracker: dict[str, tuple[datetime, int, str]] = {}
+
         # Sprint 9: PM rate limiter
         self._rate_limiter = PmRateLimiter(
             max_per_minute=config.commands.rate_limit_per_minute,
         )
+
+        # PM delivery queue — throttled to 1 message per _PM_SEND_INTERVAL
+        self._pm_queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
+        self._pm_worker_task: asyncio.Task | None = None
 
         # Command dispatch map
         self._command_map: dict[str, Callable[..., Awaitable[str]]] = {
@@ -148,6 +158,7 @@ class PmHandler:
             "top": self._cmd_top,
             "leaderboard": self._cmd_top,
             "lb": self._cmd_top,
+            "shoutout": self._cmd_shoutout,
             # Sprint 7 — Events, Multipliers & Bounties
             "bounty": self._cmd_bounty,
             "bounties": self._cmd_bounties,
@@ -206,7 +217,7 @@ class PmHandler:
             # Admin command dispatch (CyTube rank gate)
             admin_handler = self._admin_command_map.get(command)
             if admin_handler:
-                cytube_rank = getattr(event, "rank", 0) or 0
+                cytube_rank = await self._resolve_cytube_rank(event, channel, username)
                 admin_level = self._config.admin.owner_level
                 if cytube_rank < admin_level:
                     response = "⛔ This command requires admin privileges."
@@ -241,41 +252,44 @@ class PmHandler:
     # ══════════════════════════════════════════════════════════
 
     async def _cmd_help(self, username: str, channel: str, args: list[str]) -> str:
-        currency = self._config.currency.name
-        symbol = self._symbol
-        like_reward = self._config.content_triggers.like_current.reward
+        s = self._symbol
         lines = [
-            f"🎬 Economy Bot — Your Pocket Studio",
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"balance     Check your {currency} balance",
-            f"rewards     See ways to earn {currency}",
-            f"like        Like the current media (earn {like_reward} {symbol})",
-            f"spin [wager]  Slot machine (no wager = free daily spin)",
-            f"flip <wager>  Coin flip (double-or-nothing)",
-            f"challenge @user <wager>  Challenge someone to a duel",
-            f"accept / decline  Respond to a challenge",
-            f"gambling    Your gambling stats",
+            "Economy Bot",
+            "━" * 15,
+            "",
+            "💰 Basics",
+            "  balance · rewards",
+            "  like · history",
+            "",
+            "🎰 Gambling",
+            "  spin · spin <wager>",
+            "  flip <wager>",
+            "  challenge @user <amt>",
+            "  accept · decline",
+            "  gambling",
         ]
         if self._config.gambling.heist.enabled:
-            lines.append(f"heist <wager>  Start a group heist")
-            lines.append(f"heist join    Join an active heist")
+            lines.append("  heist <wager>")
+            lines.append("  heist join")
         lines.extend([
-            f"search      Browse the catalog",
-            f"queue       Add something to the playlist",
-            f"tip         Share the love (and the {symbol})",
-            f"shop        Browse vanity items",
-            f"fortune     What do the stars say?",
-            f"history     Recent transactions",
-            f"rank        Your rank & progress",
-            f"profile     Full profile overview",
-            f"achievements  Earned badges & progress",
-            f"top         Leaderboards",
-            f"bounty      Create a bounty",
-            f"bounties    View open bounties",
-            f"events      Active multipliers",
-            f"help        You're looking at it!",
-            f"",
-            f"Discover more as you go. 🍿",
+            "",
+            "🎬 Media",
+            "  search · queue",
+            "",
+            "🛒 Shop & Social",
+            "  shop · tip",
+            "  fortune · shoutout",
+            "",
+            "📊 Progress",
+            "  rank · profile",
+            "  achievements · top",
+            "",
+            "📌 Bounties & Events",
+            "  bounty · bounties",
+            "  events",
+            "",
+            "━" * 15,
+            "Discover more as you go 🍿",
         ])
         return "\n".join(lines)
 
@@ -292,28 +306,33 @@ class PmHandler:
         """Show non-hidden earning triggers."""
         lines = [
             f"💰 How to earn {self._currency_name}:",
+            "━" * 15,
             "",
-            f"📍 Be connected: {self._config.presence.base_rate_per_minute} {self._symbol}/min",
+            "📍 Passive",
+            f"  Stay connected: {self._config.presence.base_rate_per_minute} {self._symbol}/min",
         ]
 
         milestones = self._config.presence.hourly_milestones
         if milestones:
-            ms_text = ", ".join(
-                f"{h}h={r}{self._symbol}" for h, r in sorted(milestones.items())
-            )
-            lines.append(f"⏰ Dwell milestones: {ms_text}")
-
-        if self._config.streaks.daily.enabled:
-            lines.append(f"🔥 Daily streaks: day 2+ earns bonus {self._symbol}")
-
-        if self._config.streaks.weekend_weekday_bridge.enabled:
-            lines.append(
-                f"🌉 Weekend+weekday bridge: "
-                f"{self._config.streaks.weekend_weekday_bridge.bonus} {self._symbol}/week"
-            )
+            for h, r in sorted(milestones.items()):
+                lines.append(f"  {h}h dwell bonus: {r} {self._symbol}")
 
         if self._config.rain.enabled:
-            lines.append("☔ Random rain drops to connected users")
+            lines.append("  ☔ Random rain drops")
+
+        # Streaks section
+        streak_lines: list[str] = []
+        if self._config.streaks.daily.enabled:
+            streak_lines.append(f"  Day 2+ earns bonus {self._symbol}")
+        if self._config.streaks.weekend_weekday_bridge.enabled:
+            streak_lines.append(
+                f"  🌉 Bridge bonus: "
+                f"{self._config.streaks.weekend_weekday_bridge.bonus} {self._symbol}/week"
+            )
+        if streak_lines:
+            lines.append("")
+            lines.append("🔥 Streaks")
+            lines.extend(streak_lines)
 
         # Non-hidden chat/content/social triggers
         all_triggers = [
@@ -322,6 +341,7 @@ class PmHandler:
             ("social_triggers", self._config.social_triggers),
         ]
 
+        trigger_lines: list[str] = []
         for _section_name, section in all_triggers:
             for trigger_name, trigger_cfg in self._iter_trigger_configs(section):
                 if hasattr(trigger_cfg, "hidden") and trigger_cfg.hidden:
@@ -330,10 +350,15 @@ class PmHandler:
                     continue
                 reward = self._get_trigger_reward_text(trigger_cfg)
                 desc = self._get_trigger_description(trigger_name)
-                lines.append(f"  • {desc}: {reward}")
+                trigger_lines.append(f"  • {desc}: {reward}")
+
+        if trigger_lines:
+            lines.append("")
+            lines.append("💬 Activity")
+            lines.extend(trigger_lines)
 
         lines.append("")
-        lines.append("🔮 Some triggers are hidden. Experiment to find them!")
+        lines.append("🔮 Hidden triggers exist too!")
 
         return "\n".join(lines)
 
@@ -361,6 +386,43 @@ class PmHandler:
         return "Nothing playing right now."
 
     # ══════════════════════════════════════════════════════════
+    #  Gambling Win Announcement Throttle
+    # ══════════════════════════════════════════════════════════
+
+    def _should_announce_gambling_win(self, channel: str, payout: int) -> bool:
+        """Decide whether a gambling win deserves a public announcement.
+
+        Rules:
+        - Always announce jackpots (handled separately, bypass this).
+        - At most one win announcement per hour per channel.
+        - OR if the payout beats today's highest announced win.
+        - Resets daily.
+        """
+        now = datetime.now(timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+        tracker = self._win_announce_tracker.get(channel)
+
+        if tracker is None or tracker[2] != today:
+            # First win of the day — always announce, seed tracker
+            self._win_announce_tracker[channel] = (now, payout, today)
+            return True
+
+        last_time, biggest_today, _ = tracker
+        elapsed = (now - last_time).total_seconds()
+
+        # New daily high score — always announce
+        if payout > biggest_today:
+            self._win_announce_tracker[channel] = (now, payout, today)
+            return True
+
+        # Cooldown: at most once per hour
+        if elapsed >= 3600:
+            self._win_announce_tracker[channel] = (now, max(biggest_today, payout), today)
+            return True
+
+        return False
+
+    # ══════════════════════════════════════════════════════════
     #  Gambling Commands
     # ══════════════════════════════════════════════════════════
 
@@ -371,11 +433,16 @@ class PmHandler:
 
         if not args:
             result = await self._gambling_engine.daily_free_spin(username, channel)
-            if result.announce_public:
-                await self._announce_chat(
-                    channel,
-                    f"🎰 JACKPOT! {username} just won {result.payout} {self._symbol} on a FREE spin!",
-                )
+            if result.payout > 0 and self._should_announce_gambling_win(channel, result.payout):
+                template = getattr(self._config.announcements.templates, "free_spin_win", None)
+                if template:
+                    msg = template.format(
+                        user=username, amount=f"{result.payout:,}",
+                        currency=self._currency_name,
+                    )
+                else:
+                    msg = f"🎁 {username} won {result.payout:,} {self._currency_name} on a FREE spin!"
+                await self._announce_chat(channel, msg)
             return result.message
 
         try:
@@ -385,9 +452,15 @@ class PmHandler:
 
         result = await self._gambling_engine.spin(username, channel, wager)
         if result.announce_public:
+            # Jackpots always get announced — bypass throttle
             await self._announce_chat(
                 channel,
-                f"🎰 JACKPOT! {username} just won {result.payout} {self._symbol} on the slots!",
+                f"🎰 JACKPOT! {username} just won {result.payout:,} {self._symbol} on the slots!",
+            )
+        elif result.outcome == GambleOutcome.WIN and self._should_announce_gambling_win(channel, result.payout):
+            await self._announce_chat(
+                channel,
+                f"🎰 {username} won {result.payout:,} {self._symbol} on the slots!",
             )
         return result.message
 
@@ -405,6 +478,19 @@ class PmHandler:
             return "Usage: flip <wager>"
 
         result = await self._gambling_engine.flip(username, channel, wager)
+
+        # Throttled public announcement for wins
+        if result.outcome == GambleOutcome.WIN and self._should_announce_gambling_win(channel, result.payout):
+            template = getattr(self._config.announcements.templates, "flip_win", None)
+            if template:
+                msg = template.format(
+                    user=username, amount=f"{result.payout:,}",
+                    currency=self._currency_name, wager=f"{result.wager:,}",
+                )
+            else:
+                msg = f"🪙 {username} flipped and won {result.payout:,} {self._currency_name}!"
+            await self._announce_chat(channel, msg)
+
         return result.message
 
     async def _cmd_challenge(self, username: str, channel: str, args: list[str]) -> str:
@@ -790,7 +876,7 @@ class PmHandler:
         rank_tier = self._spending.get_rank_tier_index(account)
         symbol = self._symbol
 
-        lines = ["🛒 Vanity Shop", "━" * 30]
+        lines = ["🛒 Vanity Shop", "━" * 15]
 
         shop_items: list[tuple[str, Any, str]] = [
             ("greeting", self._config.vanity_shop.custom_greeting, "buy greeting <text>"),
@@ -810,14 +896,14 @@ class PmHandler:
             cost_str = f"{final_cost:,} {symbol}"
             if discount > 0:
                 cost_str += f" (was {cost:,})"
-            lines.append(f"  {item_key:<12} {cost_str:<18} → {usage}")
-            desc = getattr(item_cfg, "description", "")
-            if desc:
-                lines.append(f"  {'':12} {desc}")
+            lines.append("")
+            lines.append(f"  {item_key} — {cost_str}")
+            lines.append(f"    → {usage}")
 
         owned = await self._db.get_all_vanity_items(username, channel)
         if owned:
             lines.append("")
+            lines.append("━" * 15)
             lines.append("Your items:")
             for item_type, value in owned.items():
                 display = value[:30] + "..." if len(value) > 30 else value
@@ -948,6 +1034,12 @@ class PmHandler:
             f"Charged: {final_cost:,} Z (refunded if rejected) · Balance: {new_balance:,} Z\n"
             f"Approval ID: {approval_id}"
         )
+
+    async def _cmd_shoutout(self, username: str, channel: str, args: list[str]) -> str:
+        """Direct shoutout command — forwards to buy shoutout."""
+        if not args:
+            return "Usage: shoutout <your message>"
+        return await self._buy_shoutout(username, channel, " ".join(args))
 
     async def _buy_shoutout(self, username: str, channel: str, value: str) -> str:
         """Purchase and deliver a shoutout."""
@@ -1120,7 +1212,10 @@ class PmHandler:
             return "No transaction history yet."
 
         symbol = self._symbol
-        lines = [f"📜 Last {len(transactions)} transactions:"]
+        lines = [
+            f"📜 Last {len(transactions)} transactions:",
+            "━" * 15,
+        ]
 
         for tx in transactions:
             amount = tx["amount"]
@@ -1129,7 +1224,8 @@ class PmHandler:
             ts = tx["created_at"]
             if isinstance(ts, str):
                 ts = ts[:16].replace("T", " ")
-            lines.append(f"  {sign}{amount:,} {symbol}  {reason}  ({ts})")
+            lines.append(f"{sign}{amount:,} {symbol}  {reason}")
+            lines.append(f"  {ts}")
 
         return "\n".join(lines)
 
@@ -1200,16 +1296,21 @@ class PmHandler:
 
         lines = [
             f"⭐ Rank: {current_tier.name}",
-            f"💰 Lifetime earned: {lifetime:,} {self._symbol}",
+            "━" * 15,
+            "",
+            f"💰 Lifetime: {lifetime:,} {self._symbol}",
         ]
 
         if next_tier:
             remaining = next_tier.min_lifetime_earned - lifetime
             progress = lifetime / next_tier.min_lifetime_earned * 100 if next_tier.min_lifetime_earned > 0 else 100
             bar = self._progress_bar(progress)
-            lines.append(f"Next: {next_tier.name} ({remaining:,} {self._symbol} to go)")
+            lines.append("")
+            lines.append(f"Next: {next_tier.name}")
+            lines.append(f"  {remaining:,} {self._symbol} to go")
             lines.append(f"  {bar} {progress:.1f}%")
         else:
+            lines.append("")
             lines.append("🏆 Maximum rank achieved!")
 
         if current_tier.perks:
@@ -1246,17 +1347,20 @@ class PmHandler:
 
         lines = [
             f"👤 {target}'s Profile",
-            "━" * 30,
+            "━" * 15,
+            "",
             f"⭐ Rank: {rank_name}",
-            f"💰 Balance: {account['balance']:,} {self._symbol} ({currency})",
-            f"📈 Lifetime earned: {account.get('lifetime_earned', 0):,} {self._symbol}",
+            f"💰 Balance: {account['balance']:,} {self._symbol}",
+            f"  ({currency})",
+            f"📈 Lifetime: {account.get('lifetime_earned', 0):,} {self._symbol}",
             f"🔥 Streak: {streak_days} days",
         ]
 
         # Achievements
         achievements = await self._db.get_user_achievements(target, channel)
         if achievements:
-            lines.append(f"🏆 Achievements: {len(achievements)} earned")
+            lines.append("")
+            lines.append(f"🏆 Achievements: {len(achievements)}")
 
         # Vanity items
         vanity = await self._db.get_all_vanity_items(target, channel)
@@ -1267,8 +1371,9 @@ class PmHandler:
         # Gambling stats
         gambling_stats = await self._db.get_gambling_summary(target, channel)
         if gambling_stats and gambling_stats.get("total_games", 0) > 0:
+            lines.append("")
             lines.append(
-                f"🎰 Gambling: {gambling_stats['total_games']} games, "
+                f"🎰 {gambling_stats['total_games']} games, "
                 f"net {gambling_stats['net_profit']:+,} {self._symbol}"
             )
 
@@ -1283,7 +1388,7 @@ class PmHandler:
 
         # Show earned achievements
         if earned:
-            lines.append("━" * 30)
+            lines.append("━" * 15)
             lines.append("Earned:")
             for a in earned:
                 ach_config = self._find_achievement_config(a["achievement_id"])
@@ -1348,7 +1453,7 @@ class PmHandler:
         earners = await self._db.get_top_earners_today(channel, limit=10)
         if not earners:
             return "No earnings recorded today."
-        lines = ["🏆 Today's Top Earners"]
+        lines = ["🏆 Today's Top Earners", "━" * 15]
         for i, e in enumerate(earners, 1):
             medal = "🥇🥈🥉"[i - 1] if i <= 3 else f"{i}."
             lines.append(f"  {medal} {e['username']} — {e['earned_today']:,} {self._symbol}")
@@ -1358,7 +1463,7 @@ class PmHandler:
         rich = await self._db.get_richest_users(channel, limit=10)
         if not rich:
             return "No accounts yet."
-        lines = ["💰 Richest Users"]
+        lines = ["💰 Richest Users", "━" * 15]
         for i, r in enumerate(rich, 1):
             medal = "🥇🥈🥉"[i - 1] if i <= 3 else f"{i}."
             lines.append(
@@ -1370,7 +1475,7 @@ class PmHandler:
         top = await self._db.get_highest_lifetime(channel, limit=10)
         if not top:
             return "No accounts yet."
-        lines = ["📈 Highest Lifetime Earned"]
+        lines = ["📈 Highest Lifetime Earned", "━" * 15]
         for i, t in enumerate(top, 1):
             medal = "🥇🥈🥉"[i - 1] if i <= 3 else f"{i}."
             lines.append(
@@ -1382,7 +1487,7 @@ class PmHandler:
         dist = await self._db.get_rank_distribution(channel)
         if not dist:
             return "No accounts yet."
-        lines = ["⭐ Rank Distribution"]
+        lines = ["⭐ Rank Distribution", "━" * 15]
         for tier in self._config.ranks.tiers:
             count = dist.get(tier.name, 0)
             if count > 0:
@@ -1548,17 +1653,21 @@ class PmHandler:
         if not bounties:
             return "No open bounties."
 
-        lines = ["📌 Open Bounties:"]
+        lines = [
+            "📌 Open Bounties:",
+            "━" * 15,
+        ]
         for b in bounties:
             age = self._format_age(b["created_at"])
-            lines.append(
-                f"  #{b['id']} — {b['amount']:,} {self._symbol} — "
-                f"{b['description'][:60]} (by {b['creator']}, {age} ago)"
-            )
+            lines.append("")
+            lines.append(f"  #{b['id']} — {b['amount']:,} {self._symbol}")
+            lines.append(f"  {b['description'][:60]}")
+            lines.append(f"  by {b['creator']}, {age} ago")
 
+        lines.append("")
         lines.append(
-            f"\n{len(bounties)} open bounty/bounties. "
-            f"An admin can claim with: claim_bounty <id> @winner"
+            f"{len(bounties)} open. "
+            f"Admin: claim_bounty <id> @winner"
         )
         return "\n".join(lines)
 
@@ -1787,6 +1896,20 @@ class PmHandler:
         per_user = max(1, total // len(present))
         actual_total = per_user * len(present)
 
+        # Announce publicly FIRST — sending PMs to many users can
+        # trigger CyTube rate-limiting that silently drops the chat msg.
+        template = self._config.announcements.templates.rain
+        await self._announce_chat(
+            channel,
+            template.format(
+                count=len(present),
+                currency=self._currency_name,
+                amount=f"{actual_total:,}",
+                per_user=f"{per_user:,}",
+                sender=username,
+            ),
+        )
+
         for user in present:
             await self._db.credit(
                 user, channel, per_user,
@@ -1794,16 +1917,7 @@ class PmHandler:
                 trigger_id="admin.rain",
                 reason=f"Admin rain by {username}",
             )
-            await self._send_pm(
-                channel, user,
-                f"☔ Admin rain! +{per_user:,} Z from {username}",
-            )
 
-        template = self._config.announcements.templates.rain
-        await self._announce_chat(
-            channel,
-            template.format(count=len(present), currency=self._currency_name),
-        )
         return f"Rained {actual_total:,} Z ({per_user:,} each) to {len(present)} users."
 
     async def _cmd_set_balance(self, username: str, channel: str, args: list[str]) -> str:
@@ -1872,18 +1986,18 @@ class PmHandler:
 
         return (
             f"📊 Economy Overview:\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{'━' * 15}\n"
             f"Accounts: {accounts:,}\n"
-            f"Currently present: {present}\n"
+            f"Present: {present}\n"
             f"Active today: {active}\n"
-            f"Total circulation: {circulation:,} Z\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Today's activity:\n"
-            f"  Earned: {totals.get('z_earned', 0):,} Z\n"
-            f"  Spent: {totals.get('z_spent', 0):,} Z\n"
-            f"  Gambled in: {totals.get('z_gambled_in', 0):,} Z\n"
-            f"  Gambled out: {totals.get('z_gambled_out', 0):,} Z\n"
-            f"  Net gamble: {totals.get('z_gambled_out', 0) - totals.get('z_gambled_in', 0):+,} Z"
+            f"Circulation: {circulation:,} Z\n"
+            f"{'━' * 15}\n"
+            f"Today:\n"
+            f"  +{totals.get('z_earned', 0):,} earned\n"
+            f"  −{totals.get('z_spent', 0):,} spent\n"
+            f"  Gamble in: {totals.get('z_gambled_in', 0):,}\n"
+            f"  Gamble out: {totals.get('z_gambled_out', 0):,}\n"
+            f"  Net: {totals.get('z_gambled_out', 0) - totals.get('z_gambled_in', 0):+,} Z"
         )
 
     async def _cmd_econ_user(self, username: str, channel: str, args: list[str]) -> str:
@@ -1901,14 +2015,17 @@ class PmHandler:
         gambling = await self._db.get_gambling_summary(target, channel)
 
         lines = [
-            f"👤 Admin Inspection: {target}",
-            "━" * 30,
+            f"👤 {target}",
+            "━" * 15,
+            "",
             f"Balance: {account['balance']:,} Z",
             f"Lifetime earned: {account.get('lifetime_earned', 0):,} Z",
             f"Lifetime spent: {account.get('lifetime_spent', 0):,} Z",
+            "",
             f"Rank: {account.get('rank_name', 'Extra')}",
             f"Achievements: {achievements}",
             f"Banned: {'⛔ YES' if banned else 'No'}",
+            "",
             f"Created: {account.get('first_seen', 'unknown')}",
             f"Last seen: {account.get('last_seen', 'unknown')}",
         ]
@@ -1940,16 +2057,18 @@ class PmHandler:
 
         return (
             f"🏥 Economy Health:\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Circulation: {circulation:,} Z ({circ_change:+,} since last snapshot)\n"
-            f"Median balance: {median:,} Z\n"
-            f"Participation: {participation:.1f}% ({accounts}/{present})\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Today's Net Flow:\n"
-            f"  +Earned: {earned:,}\n"
-            f"  −Spent: {spent:,}\n"
-            f"  ±Gambling: {gamble_net:+,}\n"
-            f"  = Net: {net_flow:+,} Z {'(inflationary)' if net_flow > 0 else '(deflationary)'}"
+            f"{'━' * 15}\n"
+            f"Circ: {circulation:,} Z\n"
+            f"  ({circ_change:+,} since snap)\n"
+            f"Median: {median:,} Z\n"
+            f"Participation: {participation:.1f}%\n"
+            f"  ({accounts}/{present})\n"
+            f"{'━' * 15}\n"
+            f"Net Flow Today:\n"
+            f"  +{earned:,} earned\n"
+            f"  −{spent:,} spent\n"
+            f"  ±{gamble_net:+,} gamble\n"
+            f"  = {net_flow:+,} Z"
         )
 
     async def _cmd_econ_triggers(self, username: str, channel: str, args: list[str]) -> str:
@@ -1962,14 +2081,21 @@ class PmHandler:
 
         sorted_triggers = sorted(analytics, key=lambda t: t["hit_count"], reverse=True)
 
-        lines = ["📊 Trigger Analytics (Today):"]
-        lines.append(f"{'Trigger':<30} {'Hits':>6} {'Users':>6} {'Z':>8}")
-        lines.append("─" * 55)
+        lines = ["📊 Triggers (Today):"]
+        lines.append("━" * 15)
 
         for t in sorted_triggers:
+            tid = t['trigger_id']
+            # Shorten common prefixes
+            for pfx in ('presence.', 'chat.', 'content.', 'social.'):
+                if tid.startswith(pfx):
+                    tid = tid[len(pfx):]
+                    break
             lines.append(
-                f"{t['trigger_id']:<30} {t['hit_count']:>6} "
-                f"{t['unique_users']:>6} {t['total_z_awarded']:>8,}"
+                f"{tid}\n"
+                f"  {t['hit_count']} hits · "
+                f"{t['unique_users']} users · "
+                f"{t['total_z_awarded']:,} Z"
             )
 
         all_configured = self._get_all_trigger_ids()
@@ -2018,15 +2144,15 @@ class PmHandler:
 
         return (
             f"🎰 Gambling Report:\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Total wagered: {total_in:,} Z\n"
-            f"Total paid out: {total_out:,} Z\n"
-            f"House profit: {total_in - total_out:,} Z\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Actual house edge: {actual_edge:.1f}%\n"
-            f"Configured house edge (slots): {configured_edge:.1f}%\n"
-            f"Active gamblers: {stats.get('active_gamblers', 0)}\n"
-            f"Total games: {stats.get('total_games', 0):,}"
+            f"{'━' * 15}\n"
+            f"Wagered: {total_in:,} Z\n"
+            f"Paid out: {total_out:,} Z\n"
+            f"House: {total_in - total_out:,} Z\n"
+            f"{'━' * 15}\n"
+            f"Edge: {actual_edge:.1f}%\n"
+            f"Cfg edge: {configured_edge:.1f}%\n"
+            f"Gamblers: {stats.get('active_gamblers', 0)}\n"
+            f"Games: {stats.get('total_games', 0):,}"
         )
 
     # ══════════════════════════════════════════════════════════
@@ -2177,20 +2303,139 @@ class PmHandler:
     #  PM Sending
     # ══════════════════════════════════════════════════════════
 
+    async def _resolve_cytube_rank(self, event: Any, channel: str, username: str) -> int:
+        """Resolve the user's CyTube rank for admin gating.
+
+        CyTube PM events may not carry the sender's rank reliably (often 0).
+        If the event rank is missing or 0, fall back to querying the robot's
+        live channel state via ``client.get_user()``.
+        """
+        rank = getattr(event, "rank", 0) or 0
+        if rank > 0:
+            return rank
+
+        # Fallback: ask kryten-robot for the user's rank via the channel userlist
+        if self._client is not None:
+            try:
+                user_info = await self._client.get_user(channel, username)
+                if user_info:
+                    return user_info.get("rank", 0) if isinstance(user_info, dict) else getattr(user_info, "rank", 0)
+            except Exception:
+                self._logger.debug(
+                    "Could not resolve CyTube rank for %s via get_user, "
+                    "falling back to event rank (%d)",
+                    username,
+                    rank,
+                )
+        return rank
+
+    # ──────────────────────────────────────────────────────────
+    #  PM delivery with auto-split
+    # ──────────────────────────────────────────────────────────
+
+    _PM_MAX_LEN: int = 240  # CyTube single-message character limit
+    _PM_SEND_INTERVAL: float = 3.0  # seconds between outbound PMs
+
+    # ── PM queue lifecycle ────────────────────────────────────
+
+    def start_pm_worker(self) -> None:
+        """Start the background PM delivery worker."""
+        if self._pm_worker_task is None or self._pm_worker_task.done():
+            self._pm_worker_task = asyncio.create_task(self._pm_worker())
+
+    async def stop_pm_worker(self) -> None:
+        """Drain remaining PMs and stop the worker."""
+        if self._pm_worker_task and not self._pm_worker_task.done():
+            self._pm_worker_task.cancel()
+            try:
+                await self._pm_worker_task
+            except asyncio.CancelledError:
+                pass
+            self._pm_worker_task = None
+
+    async def _pm_worker(self) -> None:
+        """Background loop: send queued PMs with a pause between each."""
+        try:
+            while True:
+                channel, username, chunk = await self._pm_queue.get()
+                try:
+                    if self._client is not None:
+                        await self._client.send_pm(channel, username, chunk)
+                except Exception:
+                    self._logger.exception("PM worker failed to send to %s", username)
+                finally:
+                    self._pm_queue.task_done()
+                await asyncio.sleep(self._PM_SEND_INTERVAL)
+        except asyncio.CancelledError:
+            # Drain remaining items on shutdown
+            while not self._pm_queue.empty():
+                channel, username, chunk = self._pm_queue.get_nowait()
+                try:
+                    if self._client is not None:
+                        await self._client.send_pm(channel, username, chunk)
+                except Exception:
+                    self._logger.exception("PM worker (drain) failed for %s", username)
+                self._pm_queue.task_done()
+
+    def _split_message(self, message: str) -> list[str]:
+        """Split a long PM into chunks that fit within CyTube's limit.
+
+        Splits at ``\\n`` boundaries, keeping each chunk ≤ _PM_MAX_LEN chars.
+        A single line longer than the limit is forced through unsplit.
+        """
+        limit = self._PM_MAX_LEN
+        if len(message) <= limit:
+            return [message]
+
+        lines = message.split("\n")
+        chunks: list[str] = []
+        current: list[str] = []
+        current_len = 0
+
+        for line in lines:
+            # +1 accounts for the '\n' join character
+            added_len = len(line) + (1 if current else 0)
+            if current and current_len + added_len > limit:
+                chunks.append("\n".join(current))
+                current = [line]
+                current_len = len(line)
+            else:
+                current.append(line)
+                current_len += added_len
+
+        if current:
+            chunks.append("\n".join(current))
+
+        return chunks
+
     async def _send_pm(self, channel: str, username: str, message: str) -> None:
-        """Send a PM response via kryten-py."""
+        """Enqueue a PM for throttled delivery, auto-splitting long messages.
+
+        If the PM worker is not running (e.g. in tests), sends directly.
+        """
         if self._client is None:
             return
-        try:
-            await self._client.send_pm(channel, username, message)
-        except Exception:
-            self._logger.exception("Failed to send PM to %s", username)
+        chunks = self._split_message(message)
+        # If worker is active, enqueue for throttled delivery
+        if self._pm_worker_task and not self._pm_worker_task.done():
+            for chunk in chunks:
+                await self._pm_queue.put((channel, username, chunk))
+        else:
+            # Direct send (no throttle) — used in tests or before worker starts
+            for chunk in chunks:
+                try:
+                    await self._client.send_pm(channel, username, chunk)
+                except Exception:
+                    self._logger.exception("Failed to send PM to %s", username)
 
     async def _announce_chat(self, channel: str, message: str) -> None:
         """Post a message in public chat via kryten-py."""
         if self._client is None:
+            self._logger.warning("_announce_chat: client is None, skipping")
             return
         try:
-            await self._client.send_chat(channel, message)
+            self._logger.debug("_announce_chat → channel=%s msg=%s", channel, message[:80])
+            cid = await self._client.send_chat(channel, message)
+            self._logger.debug("_announce_chat sent OK, cid=%s", cid)
         except Exception:
             self._logger.exception("Failed to send chat to %s", channel)

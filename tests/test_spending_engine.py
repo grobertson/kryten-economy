@@ -94,31 +94,31 @@ async def test_apply_discount_minimum_one(spending_engine: SpendingEngine):
 
 @pytest.mark.asyncio
 async def test_price_tier_short(spending_engine: SpendingEngine):
-    """≤15 min → 250 Z."""
+    """≤15 min → 2500 Z."""
     label, cost = spending_engine.get_price_tier(600)  # 10 minutes
-    assert cost == 250
+    assert cost == 2500
     assert "short" in label.lower() or "music" in label.lower()
 
 
 @pytest.mark.asyncio
 async def test_price_tier_episode(spending_engine: SpendingEngine):
-    """16-35 min → 500 Z."""
+    """16-35 min → 5000 Z."""
     label, cost = spending_engine.get_price_tier(1800)  # 30 minutes
-    assert cost == 500
+    assert cost == 5000
 
 
 @pytest.mark.asyncio
 async def test_price_tier_long_episode(spending_engine: SpendingEngine):
-    """36-65 min → 750 Z."""
+    """36-65 min → 7500 Z."""
     label, cost = spending_engine.get_price_tier(3600)  # 60 minutes
-    assert cost == 750
+    assert cost == 7500
 
 
 @pytest.mark.asyncio
 async def test_price_tier_movie(spending_engine: SpendingEngine):
-    """>65 min → 1000 Z."""
+    """>65 min → 10000 Z."""
     label, cost = spending_engine.get_price_tier(7200)  # 120 minutes
-    assert cost == 1000
+    assert cost == 10000
 
 
 # ═══════════════════════════════════════════════════════════════

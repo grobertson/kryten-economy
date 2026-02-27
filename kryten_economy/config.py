@@ -345,13 +345,13 @@ class BlackoutWindowConfig(BaseModel):
 
 class SpendingConfig(BaseModel):
     queue_tiers: list[QueueTierConfig] = Field(default_factory=lambda: [
-        QueueTierConfig(max_minutes=15, label="Short / Music Video", cost=250),
-        QueueTierConfig(max_minutes=35, label="30-min Episode", cost=500),
-        QueueTierConfig(max_minutes=65, label="60-min Episode", cost=750),
-        QueueTierConfig(max_minutes=999, label="Movie", cost=1000),
+        QueueTierConfig(max_minutes=15, label="Short / Music Video", cost=2500),
+        QueueTierConfig(max_minutes=35, label="30-min Episode", cost=5000),
+        QueueTierConfig(max_minutes=65, label="60-min Episode", cost=7500),
+        QueueTierConfig(max_minutes=999, label="Movie", cost=10000),
     ])
-    interrupt_play_next: int = 10000
-    force_play_now: int = 100000
+    interrupt_play_next: int = 100000
+    force_play_now: int = 1000000
     force_play_requires_admin: bool = True
     max_queues_per_day: int = 3
     queue_cooldown_minutes: int = 30
@@ -377,7 +377,7 @@ class ChatColorPaletteEntry(BaseModel):
 
 class ChatColorConfig(BaseModel):
     enabled: bool = True
-    cost: int = 750
+    cost: int = 7500
     description: str = "Choose a color for your chat messages from the approved palette"
     palette: list[ChatColorPaletteEntry] = Field(default_factory=lambda: [
         ChatColorPaletteEntry(name="Crimson", hex="#DC143C"),
@@ -393,14 +393,14 @@ class ChatColorConfig(BaseModel):
 
 class ChannelGifConfig(BaseModel):
     enabled: bool = True
-    cost: int = 5000
+    cost: int = 50000
     description: str = "Personalized channel GIF (requires admin approval)"
     requires_admin_approval: bool = True
 
 
 class ShoutoutConfig(BaseModel):
     enabled: bool = True
-    cost: int = 50
+    cost: int = 500
     description: str = "Bot posts your custom message in public chat"
     max_length: int = 200
     cooldown_minutes: int = 60
@@ -408,22 +408,22 @@ class ShoutoutConfig(BaseModel):
 
 class DailyFortuneConfig(BaseModel):
     enabled: bool = True
-    cost: int = 10
+    cost: int = 100
     description: str = "Receive a random fortune / horoscope"
 
 
 class RenameCurrencyConfig(BaseModel):
     enabled: bool = True
-    cost: int = 2500
+    cost: int = 25000
     description: str = "Your balance displays with a custom currency name (e.g. 'TacoBucks')"
 
 
 class VanityShopConfig(BaseModel):
     custom_greeting: VanityItemConfig = Field(
-        default_factory=lambda: VanityItemConfig(cost=500, description="Bot greets you by name when you join")
+        default_factory=lambda: VanityItemConfig(cost=5000, description="Bot greets you by name when you join")
     )
     custom_title: VanityItemConfig = Field(
-        default_factory=lambda: VanityItemConfig(cost=1000, description="Custom title shown in bot announcements")
+        default_factory=lambda: VanityItemConfig(cost=10000, description="Custom title shown in bot announcements")
     )
     chat_color: ChatColorConfig = Field(default_factory=ChatColorConfig)
     channel_gif: ChannelGifConfig = Field(default_factory=ChannelGifConfig)
@@ -493,7 +493,7 @@ class RanksConfig(BaseModel):
 class CytubePromotionConfig(BaseModel):
     enabled: bool = True
     purchasable: bool = True
-    cost: int = 50000
+    cost: int = 500000
     min_rank: str = "Associate Producer"
 
 
@@ -588,6 +588,8 @@ class AnnouncementTemplatesConfig(BaseModel):
     greeting: str = "👋 {greeting}"
     rain: str = "☔ Rain! {count} users just got free {currency}."
     challenge_win: str = "⚔️ {winner} defeated {loser} and won {amount} {currency}!"
+    flip_win: str = "🪙 {user} flipped and won {amount} {currency}!"
+    free_spin_win: str = "🎁 {user} won {amount} {currency} on a FREE spin!"
 
 
 class AnnouncementsConfig(BaseModel):
@@ -634,8 +636,9 @@ class CommandsConfig(BaseModel):
     rate_limit_per_minute: int = 10
 
 
-class MetricsConfig(BaseModel):
-    port: int = 28286
+# NOTE: We do NOT define a local MetricsConfig — we reuse KrytenConfig's
+# kryten.config.MetricsConfig which includes port, health_path, metrics_path.
+# The EconomyConfig.metrics field is inherited from KrytenConfig.
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -690,7 +693,8 @@ class EconomyConfig(KrytenConfig):
 
     # Sprint 9 — Polish & Hardening
     commands: CommandsConfig = Field(default_factory=CommandsConfig)
-    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    # NOTE: metrics is inherited from KrytenConfig (kryten.config.MetricsConfig)
+    #       which includes port, health_path, metrics_path
 
 
 # ═══════════════════════════════════════════════════════════════

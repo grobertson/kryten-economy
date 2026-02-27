@@ -6,6 +6,7 @@ Sprint 6: Achievements, Named Ranks & CyTube Promotion.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -33,6 +34,13 @@ class RankEngine:
             config.ranks.tiers,
             key=lambda t: t.min_lifetime_earned,
         )
+
+        # Buffered rank-up announcements: list of (username, channel, tier)
+        self._pending_announcements: list[tuple[str, str, RankTierConfig]] = []
+
+        # Throttle state per channel:
+        # {channel: (last_announce_utc, highest_tier_index_today, today_str)}
+        self._announce_tracker: dict[str, tuple[datetime, int, str]] = {}
 
     def update_config(self, new_config) -> None:
         """Hot-swap the config reference. Re-sort tiers."""
@@ -104,19 +112,92 @@ class RankEngine:
         channel: str,
         tier: RankTierConfig,
     ) -> None:
-        """PM user and optionally announce publicly."""
+        """PM user and buffer public announcement."""
         perks_str = ", ".join(tier.perks) if tier.perks else "No additional perks"
-        await self._client.send_pm(
-            channel,
-            username,
-            f"⭐ Rank Up! You are now a **{tier.name}**!\n"
-            f"Perks: {perks_str}",
-        )
+        try:
+            await self._client.send_pm(
+                channel,
+                username,
+                f"\u2b50 Rank Up! You are now a **{tier.name}**!\n"
+                f"Perks: {perks_str}",
+            )
+        except Exception as e:
+            self._logger.warning("Rank-up PM failed for %s: %s", username, e)
 
         if self._config.announcements.rank_promotion:
+            self._pending_announcements.append((username, channel, tier))
+
+    def _get_tier_index(self, tier: RankTierConfig) -> int:
+        """Return the index of a tier (higher = more prestigious)."""
+        for i, t in enumerate(self._tiers):
+            if t.name == tier.name:
+                return i
+        return 0
+
+    async def flush_pending_announcements(self) -> None:
+        """Announce buffered rank-ups, batched per channel with throttle.
+
+        Rules (per channel):
+        - At most one announcement per hour.
+        - OR if a user reached a higher rank than today's previous best.
+        - Multiple users can be batched into one message.
+        - Resets daily.
+        """
+        if not self._pending_announcements:
+            return
+
+        # Group by channel
+        by_channel: dict[str, list[tuple[str, RankTierConfig]]] = {}
+        for username, channel, tier in self._pending_announcements:
+            by_channel.setdefault(channel, []).append((username, tier))
+        self._pending_announcements.clear()
+
+        now = datetime.now(timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+
+        for channel, promotions in by_channel.items():
+            # Find the highest tier index in this batch
+            max_tier_idx = max(self._get_tier_index(t) for _, t in promotions)
+
+            tracker = self._announce_tracker.get(channel)
+            if tracker and tracker[2] == today:
+                last_time, best_today, _ = tracker
+                elapsed = (now - last_time).total_seconds()
+
+                # Skip if within cooldown AND not a new daily high
+                if elapsed < 3600 and max_tier_idx <= best_today:
+                    continue
+
+                new_best = max(best_today, max_tier_idx)
+            else:
+                # First of the day
+                new_best = max_tier_idx
+
+            self._announce_tracker[channel] = (now, new_best, today)
+
+            # Build message
             template = self._config.announcements.templates.rank_up
-            msg = template.format(user=username, rank=tier.name)
-            await self._client.send_chat(channel, msg)
+            if len(promotions) == 1:
+                user, tier = promotions[0]
+                msg = template.format(user=user, rank=tier.name)
+            else:
+                # Batch: group by rank name
+                by_rank: dict[str, list[str]] = {}
+                for user, tier in promotions:
+                    by_rank.setdefault(tier.name, []).append(user)
+                parts = []
+                for rank_name, users in by_rank.items():
+                    if len(users) == 1:
+                        parts.append(f"{users[0]} \u2192 {rank_name}")
+                    else:
+                        parts.append(f"{', '.join(users)} \u2192 {rank_name}")
+                msg = f"\u2b50 Rank ups! {' \u00b7 '.join(parts)}"
+
+            try:
+                await self._client.send_chat(channel, msg)
+                self._logger.debug("Rank-up announcement: %s", msg)
+            except Exception as e:
+                self._logger.warning("Rank-up chat announcement failed: %s", e)
 
     async def _promote_cytube_level(
         self,

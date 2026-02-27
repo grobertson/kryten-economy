@@ -21,7 +21,7 @@ CH = "testchannel"
 async def _seed_account(
     db: EconomyDatabase,
     username: str = "Alice",
-    balance: int = 50000,
+    balance: int = 500000,
     lifetime: int = 0,
 ) -> None:
     """Create account with given balance and lifetime earnings."""
@@ -91,7 +91,7 @@ async def test_shop_shows_discount(
     spending_engine: SpendingEngine,
 ):
     """High-rank user sees discounted prices."""
-    await _seed_account(database, "Whale", balance=50000, lifetime=100000)
+    await _seed_account(database, "Whale", balance=500000, lifetime=100000)
     handler = _make_handler(sample_config, database, spending_engine)
 
     resp = await handler._cmd_shop("Whale", CH, [])
@@ -196,7 +196,7 @@ async def test_buy_gif_creates_approval(
     spending_engine: SpendingEngine,
 ):
     """Channel GIF creates a pending approval."""
-    await _seed_account(database, "Alice", 50000)
+    await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine)
 
     resp = await handler._cmd_buy("Alice", CH, ["gif", "https://example.com/cool.gif"])
@@ -292,7 +292,7 @@ async def test_buy_rename_success(
     spending_engine: SpendingEngine,
 ):
     """Rename currency stores new name."""
-    await _seed_account(database, "Alice", 50000)
+    await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine)
 
     resp = await handler._cmd_buy("Alice", CH, ["rename", "TacoBucks"])
@@ -308,7 +308,7 @@ async def test_buy_rename_too_long(
     spending_engine: SpendingEngine,
 ):
     """Rename > 30 chars → rejected."""
-    await _seed_account(database, "Alice", 50000)
+    await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine)
 
     resp = await handler._cmd_buy("Alice", CH, ["rename", "x" * 31])

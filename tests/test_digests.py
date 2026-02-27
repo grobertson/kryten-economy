@@ -37,8 +37,8 @@ async def test_admin_digest_format(
     admin_scheduler._client.send_pm.assert_called()
     msg = admin_scheduler._client.send_pm.call_args[0][2]
 
-    assert "Weekly Economy Digest" in msg
-    assert "circulation" in msg.lower()
+    assert "Weekly Digest" in msg
+    assert "circ" in msg.lower()
     assert "Top 5 Earners" in msg
 
 

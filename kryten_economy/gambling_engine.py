@@ -799,10 +799,13 @@ class GamblingEngine:
 
         lines = [
             f"🎰 Gambling Stats for {username}:",
+            "━" * 15,
+            "",
             f"  Spins: {stats.get('total_spins', 0)}",
             f"  Flips: {stats.get('total_flips', 0)}",
             f"  Challenges: {stats.get('total_challenges', 0)}",
             f"  Heists: {stats.get('total_heists', 0)}",
+            "",
             f"  Biggest win: {stats.get('biggest_win', 0)} {self._symbol}",
             f"  Biggest loss: {stats.get('biggest_loss', 0)} {self._symbol}",
             f"  Net P&L: {net_display} {self._symbol}",

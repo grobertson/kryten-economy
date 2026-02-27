@@ -53,7 +53,7 @@ async def test_purchase_success(
 ):
     """Debits account and calls safe_set_channel_rank(channel, user, 2)."""
     # Associate Producer (100000 lifetime) is the min_rank for purchase
-    await _seed_account(database, "Alice", 200_000)
+    await _seed_account(database, "Alice", 2_000_000)
     # Set lifetime high enough for Associate Producer
     await database.credit("Alice", CH, 100_000, tx_type="earn", reason="seed")
 
@@ -80,7 +80,7 @@ async def test_purchase_min_rank_gate(
         conn = sqlite3.connect(database._db_path)
         conn.row_factory = sqlite3.Row
         conn.execute(
-            "UPDATE accounts SET balance = 200000 WHERE username = 'Bob' AND channel = ?",
+            "UPDATE accounts SET balance = 2000000 WHERE username = 'Bob' AND channel = ?",
             (CH,),
         )
         conn.commit()
@@ -122,7 +122,7 @@ async def test_purchase_failure_refund(
         return_value={"success": False, "error": "not owner"},
     )
 
-    await _seed_account(database, "Alice", 200_000)
+    await _seed_account(database, "Alice", 2_000_000)
     await database.credit("Alice", CH, 100_000, tx_type="earn", reason="test")
 
     handler = _make_handler(sample_config, database, mock_client, spending_engine)

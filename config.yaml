@@ -1,0 +1,134 @@
+# ══════════════════════════════════════════════════════════════
+#  kryten-economy — Dev Config
+# ══════════════════════════════════════════════════════════════
+
+nats:
+  servers: ["nats://localhost:4222"]
+
+channels:
+  - domain: cytu.be
+    channel: Channel-Z
+
+service:
+  name: economy
+  version: "0.1.0"
+  enable_lifecycle: true
+  enable_heartbeat: true
+  enable_discovery: true
+  heartbeat_interval: 30
+
+metrics:
+  port: 28290
+
+database:
+  path: economy-dev.db
+
+currency:
+  name: "Z-Coin"
+  symbol: "Z"
+  plural: "Z-Coins"
+
+bot:
+  username: "ZCoinBot"
+
+ignored_users:
+  - "CyTubeBot"
+  - "NepBot"
+
+onboarding:
+  welcome_wallet: 100
+  welcome_message: >
+    Welcome! You've got {amount} {currency}.
+    Stick around and you'll earn more. Try 'help' to see what you can do.
+
+presence:
+  base_rate_per_minute: 1
+  active_bonus_per_minute: 0
+  afk_threshold_minutes: 5
+  join_debounce_minutes: 5
+  greeting_absence_minutes: 30
+  hourly_milestones:
+    1: 10
+    3: 30
+    6: 75
+    12: 200
+    24: 1000
+  night_watch:
+    enabled: false
+    hours: [2, 3, 4, 5, 6, 7]
+    multiplier: 1.5
+
+streaks:
+  daily:
+    enabled: true
+    min_presence_minutes: 15
+    rewards:
+      2: 10
+      3: 20
+      4: 30
+      5: 50
+      6: 75
+      7: 100
+    milestone_7_bonus: 200
+
+gambling:
+  enabled: true
+  spin:
+    min_wager: 10
+    max_wager: 500
+    default_wager: 10
+    cooldown_seconds: 10
+  flip:
+    min_wager: 5
+    max_wager: 1000
+    cooldown_seconds: 5
+  challenge:
+    min_wager: 10
+    max_wager: 2000
+    accept_timeout_seconds: 60
+  heist:
+    enabled: true
+    min_wager: 20
+    max_wager: 500
+    min_participants: 2
+    join_window_seconds: 60
+
+spending:
+  queue_cost: 500
+  queue_priority_cost: 1000
+
+mediacms:
+  base_url: ""
+  api_token: ""
+
+vanity_shop:
+  enabled: true
+
+tipping:
+  enabled: true
+  min_amount: 1
+  max_amount: 10000
+
+ranks:
+  enabled: true
+
+admin:
+  owner_level: 4
+
+announcements:
+  custom_greeting: true
+  templates:
+    greeting: "👋 {greeting}"
+    rain: "☔ Rain! {count} users just got free {currency}."
+    flip_win: "🪙 {user} flipped and won {amount} {currency}!"
+    free_spin_win: "🎁 {user} won {amount} {currency} on a FREE spin!"
+
+digest:
+  admin_digest:
+    send_hour_utc: 5
+  user_digest:
+    enabled: false
+    send_hour_utc: 4
+
+commands:
+  rate_limit_per_minute: 10
