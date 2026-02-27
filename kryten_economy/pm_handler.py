@@ -2290,7 +2290,7 @@ class PmHandler:
         config_path = getattr(self, "_config_path", None)
         if not config_path:
             raise RuntimeError("No config_path set for hot-reload.")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
         return ConfigModel(**raw)
 
