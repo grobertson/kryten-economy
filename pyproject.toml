@@ -1,6 +1,6 @@
 [project]
 name = "kryten-economy"
-version = "0.5.1"
+version = "0.5.2"
 description = "Channel engagement currency microservice for CyTube channels"
 readme = "README.md"
 requires-python = ">=3.11,<4.0.0"
