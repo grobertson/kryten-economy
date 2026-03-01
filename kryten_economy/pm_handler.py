@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import random
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Awaitable
@@ -126,6 +127,11 @@ class PmHandler:
         self._pm_queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
         self._pm_worker_task: asyncio.Task | None = None
 
+        # Per-user search results cache (for number-selection flow)
+        self._last_search: dict[str, list[dict]] = {}  # user_lower → results
+        # Per-user pending queue confirmation (for YES/NO flow)
+        self._pending_confirm: dict[str, dict] = {}  # user_lower → {item, cost, ...}
+
         # Command dispatch map
         self._command_map: dict[str, Callable[..., Awaitable[str]]] = {
             "help": self._cmd_help,
@@ -213,6 +219,35 @@ class PmHandler:
         if not self._rate_limiter.check(username):
             await self._send_pm(channel, username, "⏳ Slow down! Try again in a moment.")
             return
+
+        # ── Intercept YES/NO for pending queue confirmations ──
+        ukey = username.lower()
+        if ukey in self._pending_confirm:
+            answer = text.strip().upper()
+            if answer == "YES":
+                pending = self._pending_confirm.pop(ukey)
+                response = await self._execute_confirmed_queue(username, channel, pending)
+                await self._send_pm(channel, username, response)
+                return
+            else:
+                self._pending_confirm.pop(ukey)
+                await self._send_pm(channel, username, "Cancelled.")
+                return
+
+        # ── Intercept numeric selection from last search ──
+        if text.strip().isdigit() and ukey in self._last_search:
+            idx = int(text.strip()) - 1
+            results = self._last_search[ukey]
+            if 0 <= idx < len(results):
+                response = await self._start_queue_confirm(username, channel, results[idx])
+                await self._send_pm(channel, username, response)
+                return
+            else:
+                await self._send_pm(channel, username, f"Invalid selection. Enter 1–{len(results)}.")
+                return
+
+        # Clear stale search selection once user types a non-number command
+        self._last_search.pop(ukey, None)
 
         parts = text.split(None, 1)
         command = parts[0].lower()
@@ -597,7 +632,22 @@ class PmHandler:
             if not heist:
                 return "No active heist to join."
             wager = list(heist.participants.values())[0]
-            return await self._gambling_engine.join_heist(username, channel, wager)
+            result = await self._gambling_engine.join_heist(username, channel, wager)
+
+            # Announce the join publicly with a fun trope line
+            if result.startswith("heist_joined:"):
+                parts = result.split(":", 3)
+                crew_size = int(parts[3])
+                join_line = random.choice(
+                    self._gambling_engine.HEIST_JOIN_LINES
+                ).format(user=username)
+                await self._announce_chat(
+                    channel,
+                    f"{join_line}  (Crew: {crew_size} 🧑‍🤝‍🧑)",
+                )
+                return f"You're in! Crew size: {crew_size}. Get ready… 🔫"
+
+            return result
 
         if not arg_text:
             return "Usage: heist <wager> or heist join"
@@ -613,10 +663,21 @@ class PmHandler:
             cfg = self._config.gambling.heist
             await self._announce_chat(
                 channel,
-                f"🏦 {username} is planning a heist! "
-                f"PM 'heist join' within {cfg.join_window_seconds}s to participate!",
+                f"🏦 {username} is assembling a crew for a HEIST! 💰\n"
+                f"PM me 'heist join' within {cfg.join_window_seconds}s — the more muscle, the bigger the score!",
             )
-            return f"Heist started! Waiting {cfg.join_window_seconds}s for others to join..."
+            return f"Heist started! Waiting {cfg.join_window_seconds}s for others to join… 🕐"
+
+        if result.startswith("heist_cooldown:"):
+            parts = result.split(":", 2)
+            secs = int(parts[1])
+            # Announce publicly too
+            await self._announce_chat(
+                channel,
+                f"👀 {username} is itching for another heist, "
+                f"but it's best to lay low for a minute. Let the heat cool off. 🔥👮",
+            )
+            return f"⏳ The heat is still on! Cooldown: {secs}s. Lay low."
 
         return result
 
@@ -641,26 +702,147 @@ class PmHandler:
             return "Usage: search <query>"
 
         query = " ".join(args)
+        self._logger.debug("MediaCMS search request from %s: '%s'", username, query)
         results = await self._media.search(query)
         if not results:
+            self._logger.info("MediaCMS search for '%s' returned no results", query)
             return f"No results found for '{query}'."
 
-        account = await self._db.get_account(username, channel)
-        rank_tier = self._spending.get_rank_tier_index(account) if account and self._spending else 0
+        # Stash results so user can pick by number
+        ukey = username.lower()
+        self._last_search[ukey] = results
+        # Clear any stale confirm
+        self._pending_confirm.pop(ukey, None)
 
-        lines = [f"🔍 Found {len(results)} result(s) for '{query}':"]
+        lines = [f"🔍 {len(results)} result(s) for '{query}':"]
         for i, item in enumerate(results, 1):
             duration_str = self._format_duration(item["duration"])
-            tier_label, base_cost = self._spending.get_price_tier(item["duration"]) if self._spending else ("", 0)
-            final_cost, discount = self._spending.apply_discount(base_cost, rank_tier) if self._spending else (base_cost, 0)
+            lines.append(f"{item['title']}")
+            lines.append(f"Runtime: {duration_str}")
+            lines.append(f"\"{i}\" to choose.")
+            lines.append("")
+        lines.append("Enter a number to select.")
+        return "\n".join(lines)
 
-            cost_str = f"{final_cost:,} Z"
-            if discount > 0:
-                cost_str += f" ({int(discount * 100)}% off!)"
+    async def _start_queue_confirm(
+        self, username: str, channel: str, item: dict, *, queue_type: str = "queue",
+    ) -> str:
+        """Show price and ask user to confirm with YES."""
+        if not self._spending:
+            return "📽️ Content queuing is not configured."
 
-            lines.append(
-                f"  {i}. \"{item['title']}\" ({duration_str}) — ID: {item['id']} · {cost_str}"
+        account = await self._db.get_or_create_account(username, channel)
+        rank_tier = self._spending.get_rank_tier_index(account)
+
+        if queue_type == "playnext":
+            base_cost = self._config.spending.interrupt_play_next
+        elif queue_type == "forcenow":
+            base_cost = self._config.spending.force_play_now
+        else:
+            _tier_label, base_cost = self._spending.get_price_tier(item["duration"])
+
+        final_cost, discount = self._spending.apply_discount(base_cost, rank_tier)
+        duration_str = self._format_duration(item["duration"])
+
+        discount_str = ""
+        if discount > 0:
+            discount_str = f" ({int(discount * 100)}% off!)"
+
+        # Stash pending confirmation
+        ukey = username.lower()
+        self._pending_confirm[ukey] = {
+            "item": item,
+            "cost": final_cost,
+            "discount": discount,
+            "rank_tier": rank_tier,
+            "queue_type": queue_type,
+            "channel": channel,
+        }
+
+        action_label = {
+            "queue": "Queue",
+            "playnext": "Play Next",
+            "forcenow": "Force Play Now",
+        }.get(queue_type, "Queue")
+
+        lines = [
+            "You selected:",
+            item["title"],
+            f"Runtime: {duration_str}",
+            f"{action_label} for {final_cost:,} {self._symbol}{discount_str}",
+            "",
+            "Enter YES to queue the item.",
+            f"{final_cost:,} {self._symbol} will be deducted.",
+            "",
+            "Enter anything else to cancel.",
+        ]
+        return "\n".join(lines)
+
+    async def _execute_confirmed_queue(
+        self, username: str, channel: str, pending: dict,
+    ) -> str:
+        """Execute a queue after YES confirmation."""
+        assert self._media is not None
+        assert self._spending is not None
+
+        item = pending["item"]
+        final_cost = pending["cost"]
+        discount = pending["discount"]
+        queue_type = pending["queue_type"]
+
+        # Daily limit
+        queues_today = await self._db.get_queues_today(username, channel)
+        max_queues = self._config.spending.max_queues_per_day
+        if queues_today >= max_queues:
+            return f"Daily queue limit reached ({max_queues}/{max_queues}). Try again tomorrow!"
+
+        # Cooldown
+        if queue_type != "forcenow":
+            last_queue = await self._db.get_last_queue_time(username, channel)
+            if last_queue:
+                cooldown = self._config.spending.queue_cooldown_minutes * 60
+                elapsed = (datetime.now(timezone.utc) - last_queue).total_seconds()
+                if elapsed < cooldown:
+                    remaining = int((cooldown - elapsed) / 60) + 1
+                    return f"⏳ Queue cooldown: {remaining} minute(s) remaining."
+
+        # Validate spend
+        validation = await self._spending.validate_spend(username, channel, final_cost, queue_type)
+        if validation:
+            return validation.message
+
+        # Debit
+        trigger_id = f"spend.{queue_type}"
+        new_balance = await self._db.debit(
+            username, channel, final_cost,
+            tx_type="spend", trigger_id=trigger_id,
+            reason=f'Queue: "{item["title"]}"',
+        )
+        if new_balance is None:
+            return "Insufficient funds."
+
+        # Queue the media via kryten-py
+        position = "next" if queue_type in ("playnext", "forcenow") else None
+        if self._client:
+            if position:
+                await self._client.add_media(channel, item["media_type"], item["media_id"], position=position)
+            else:
+                await self._client.add_media(channel, item["media_type"], item["media_id"])
+
+        # Public announcement
+        if self._config.announcements.queue_purchase and self._client:
+            template = self._config.announcements.templates.queue
+            announce_msg = template.format(
+                user=username, title=item["title"],
+                cost=final_cost, currency=self._currency_name,
             )
+            await self._announce_chat(channel, announce_msg)
+
+        lines = [
+            "Thank you.",
+            f'"{item["title"]}" has been queued.',
+            f"Balance: {new_balance:,} {self._symbol}",
+        ]
         return "\n".join(lines)
 
     async def _cmd_queue(self, username: str, channel: str, args: list[str]) -> str:
@@ -671,7 +853,10 @@ class PmHandler:
             return "Usage: queue <id>"
 
         media_id = args[0]
-        return await self._queue_media(username, channel, media_id, "queue")
+        item = await self._media.get_by_id(media_id)
+        if not item:
+            return f"Media '{media_id}' not found in the catalog."
+        return await self._start_queue_confirm(username, channel, item, queue_type="queue")
 
     async def _cmd_playnext(self, username: str, channel: str, args: list[str]) -> str:
         """Queue a MediaCMS item to play next (premium cost)."""
@@ -681,7 +866,10 @@ class PmHandler:
             return "Usage: playnext <id>"
 
         media_id = args[0]
-        return await self._queue_media(username, channel, media_id, "playnext")
+        item = await self._media.get_by_id(media_id)
+        if not item:
+            return f"Media '{media_id}' not found in the catalog."
+        return await self._start_queue_confirm(username, channel, item, queue_type="playnext")
 
     async def _cmd_forcenow(self, username: str, channel: str, args: list[str]) -> str:
         """Force-play a MediaCMS item immediately (highest cost)."""
@@ -800,11 +988,12 @@ class PmHandler:
             )
             await self._announce_chat(channel, announce_msg)
 
-        emoji = {"queue": "🎬", "playnext": "⏭️", "forcenow": "🎬💥"}.get(queue_type, "🎬")
-        return (
-            f"{emoji} Queued \"{item['title']}\" ({duration_str}).\n"
-            f"Charged: {final_cost:,} Z{discount_str} · Balance: {new_balance:,} Z"
-        )
+        lines = [
+            "Thank you.",
+            f'"{item["title"]}" has been queued.',
+            f"Balance: {new_balance:,} {self._symbol}",
+        ]
+        return "\n".join(lines)
 
     # ══════════════════════════════════════════════════════════
     #  Sprint 5: Tipping
@@ -1937,6 +2126,7 @@ class PmHandler:
                 amount=f"{actual_total:,}",
                 per_user=f"{per_user:,}",
                 sender=username,
+                user=username,
             ),
         )
 
@@ -2364,7 +2554,7 @@ class PmHandler:
     # ──────────────────────────────────────────────────────────
 
     _PM_MAX_LEN: int = 240  # CyTube single-message character limit
-    _PM_SEND_INTERVAL: float = 10.0  # seconds between outbound PMs
+    _PM_SEND_INTERVAL: float = 2.0  # seconds between outbound PMs
 
     # Appended to every automated trigger PM so users know how to opt out
     QUIET_HINT: str = "(PM 'quiet' to mute notifications)"

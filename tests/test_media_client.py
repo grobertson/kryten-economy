@@ -24,11 +24,12 @@ def _make_client(**overrides) -> MediaCMSClient:
 
 
 def _fake_media(mid: str = "abc123", title: str = "Test Video", dur: int = 600) -> dict:
+    """Simulate raw API response from MediaCMS."""
     return {
         "friendly_token": mid,
         "title": title,
         "duration": dur,
-        "media_type": "yt",
+        "media_type": "video",
         "media_id": mid,
     }
 
@@ -57,7 +58,42 @@ async def test_search_returns_results():
     assert len(results) == 2
     assert results[0]["title"] == "Test Video"
     assert results[0]["id"] == "abc123"
+    assert results[0]["media_type"] == "cm"
+    assert results[0]["media_id"] == "https://media.test.com/api/v1/media/cytube/abc123.json?format=json"
     assert results[1]["duration"] == 120
+
+    # Verify correct API params: 'q' (not 'search'), no page_size
+    call_args = mock_session.get.call_args
+    assert call_args[0][0] == "/api/v1/media"
+    assert call_args[1]["params"]["q"] == "test"
+    assert "search" not in call_args[1]["params"]
+
+
+@pytest.mark.asyncio
+async def test_search_client_side_limit():
+    """Results are truncated to search_results_limit client-side."""
+    cfg = MediaCMSConfig(
+        base_url="https://media.test.com",
+        api_token="test-token",
+        search_results_limit=3,
+    )
+    import logging
+    client = MediaCMSClient(cfg, logging.getLogger("test"))
+    items = [_fake_media(f"id{i}", f"Video {i}", 100 + i) for i in range(10)]
+    mock_resp = AsyncMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json = AsyncMock(return_value={"results": items})
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    client._session = mock_session
+
+    results = await client.search("many")
+    assert len(results) == 3
+    assert results[0]["id"] == "id0"
+    assert results[2]["id"] == "id2"
 
 
 @pytest.mark.asyncio

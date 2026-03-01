@@ -313,7 +313,13 @@ class HeistConfig(BaseModel):
     min_participants: int = 3
     join_window_seconds: int = 120
     success_chance: float = 0.40
+    push_chance: float = 0.15
+    push_fee_pct: float = 0.05
     payout_multiplier: float = 1.5
+    crew_bonus_per_player: float = 0.25
+    cooldown_seconds: int = 180
+    min_wager: int = 20
+    max_wager: int = 5000
     announce_public: bool = True
 
 

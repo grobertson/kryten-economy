@@ -71,8 +71,8 @@ def _fake_media(mid: str = "abc123", title: str = "Test Video", dur: int = 600) 
         "id": mid,
         "title": title,
         "duration": dur,
-        "media_type": "yt",
-        "media_id": mid,
+        "media_type": "cm",
+        "media_id": f"https://media.test.com/api/v1/media/cytube/{mid}.json?format=json",
     }
 
 
@@ -113,7 +113,9 @@ async def test_search_shows_results(
     resp = await handler._cmd_search("Alice", CH, ["cool"])
     assert "Cool Video" in resp
     assert "Nice Movie" in resp
-    assert "v1" in resp
+    # Results are stored for number-selection
+    assert "alice" in handler._last_search
+    assert len(handler._last_search["alice"]) == 2
 
 
 @pytest.mark.asyncio
@@ -121,13 +123,18 @@ async def test_search_shows_discount(
     sample_config: EconomyConfig, database: EconomyDatabase,
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
 ):
-    """High-rank user sees discount in search results."""
+    """High-rank user sees discount in queue confirmation (not in search results)."""
     mock_media_client.search = AsyncMock(return_value=[_fake_media("v1", "Video", 600)])
     await _seed_account(database, "Whale", balance=50000, lifetime=100000)  # tier 5 = 10%
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
+    # Search shows results — discount shown at confirm stage
     resp = await handler._cmd_search("Whale", CH, ["video"])
-    assert "off" in resp.lower()
+    assert "Video" in resp
+
+    # Simulate selecting item 1 → confirm prompt shows discount
+    confirm_resp = await handler._start_queue_confirm("Whale", CH, handler._last_search["whale"][0])
+    assert "off" in confirm_resp.lower()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -141,13 +148,22 @@ async def test_queue_success(
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
-    """Successful queue deducts funds and calls add_media."""
+    """Successful queue deducts funds and calls add_media after YES confirmation."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Hit Song", 180))
     await _seed_account(database, "Alice", 5000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
+    # Step 1: queue command returns confirmation prompt
     resp = await handler._cmd_queue("Alice", CH, ["v1"])
-    assert "Queued" in resp or "queued" in resp
+    assert "You selected" in resp
+    assert "Hit Song" in resp
+    assert "YES" in resp
+
+    # Step 2: confirm with YES
+    assert "alice" in handler._pending_confirm
+    pending = handler._pending_confirm.pop("alice")
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
+    assert "queued" in resp.lower()
     assert "Hit Song" in resp
 
     # Balance reduced
@@ -177,13 +193,19 @@ async def test_queue_insufficient_funds(
     sample_config: EconomyConfig, database: EconomyDatabase,
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
 ):
-    """Queue with too little Z → insufficient funds."""
+    """Queue with too little Z → insufficient funds at confirm stage."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Movie", 7200))
     await _seed_account(database, "Broke", 100)  # only 100 Z, movie costs 1000
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
+    # Confirm prompt still shows (price shown)
     resp = await handler._cmd_queue("Broke", CH, ["v1"])
-    assert "insufficient" in resp.lower() or "funds" in resp.lower()
+    assert "You selected" in resp
+
+    # But when they confirm, insufficient funds
+    pending = handler._pending_confirm.pop("broke")
+    resp = await handler._execute_confirmed_queue("Broke", CH, pending)
+    assert "insufficient" in resp.lower() or "funds" in resp.lower() or "don't have" in resp.lower()
 
 
 @pytest.mark.asyncio
@@ -192,7 +214,7 @@ async def test_queue_daily_limit(
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
-    """Queue past daily limit → blocked."""
+    """Queue past daily limit → blocked at confirm stage."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Song", 180))
     await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
@@ -203,15 +225,21 @@ async def test_queue_daily_limit(
     async def _no_cooldown(username, channel):
         return None
 
-    # Queue max_queues_per_day times (default 3), bypassing cooldown
+    # Queue max_queues_per_day times (default 3)
     for i in range(3):
         database.get_last_queue_time = _no_cooldown
         resp = await handler._cmd_queue("Alice", CH, [f"v{i}"])
-        assert "queued" in resp.lower() or "Queued" in resp
+        assert "You selected" in resp
+        pending = handler._pending_confirm.pop("alice")
+        resp = await handler._execute_confirmed_queue("Alice", CH, pending)
+        assert "queued" in resp.lower()
 
     database.get_last_queue_time = _no_cooldown
-    # 4th should be rejected by daily limit
+    # 4th: gets confirm prompt, but confirmation fails on daily limit
     resp = await handler._cmd_queue("Alice", CH, ["v99"])
+    assert "You selected" in resp
+    pending = handler._pending_confirm.pop("alice")
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
     assert "limit" in resp.lower()
 
     database.get_last_queue_time = original_get_last
@@ -223,13 +251,22 @@ async def test_queue_cooldown(
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
-    """Second queue within cooldown → blocked."""
+    """Second queue within cooldown → blocked at confirm stage."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Song", 180))
     await _seed_account(database, "Alice", 50000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
-    await handler._cmd_queue("Alice", CH, ["v1"])
-    resp = await handler._cmd_queue("Alice", CH, ["v2"])
+    # First queue succeeds
+    resp = await handler._cmd_queue("Alice", CH, ["v1"])
+    pending = handler._pending_confirm.pop("alice")
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
+    assert "queued" in resp.lower()
+
+    # Second queue: gets confirm prompt but confirmation hits cooldown
+    resp = await handler._cmd_queue("Alice", CH, ["v1"])
+    assert "You selected" in resp
+    pending = handler._pending_confirm.pop("alice")
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
     assert "cooldown" in resp.lower()
 
 
@@ -244,13 +281,21 @@ async def test_playnext_uses_position(
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
-    """playnext calls add_media with position='next'."""
+    """playnext calls add_media with position='next' after YES."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Priority", 300))
     await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
+    # Step 1: confirm prompt with queue_type=playnext
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
-    assert "Queued" in resp or "queued" in resp
+    assert "You selected" in resp
+    assert "Play Next" in resp
+
+    # Step 2: confirm
+    pending = handler._pending_confirm.pop("alice")
+    assert pending["queue_type"] == "playnext"
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
+    assert "queued" in resp.lower()
 
     # Check position kwarg
     call_args = mock_client.add_media.call_args
@@ -268,7 +313,13 @@ async def test_playnext_higher_cost(
     await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
+    # Confirm prompt shows the higher price
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
+    assert "You selected" in resp
+
+    # Execute queue
+    pending = handler._pending_confirm.pop("alice")
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
     account = await database.get_account("Alice", CH)
     # Charged interrupt_play_next (100000), balance was 500000 → ~400000
     assert account["balance"] <= 500000 - 80000  # At least 80000 charged (maybe discount)
@@ -314,5 +365,5 @@ async def test_forcenow_without_admin_gate(
     handler = _make_handler(config, database, engine, mock_media_client, mock_client)
 
     resp = await handler._cmd_forcenow("Rich", CH, ["v1"])
-    assert "Queued" in resp or "queued" in resp
+    assert "queued" in resp.lower() or "Thank you" in resp
     mock_client.add_media.assert_called_once()

@@ -28,14 +28,20 @@ class MediaCMSClient:
 
     async def start(self) -> None:
         """Create the HTTP session."""
+        if "example.com" in self._config.base_url:
+            self._logger.warning(
+                "MediaCMS base_url looks like a placeholder (%s) — search will not work",
+                self._config.base_url,
+            )
         headers: dict[str, str] = {}
-        if self._config.api_token:
+        if self._config.api_token and self._config.api_token != "your-token-here":
             headers["Authorization"] = f"Token {self._config.api_token}"
         self._session = aiohttp.ClientSession(
             base_url=self._config.base_url,
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=10.0),
         )
+        self._logger.info("MediaCMS session created for %s", self._config.base_url)
 
     async def stop(self) -> None:
         """Close the HTTP session."""
@@ -58,16 +64,17 @@ class MediaCMSClient:
             return []
 
         try:
+            self._logger.debug("MediaCMS search: q=%r limit=%d", query, self._config.search_results_limit)
             async with self._session.get(
                 "/api/v1/media",
-                params={
-                    "search": query,
-                    "page_size": self._config.search_results_limit,
-                },
+                params={"q": query},
             ) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
                 results = self._parse_search_results(data)
+                # Server ignores page_size — apply limit client-side
+                results = results[: self._config.search_results_limit]
+                self._logger.debug("MediaCMS search returned %d result(s) for '%s'", len(results), query)
                 self._set_cached(cache_key, results)
                 return results
         except Exception as e:
@@ -115,15 +122,21 @@ class MediaCMSClient:
         results = data.get("results", data) if isinstance(data, dict) else data
         return [self._parse_media_item(item) for item in results]
 
-    @staticmethod
-    def _parse_media_item(item: dict) -> dict:
-        """Parse a single media item from API response."""
+    def _parse_media_item(self, item: dict) -> dict:
+        """Parse a single media item from API response.
+
+        Builds a CyTube-compatible custom-media URL so ``add_media``
+        can queue the item directly.
+        """
+        token = item.get("friendly_token", item.get("id", ""))
+        base = self._config.base_url.rstrip("/")
+        cytube_url = f"{base}/api/v1/media/cytube/{token}.json?format=json"
         return {
-            "id": item.get("friendly_token", item.get("id", "")),
+            "id": token,
             "title": item.get("title", "Unknown"),
             "duration": item.get("duration", 0),
-            "media_type": item.get("media_type", "yt"),
-            "media_id": item.get("media_id", item.get("friendly_token", "")),
+            "media_type": "cm",
+            "media_id": cytube_url,
         }
 
     def _get_cached(self, key: str) -> Any | None:

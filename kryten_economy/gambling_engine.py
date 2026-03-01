@@ -102,6 +102,9 @@ class GamblingEngine:
         # Active heists: channel → ActiveHeist
         self._active_heists: dict[str, ActiveHeist] = {}
 
+        # Heist cooldown: channel → last_resolve_time
+        self._heist_cooldowns: dict[str, datetime] = {}
+
     def update_config(self, new_config) -> None:
         """Hot-swap the config reference. Rebuild payout table."""
         self._config = new_config
@@ -663,11 +666,67 @@ class GamblingEngine:
     #  Heist
     # ══════════════════════════════════════════════════════════
 
+    # ── Dramatic scenario text pools ──────────────────────────
+
+    HEIST_SCENARIOS: list[str] = [
+        "🏦 Your team enters the casino. {user} disables the cameras while the rest get to work…",
+        "🏦 As the bank doors swing open, {user} yells, \"EVERYONE ON THE FLOOR!!!\" 💰",
+        "🏦 __SMASH!__ 💎 Alarms ring as {user} _removes_ the top of the glass cabinet. It's full of jewels! The team better move quickly…",
+        "🏦 The crew rolls up to the armored truck in a black sedan. {user} pulls out the acetylene torch… 🔥",
+        "🏦 Under cover of night, the crew slides down ropes into the vault. {user} whispers: \"Nobody make a sound…\" 🤫",
+        "🏦 {user} hacks the security mainframe — \"We've got 90 seconds before the grid resets!\" 💻🔓",
+        "🏦 The tunnel breaks through the floor of the vault. Gold bars everywhere. {user} grins: \"Jackpot.\" 🪙",
+    ]
+
+    HEIST_WIN_LINES: list[str] = [
+        "💰 THAT WAS CLOSE! Sirens in the distance, but the crew vanishes into the night. Everyone collects {payout} {symbol}!",
+        "💰 Like taking candy from a baby. Everyone collects {payout} {symbol}! 😎",
+        "💰 The getaway driver floors it — tires screech, but the crew is CLEAN! Everyone collects {payout} {symbol}! 🚗💨",
+        "💰 The doors slam shut behind them and the safe house erupts in cheers! Everyone collects {payout} {symbol}! 🎉",
+        "💰 Not a single alarm tripped. The perfect crime. Everyone collects {payout} {symbol}! 🤌",
+    ]
+
+    HEIST_LOSE_LINES: list[str] = [
+        "🚨 CAUGHT! {user} tripped the laser grid. Everyone loses their wager! 👮",
+        "🚨 BUSTED! Undercover cops were waiting the whole time. The crew is going DOWNTOWN! 🚔",
+        "🚨 {user} left prints on the vault door — the feds traced it in minutes. Wagers forfeited! 🔍",
+        "🚨 The getaway van won't start! Surrounded by SWAT. It's over. Everyone's busted! 💀",
+        "🚨 A dye pack exploded in the bag — {user} is covered in blue and the cops are closing in! 🔵👮",
+    ]
+
+    HEIST_PUSH_LINES: list[str] = [
+        "😰 The alarm trips! The crew scatters — most of the loot falls out of the bags during the escape. Refunded minus a 5% \"dry cleaning\" fee.",
+        "😰 A guard spots the crew at the last second — they bail but drop most of the cash. Refunded minus 5% for the getaway fuel. ⛽",
+        "😰 {user} accidentally sets off a smoke bomb in the van. Chaos. The crew saves MOST of the take… minus 5%.",
+    ]
+
+    HEIST_JOIN_LINES: list[str] = [
+        "🔫 \"You son of a bitch, I'm in!\" — {user}",
+        "🤝 \"One last job. After this, we're even. Understood?\" — {user}",
+        "😏 \"{user} cracks their knuckles. \"Let's do this.\"",
+        "🎭 {user} puts on the mask. \"Nobody knows me in there.\"",
+        "🗺️ \"I know a guy on the inside…\" — {user}",
+        "💣 {user} opens a briefcase full of explosives. \"I brought party favors.\"",
+        "🕶️ {user} slides on sunglasses. \"I was born for this.\"",
+        "🤫 {user} slips in through the back. \"What? I was already here.\"",
+        "🔒 \"I can crack any safe in under 60 seconds.\" — {user}",
+        "🏎️ \"{user} revs the engine. \"I'll be the getaway.\"",
+    ]
+
     def get_active_heist(self, channel: str) -> ActiveHeist | None:
         return self._active_heists.get(channel)
 
+    def get_heist_cooldown_remaining(self, channel: str) -> int:
+        """Return seconds remaining on channel heist cooldown, or 0."""
+        last = self._heist_cooldowns.get(channel)
+        if last is None:
+            return 0
+        elapsed = (datetime.now(timezone.utc) - last).total_seconds()
+        remaining = self._config.gambling.heist.cooldown_seconds - elapsed
+        return max(0, int(remaining))
+
     async def start_heist(self, username: str, channel: str, wager: int) -> str:
-        """Start a new heist. Returns PM response."""
+        """Start a new heist. Returns PM response or sentinel."""
         cfg = self._config.gambling.heist
 
         if not cfg.enabled:
@@ -676,10 +735,14 @@ class GamblingEngine:
         if channel in self._active_heists:
             return "A heist is already in progress! Use 'heist join' to join."
 
+        # Cooldown check — returns sentinel for public + PM messaging
+        cooldown_left = self.get_heist_cooldown_remaining(channel)
+        if cooldown_left > 0:
+            return f"heist_cooldown:{cooldown_left}:{username}"
+
         error = await self._validate_gamble(
             username, channel, wager, "heist",
-            self._config.gambling.spin.min_wager,
-            self._config.gambling.spin.max_wager,
+            cfg.min_wager, cfg.max_wager,
             0, None,
         )
         if error:
@@ -701,7 +764,7 @@ class GamblingEngine:
         return f"heist_started:{channel}"
 
     async def join_heist(self, username: str, channel: str, wager: int) -> str:
-        """Join an active heist."""
+        """Join an active heist. Returns sentinel on success for announcement."""
         if channel not in self._active_heists:
             return "No active heist. Start one with 'heist <wager>'."
 
@@ -718,12 +781,31 @@ class GamblingEngine:
             return "Insufficient funds."
 
         heist.participants[username] = wager
-        return f"You joined the heist! ({len(heist.participants)} participants so far)"
+        crew_size = len(heist.participants)
 
-    async def resolve_heist(self, channel: str) -> tuple[str, list[str]] | None:
+        # Return a sentinel so the PM handler can announce the join publicly
+        return f"heist_joined:{channel}:{username}:{crew_size}"
+
+    def _heist_crew_multiplier(self, crew_size: int) -> float:
+        """Calculate payout multiplier scaled by crew size.
+
+        base_multiplier + (crew_size - 1) * crew_bonus_per_player
+        e.g. 1.5 + (4-1) * 0.25 = 2.25x for a 4-person crew.
+        """
+        cfg = self._config.gambling.heist
+        return cfg.payout_multiplier + (crew_size - 1) * cfg.crew_bonus_per_player
+
+    def pick_heist_scenario(self, participants: list[str]) -> str:
+        """Pick a random heist scenario line with a random participant name."""
+        user = random.choice(participants)
+        return random.choice(self.HEIST_SCENARIOS).format(user=user)
+
+    async def resolve_heist(self, channel: str) -> tuple[list[str], list[str]] | None:
         """Resolve an active heist.
 
-        Returns ``(public_message, [participant_usernames])`` or ``None``.
+        Returns ``([message_lines], [participant_usernames])`` or ``None``.
+        The first line is the scenario (sent before the delay).
+        Subsequent lines are the outcome (sent after the delay).
         """
         cfg = self._config.gambling.heist
 
@@ -732,7 +814,14 @@ class GamblingEngine:
 
         heist = self._active_heists.pop(channel)
 
-        if len(heist.participants) < cfg.min_participants:
+        # Record cooldown start
+        self._heist_cooldowns[channel] = datetime.now(timezone.utc)
+
+        participants = list(heist.participants.keys())
+        crew_size = len(participants)
+
+        # ---- Not enough crew → refund ----
+        if crew_size < cfg.min_participants:
             for user, wager in heist.participants.items():
                 await self._db.credit(
                     user, channel, wager,
@@ -741,16 +830,23 @@ class GamblingEngine:
                     reason="Heist cancelled — not enough participants",
                 )
             return (
-                f"🏦 Heist cancelled — only {len(heist.participants)} participants "
-                f"(need {cfg.min_participants}). Everyone refunded.",
-                list(heist.participants.keys()),
+                [
+                    f"🏦 Heist cancelled — only {crew_size} participant(s) "
+                    f"(need {cfg.min_participants}). Everyone was refunded.",
+                ],
+                participants,
             )
 
-        success = random.random() < cfg.success_chance
+        # ---- Determine outcome ----
+        scenario_line = self.pick_heist_scenario(participants)
+        roll = random.random()
+        total_pot = sum(heist.participants.values())
+        multiplier = self._heist_crew_multiplier(crew_size)
 
-        if success:
+        if roll < cfg.success_chance:
+            # ── WIN ──
             for user, wager in heist.participants.items():
-                payout = int(wager * cfg.payout_multiplier)
+                payout = int(wager * multiplier)
                 await self._db.credit(
                     user, channel, payout,
                     tx_type="gamble_win",
@@ -763,25 +859,56 @@ class GamblingEngine:
                     biggest_win=max(0, net), biggest_loss=0,
                 )
 
-            total_pot = sum(heist.participants.values())
-            return (
-                f"🏦💰 HEIST SUCCESS! {len(heist.participants)} participants split "
-                f"{int(total_pot * cfg.payout_multiplier)} {self._symbol}!",
-                list(heist.participants.keys()),
+            total_payout = int(total_pot * multiplier)
+            per_user_display = int((total_pot // crew_size) * multiplier)
+            random_user = random.choice(participants)
+            win_line = random.choice(self.HEIST_WIN_LINES).format(
+                payout=f"{per_user_display:,}", symbol=self._symbol, user=random_user,
             )
+            summary = (
+                f"💰 Crew of {crew_size} split {total_payout:,} {self._symbol} "
+                f"({multiplier:.1f}x multiplier)!"
+            )
+            return ([scenario_line, win_line, summary], participants)
+
+        elif roll < cfg.success_chance + cfg.push_chance:
+            # ── PUSH — refund minus fee ──
+            fee_pct = cfg.push_fee_pct
+            for user, wager in heist.participants.items():
+                refund = int(wager * (1.0 - fee_pct))
+                await self._db.credit(
+                    user, channel, refund,
+                    tx_type="gamble_win",
+                    trigger_id="gambling.heist.push",
+                    reason="Heist push — partial refund",
+                )
+                loss = wager - refund
+                await self._db.update_gambling_stats(
+                    user, channel, "heist", net=-loss,
+                    biggest_win=0, biggest_loss=loss,
+                )
+
+            random_user = random.choice(participants)
+            push_line = random.choice(self.HEIST_PUSH_LINES).format(
+                user=random_user, symbol=self._symbol,
+            )
+            return ([scenario_line, push_line], participants)
+
         else:
+            # ── LOSS ──
             for user, wager in heist.participants.items():
                 await self._db.update_gambling_stats(
                     user, channel, "heist", net=-wager,
                     biggest_win=0, biggest_loss=wager,
                 )
 
-            total_lost = sum(heist.participants.values())
-            return (
-                f"🏦🚨 HEIST FAILED! {len(heist.participants)} participants lost "
-                f"{total_lost} {self._symbol} total!",
-                list(heist.participants.keys()),
+            random_user = random.choice(participants)
+            lose_line = random.choice(self.HEIST_LOSE_LINES).format(
+                user=random_user, symbol=self._symbol,
             )
+            total_lost = sum(heist.participants.values())
+            summary = f"The crew lost {total_lost:,} {self._symbol} total. 💸"
+            return ([scenario_line, lose_line, summary], participants)
 
     # ══════════════════════════════════════════════════════════
     #  Gambling Stats

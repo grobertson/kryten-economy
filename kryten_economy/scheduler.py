@@ -195,11 +195,20 @@ class Scheduler:
                     if heist and now > heist.expires_at:
                         result = await self._gambling_engine.resolve_heist(channel)
                         if result:
-                            public_msg, participants = result
-                            if self._config.gambling.heist.announce_public:
-                                await self._announce_chat(channel, public_msg)
+                            lines, participants = result
+                            if self._config.gambling.heist.announce_public and lines:
+                                # Send scenario line first
+                                await self._announce_chat(channel, lines[0])
+                                if len(lines) > 1:
+                                    # Dramatic pause before revealing outcome
+                                    await asyncio.sleep(6)
+                                    for line in lines[1:]:
+                                        await self._announce_chat(channel, line)
+                                        await asyncio.sleep(2)
+                            # PM all participants with the full result
+                            full_msg = "\n".join(lines)
                             for user in participants:
-                                await self._send_pm(channel, user, public_msg)
+                                await self._send_pm(channel, user, full_msg)
             except Exception:
                 self._logger.exception("Heist check failed")
 

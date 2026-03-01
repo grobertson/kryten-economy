@@ -50,7 +50,8 @@ def _make_handler(
 def _fake_media(mid: str = "abc123") -> dict:
     return {
         "id": mid, "title": "Test Video", "duration": 600,
-        "media_type": "yt", "media_id": mid,
+        "media_type": "cm",
+        "media_id": f"https://media.test.com/api/v1/media/cytube/{mid}.json?format=json",
     }
 
 
@@ -73,7 +74,12 @@ async def test_queue_no_blackout(
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
     resp = await handler._cmd_queue("Alice", CH, ["abc123"])
-    assert "Queued" in resp or "queued" in resp
+    assert "You selected" in resp
+
+    # Confirm with YES
+    pending = handler._pending_confirm.pop("alice")
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
+    assert "queued" in resp.lower()
 
 
 @pytest.mark.asyncio

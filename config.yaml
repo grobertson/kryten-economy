@@ -32,21 +32,25 @@ bot:
   username: "ZCoinBot"
 
 ignored_users:
-  - "CyTubeBot"
-  - "NepBot"
+  - "SaveTheRobots"
+  - "FaxyBrown"
+  - "VHSOracle"
 
 onboarding:
-  welcome_wallet: 100
+  welcome_wallet: 250
   welcome_message: >
-    Welcome! You've got {amount} {currency}.
-    Stick around and you'll earn more. Try 'help' to see what you can do.
+    Welcome to Channel-Z!! You've got {amount} {currency} to start.
+    Stick around and you'll earn more and gain the ability to do cool things, like add to our queue or purchase a username-Gif. \n\nTry 'help' to see what you can do.
 
 presence:
-  base_rate_per_minute: 1
-  active_bonus_per_minute: 0
+  base_rate_per_minute: 2
+  active_bonus_per_minute: 2
   afk_threshold_minutes: 5
   join_debounce_minutes: 5
-  greeting_absence_minutes: 30
+  greeting_absence_minutes: 90
+
+rain:
+  enabled: false
   hourly_milestones:
     1: 10
     3: 30
@@ -54,7 +58,7 @@ presence:
     12: 200
     24: 1000
   night_watch:
-    enabled: false
+    enabled: true
     hours: [2, 3, 4, 5, 6, 7]
     multiplier: 1.5
 
@@ -75,31 +79,37 @@ gambling:
   enabled: true
   spin:
     min_wager: 10
-    max_wager: 500
+    max_wager: 5000
     default_wager: 10
     cooldown_seconds: 10
   flip:
     min_wager: 5
-    max_wager: 1000
+    max_wager: 10000
     cooldown_seconds: 5
   challenge:
     min_wager: 10
-    max_wager: 2000
+    max_wager: 25000
     accept_timeout_seconds: 60
   heist:
     enabled: true
     min_wager: 20
-    max_wager: 500
+    max_wager: 5000
     min_participants: 2
-    join_window_seconds: 60
+    join_window_seconds: 120
+    success_chance: 0.40
+    push_chance: 0.15
+    push_fee_pct: 0.05
+    payout_multiplier: 1.5
+    crew_bonus_per_player: 0.25
+    cooldown_seconds: 180
 
 spending:
-  queue_cost: 500
-  queue_priority_cost: 1000
+  queue_cost: 5000
+  queue_priority_cost: 10000
 
 mediacms:
-  base_url: ""
-  api_token: ""
+  base_url: "https://www.dropsugar.co"
+  api_token: "07cef36ea6fb4730220de94f106e769cf0f6c9cf"
 
 vanity_shop:
   enabled: true
@@ -113,15 +123,15 @@ ranks:
   enabled: true
 
 admin:
-  owner_level: 4
+  owner_level: 3
 
 announcements:
   custom_greeting: true
   templates:
     greeting: "👋 {greeting}"
-    rain: "☔ Rain! {count} users just got free {currency}."
-    flip_win: "🪙 {user} flipped and won {amount} {currency}!"
-    free_spin_win: "🎁 {user} won {amount} {currency} on a FREE spin!"
+    rain: "☔ Rain! {count} users just got free {currency}. {user} made it rain up in here!"
+    flip_win: "🪙 {user} flipped a coin and won {amount} {currency}!"
+    free_spin_win: "🎁 {user} won {amount} {currency} on a FREE spin! Try yours DAILY!"
 
 digest:
   admin_digest:
