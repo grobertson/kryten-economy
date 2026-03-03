@@ -668,10 +668,12 @@ class PmHandler:
 
         if result.startswith("heist_started:"):
             cfg = self._config.gambling.heist
+            s = self._symbol
             await self._announce_chat(
                 channel,
                 f"🏦 {username} is assembling a crew for a HEIST! 💰\n"
-                f"Say 'join' in chat within {cfg.join_window_seconds}s — the more muscle, the bigger the score!",
+                f"Buy-in: {wager:,} {s} — say 'join' in chat within "
+                f"{cfg.join_window_seconds}s. The more muscle, the bigger the score!",
             )
             return f"Heist started! Waiting {cfg.join_window_seconds}s for others to join… 🕐"
 
@@ -708,8 +710,30 @@ class PmHandler:
                 channel,
                 f"{join_line}  (Crew: {crew_size} \U0001f9d1\u200d\U0001f91d\u200d\U0001f9d1)",
             )
-        # Non-join results (already in crew, wager issues, etc.) are silently ignored
-        # since the user spoke in public chat rather than a PM command
+        elif result == "Insufficient funds.":
+            s = self._symbol
+            await self._send_pm(
+                channel, username,
+                f"🏦 You don't have enough {s} for the buy-in! "
+                f"Need {wager:,} {s} to join this crew. "
+                f"Try 'balance' to check your stash.",
+            )
+        elif result == "You're already in this heist.":
+            await self._send_pm(
+                channel, username,
+                "🏦 Easy, hotshot — you're already on the crew. Sit tight.",
+            )
+        elif result == "The join window has closed.":
+            await self._send_pm(
+                channel, username,
+                "🏦 Too late — the crew already rolled out. "
+                "Catch the next one!",
+            )
+        elif result == "No active heist. Start one with 'heist <wager>'.":
+            pass  # No heist running — ignore stray 'join' messages
+        else:
+            # Unexpected refusal — still let the user know
+            await self._send_pm(channel, username, f"🏦 {result}")
 
     async def _cmd_gambling_stats(
         self, username: str, channel: str, args: list[str],

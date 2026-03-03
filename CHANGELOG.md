@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-03-03
+
+### Fixed
+
+- **Silent heist join failure** — When a user says "join" in chat but lacks funds (or hits another error), the bot now PMs them an in-character explanation instead of failing silently
+- **Heist announcement missing buy-in** — The crew-forming announcement now shows the wager amount so users know the cost before joining
+
+[0.7.4]: https://github.com/grobertson/kryten-economy/releases/tag/v0.7.4
+
 ## [0.7.3] - 2026-03-03
 
 ### Added
