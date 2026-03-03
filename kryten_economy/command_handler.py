@@ -75,6 +75,17 @@ class CommandHandler:
     async def _handle_ping(self, request: dict[str, Any]) -> dict[str, Any]:
         return {"pong": True, "version": __version__}
 
+    async def _handle_about(self, request: dict[str, Any]) -> dict[str, Any]:
+        uptime = self._app.uptime_seconds
+        hours, remainder = divmod(int(uptime), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_human = f"{hours}h {minutes}m {seconds}s"
+        return {
+            "version": __version__,
+            "uptime_seconds": uptime,
+            "uptime_human": uptime_human,
+        }
+
     async def _handle_health(self, request: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "healthy",
@@ -107,6 +118,7 @@ class CommandHandler:
 
     _HANDLER_MAP: dict[str, Any] = {
         "system.ping": _handle_ping,
+        "system.about": _handle_about,
         "system.health": _handle_health,
         "balance.get": _handle_balance_get,
     }

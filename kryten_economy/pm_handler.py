@@ -11,9 +11,11 @@ import hashlib
 import logging
 import random
 import re
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Awaitable
 
+from . import __version__
 from .database import EconomyDatabase
 from .gambling_engine import GambleOutcome
 from .presence_tracker import PresenceTracker
@@ -104,6 +106,7 @@ class PmHandler:
         self._multiplier_engine = multiplier_engine
         self._bounty_manager = bounty_manager
         self._logger = logger or logging.getLogger("economy.pm")
+        self._metrics = None  # Wired by EconomyApp after construction
 
         self._ignored_users: set[str] = {u.lower() for u in config.ignored_users}
         self._bot_username_lower = config.bot.username.lower()
@@ -122,6 +125,8 @@ class PmHandler:
         self._rate_limiter = PmRateLimiter(
             max_per_minute=config.commands.rate_limit_per_minute,
         )
+
+        self._start_time: float = time.time()
 
         # PM delivery queue — throttled to 1 message per _PM_SEND_INTERVAL
         self._pm_queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
@@ -175,6 +180,8 @@ class PmHandler:
             "unquiet": self._cmd_unquiet,
             "mute": self._cmd_quiet,
             "unmute": self._cmd_unquiet,
+            # About
+            "about": self._cmd_about,
         }
 
         # Admin commands (CyTube rank >= owner_level)
@@ -310,7 +317,7 @@ class PmHandler:
         ]
         if self._config.gambling.heist.enabled:
             lines.append("  heist <wager>")
-            lines.append("  heist join")
+            lines.append("  (say 'join' in chat to join an active heist)")
         lines.extend([
             "",
             "🎬 Media",
@@ -331,10 +338,23 @@ class PmHandler:
             "🔕 Notifications",
             "  quiet · unquiet",
             "",
+            "ℹ️ Info",
+            "  about",
+            "",
             "━" * 15,
             "Discover more as you go 🍿",
         ])
         return "\n".join(lines)
+
+    async def _cmd_about(self, username: str, channel: str, args: list[str]) -> str:
+        uptime = time.time() - self._start_time
+        hours, remainder = divmod(int(uptime), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_human = f"{hours}h {minutes}m {seconds}s"
+        return (
+            f"🤖 kryten-economy v{__version__}\n"
+            f"⏱ Uptime: {uptime_human}"
+        )
 
     async def _cmd_balance(self, username: str, channel: str, args: list[str]) -> str:
         account = await self._db.get_or_create_account(username, channel)
@@ -498,6 +518,8 @@ class PmHandler:
 
         if not args:
             result = await self._gambling_engine.daily_free_spin(username, channel)
+            if self._metrics:
+                self._metrics.record_gamble("spin", 0, result.payout)
             if result.payout > 0 and self._should_announce_gambling_win(channel, result.payout):
                 template = getattr(self._config.announcements.templates, "free_spin_win", None)
                 if template:
@@ -516,6 +538,8 @@ class PmHandler:
             return "Usage: spin [wager] (no wager = free daily spin)"
 
         result = await self._gambling_engine.spin(username, channel, wager)
+        if self._metrics:
+            self._metrics.record_gamble("spin", wager, result.payout)
         if result.announce_public:
             # Jackpots always get announced — bypass throttle
             await self._announce_chat(
@@ -543,6 +567,8 @@ class PmHandler:
             return "Usage: flip <wager>"
 
         result = await self._gambling_engine.flip(username, channel, wager)
+        if self._metrics:
+            self._metrics.record_gamble("flip", wager, result.payout)
 
         # Throttled public announcement for wins
         if result.outcome == GambleOutcome.WIN and self._should_announce_gambling_win(channel, result.payout):
@@ -628,34 +654,15 @@ class PmHandler:
         arg_text = " ".join(args).strip().lower()
 
         if arg_text == "join":
-            heist = self._gambling_engine.get_active_heist(channel)
-            if not heist:
-                return "No active heist to join."
-            wager = list(heist.participants.values())[0]
-            result = await self._gambling_engine.join_heist(username, channel, wager)
-
-            # Announce the join publicly with a fun trope line
-            if result.startswith("heist_joined:"):
-                parts = result.split(":", 3)
-                crew_size = int(parts[3])
-                join_line = random.choice(
-                    self._gambling_engine.HEIST_JOIN_LINES
-                ).format(user=username)
-                await self._announce_chat(
-                    channel,
-                    f"{join_line}  (Crew: {crew_size} 🧑‍🤝‍🧑)",
-                )
-                return f"You're in! Crew size: {crew_size}. Get ready… 🔫"
-
-            return result
+            return "To join an active heist, just say 'join' in chat!"
 
         if not arg_text:
-            return "Usage: heist <wager> or heist join"
+            return "Usage: heist <wager>  (say 'join' in chat to join an active heist)"
 
         try:
             wager = int(arg_text)
         except ValueError:
-            return "Usage: heist <wager> or heist join"
+            return "Usage: heist <wager>  (say 'join' in chat to join an active heist)"
 
         result = await self._gambling_engine.start_heist(username, channel, wager)
 
@@ -664,7 +671,7 @@ class PmHandler:
             await self._announce_chat(
                 channel,
                 f"🏦 {username} is assembling a crew for a HEIST! 💰\n"
-                f"PM me 'heist join' within {cfg.join_window_seconds}s — the more muscle, the bigger the score!",
+                f"Say 'join' in chat within {cfg.join_window_seconds}s — the more muscle, the bigger the score!",
             )
             return f"Heist started! Waiting {cfg.join_window_seconds}s for others to join… 🕐"
 
@@ -680,6 +687,26 @@ class PmHandler:
             return f"⏳ The heat is still on! Cooldown: {secs}s. Lay low."
 
         return result
+
+    async def handle_chat_heist_join(self, username: str, channel: str) -> None:
+        """Process a heist join triggered by a user saying 'join' in public chat."""
+        if self._gambling_engine is None:
+            return
+        heist = self._gambling_engine.get_active_heist(channel)
+        if not heist:
+            return
+        wager = list(heist.participants.values())[0]
+        result = await self._gambling_engine.join_heist(username, channel, wager)
+        if result.startswith("heist_joined:"):
+            parts = result.split(":", 3)
+            crew_size = int(parts[3])
+            join_line = self._gambling_engine._narrator.get_join_line(username)
+            await self._announce_chat(
+                channel,
+                f"{join_line}  (Crew: {crew_size} \U0001f9d1\u200d\U0001f91d\u200d\U0001f9d1)",
+            )
+        # Non-join results (already in crew, wager issues, etc.) are silently ignored
+        # since the user spoke in public chat rather than a PM command
 
     async def _cmd_gambling_stats(
         self, username: str, channel: str, args: list[str],
@@ -820,6 +847,9 @@ class PmHandler:
         )
         if new_balance is None:
             return "Insufficient funds."
+
+        if self._metrics:
+            self._metrics.record_queue(final_cost)
 
         # Queue the media via kryten-py
         position = "next" if queue_type in ("playnext", "forcenow") else None
@@ -1072,6 +1102,8 @@ class PmHandler:
 
         # Record in tip_history
         await self._db.record_tip(username, target, channel, amount)
+        if self._metrics:
+            self._metrics.record_tip(amount)
 
         # PM to receiver
         if self._client:
@@ -1241,6 +1273,9 @@ class PmHandler:
         if new_balance is None:
             return "Insufficient funds."
 
+        if self._metrics:
+            self._metrics.record_vanity_purchase(final_cost)
+
         approval_id = await self._db.create_pending_approval(
             username, channel, "channel_gif",
             data={"gif_url": value},
@@ -1295,6 +1330,9 @@ class PmHandler:
         )
         if new_balance is None:
             return "Insufficient funds."
+
+        if self._metrics:
+            self._metrics.record_shoutout(final_cost)
 
         # Deliver to public chat
         await self._announce_chat(channel, f"📢 {username}: {value}")
@@ -1351,6 +1389,8 @@ class PmHandler:
             return "Insufficient funds."
 
         await self._db.set_vanity_item(username, channel, item_type, value)
+        if self._metrics:
+            self._metrics.record_vanity_purchase(final_cost)
 
         return f"{success_message}\nCharged: {final_cost:,} {self._symbol} · Balance: {new_balance:,} {self._symbol}"
 
@@ -1405,6 +1445,9 @@ class PmHandler:
         )
         if new_balance is None:
             return "Insufficient funds."
+
+        if self._metrics:
+            self._metrics.record_fortune(final_cost)
 
         # Deterministic fortune per user+date
         seed = int(hashlib.md5(f"{username}{today}".encode()).hexdigest()[:8], 16)
