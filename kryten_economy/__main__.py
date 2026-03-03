@@ -66,7 +66,7 @@ async def main_async() -> None:
 
     try:
         await app.start()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
         await app.stop()
@@ -74,7 +74,10 @@ async def main_async() -> None:
 
 def main() -> None:
     """Sync entry point for pyproject.toml [project.scripts]."""
-    asyncio.run(main_async())
+    try:
+        asyncio.run(main_async())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

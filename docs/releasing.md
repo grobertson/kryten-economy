@@ -1,0 +1,1 @@
+From here on, bumping version = "x.y.z" in pyproject.toml and pushing to main is all it takes to ship a release.

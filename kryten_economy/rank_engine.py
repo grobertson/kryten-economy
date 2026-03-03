@@ -28,6 +28,7 @@ class RankEngine:
         self._db = database
         self._client = client
         self._logger = logger
+        self._metrics = None  # Wired by EconomyApp after construction
 
         # Pre-sort tiers by min_lifetime_earned ascending
         self._tiers: list[RankTierConfig] = sorted(
@@ -91,6 +92,8 @@ class RankEngine:
             # Promotion!
             await self._db.update_account_rank(username, channel, new_tier.name)
             await self._notify_rank_promotion(username, channel, new_tier)
+            if self._metrics:
+                self._metrics.record_rank_promotion()
 
             # Auto CyTube level promotion if configured
             if new_tier.cytube_level_promotion is not None:

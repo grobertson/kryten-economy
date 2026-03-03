@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
@@ -33,6 +34,7 @@ class TestWelcomeWallet:
     async def test_wallet_pm_sent(self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock):
         """Welcome wallet should trigger a PM."""
         await tracker.handle_user_join("NewUser", "testchannel")
+        await asyncio.sleep(0)  # Let the background welcome-PM task complete
         mock_client.send_pm.assert_called()
         msg = mock_client.send_pm.call_args[0][2]
         assert "Welcome" in msg or "100" in msg

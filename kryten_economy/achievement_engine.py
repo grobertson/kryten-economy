@@ -27,6 +27,7 @@ class AchievementEngine:
         self._db = database
         self._client = client
         self._logger = logger
+        self._metrics = None  # Wired by EconomyApp after construction
 
         # Pre-index achievements by condition type for efficient lookup
         self._by_condition_type: dict[str, list[AchievementConfig]] = {}
@@ -96,6 +97,8 @@ class AchievementEngine:
                                 reason=f"Achievement: {ach.description}",
                             )
                         awarded.append(ach)
+                        if self._metrics:
+                            self._metrics.record_achievement()
                         self._logger.info(
                             "Achievement awarded: %s → %s (+%d Z) in %s",
                             username,

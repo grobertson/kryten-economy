@@ -12,6 +12,7 @@ import pytest
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.presence_tracker import PresenceTracker, UserSession
+from kryten_economy.utils import now_utc
 
 
 @pytest.fixture
@@ -165,3 +166,142 @@ class TestStartStop:
         acct = await database.get_account("Alice", "testchannel")
         assert acct is not None
         assert acct["last_seen"] is not None
+
+
+class TestCumulativeMinutesRestoration:
+    """cumulative_minutes_today should be restored from DB on session creation."""
+
+    async def test_seed_restores_cumulative_minutes(
+        self, tracker: PresenceTracker, database: EconomyDatabase,
+    ):
+        """seed_initial_users should restore cumulative_minutes_today from daily_activity."""
+        today = now_utc().strftime("%Y-%m-%d")
+        # Pre-populate 45 minutes in DB
+        await database.get_or_create_account("Alice", "testchannel")
+        await database.increment_daily_minutes_present("Alice", "testchannel", today, 45)
+
+        users = [{"name": "Alice", "rank": 0}]
+        count = await tracker.seed_initial_users("testchannel", users)
+        assert count == 1
+
+        session = tracker._sessions[("alice", "testchannel")]
+        assert session.cumulative_minutes_today == 45
+
+    async def test_seed_zero_minutes_when_no_activity(
+        self, tracker: PresenceTracker, database: EconomyDatabase,
+    ):
+        """seed should default to 0 cumulative minutes if no daily_activity row exists."""
+        users = [{"name": "NewUser", "rank": 0}]
+        await tracker.seed_initial_users("testchannel", users)
+        session = tracker._sessions[("newuser", "testchannel")]
+        assert session.cumulative_minutes_today == 0
+
+    async def test_seed_sets_streak_flag_when_already_evaluated(
+        self, tracker: PresenceTracker, database: EconomyDatabase,
+    ):
+        """If streak was already counted today, seed should set _streak_checked_today."""
+        today = now_utc().strftime("%Y-%m-%d")
+        min_minutes = tracker._streak_config.daily.min_presence_minutes
+
+        await database.get_or_create_account("Alice", "testchannel")
+        await database.increment_daily_minutes_present("Alice", "testchannel", today, min_minutes + 5)
+        # Pre-set streak as evaluated today
+        await database.get_or_create_streak("Alice", "testchannel")
+        await database.update_streak("Alice", "testchannel", 3, 5, today)
+
+        users = [{"name": "Alice", "rank": 0}]
+        await tracker.seed_initial_users("testchannel", users)
+        session = tracker._sessions[("alice", "testchannel")]
+        assert session._streak_checked_today is True
+
+    async def test_seed_no_streak_flag_when_below_threshold(
+        self, tracker: PresenceTracker, database: EconomyDatabase,
+    ):
+        """If cumulative minutes below threshold, _streak_checked_today should be False."""
+        today = now_utc().strftime("%Y-%m-%d")
+        await database.get_or_create_account("Alice", "testchannel")
+        await database.increment_daily_minutes_present("Alice", "testchannel", today, 5)
+
+        users = [{"name": "Alice", "rank": 0}]
+        await tracker.seed_initial_users("testchannel", users)
+        session = tracker._sessions[("alice", "testchannel")]
+        assert session._streak_checked_today is False
+
+    async def test_genuine_join_restores_cumulative_minutes(
+        self, tracker: PresenceTracker, database: EconomyDatabase,
+    ):
+        """handle_user_join (genuine) should restore cumulative_minutes_today from DB."""
+        today = now_utc().strftime("%Y-%m-%d")
+        await database.get_or_create_account("Alice", "testchannel")
+        await database.increment_daily_minutes_present("Alice", "testchannel", today, 30)
+        # Push last_seen back so _is_genuine_arrival returns True
+        old_time = now_utc() - timedelta(hours=1)
+        await database.update_last_seen("Alice", "testchannel")
+        # Overwrite last_seen to an old timestamp via raw SQL
+        import sqlite3
+        conn = sqlite3.connect(database._db_path)
+        conn.execute(
+            "UPDATE accounts SET last_seen = ? WHERE username = ? AND channel = ?",
+            (old_time.isoformat(), "Alice", "testchannel"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = await tracker.handle_user_join("Alice", "testchannel")
+        assert result is True
+        session = tracker._sessions[("alice", "testchannel")]
+        assert session.cumulative_minutes_today == 30
+
+    async def test_bounce_join_restores_cumulative_minutes(
+        self, tracker: PresenceTracker, database: EconomyDatabase,
+    ):
+        """handle_user_join (bounce) should restore cumulative_minutes_today from DB."""
+        today = now_utc().strftime("%Y-%m-%d")
+        await database.get_or_create_account("Alice", "testchannel")
+        await database.increment_daily_minutes_present("Alice", "testchannel", today, 20)
+
+        # Set up a recent departure so the next join is a bounce
+        await tracker.handle_user_join("Alice", "testchannel")
+        tracker._last_departure[("alice", "testchannel")] = now_utc()
+        del tracker._sessions[("alice", "testchannel")]
+
+        result = await tracker.handle_user_join("Alice", "testchannel")
+        assert result is False  # bounce
+        session = tracker._sessions[("alice", "testchannel")]
+        assert session.cumulative_minutes_today == 20
+
+
+class TestStreakCheckOperator:
+    """Streak check uses >= (not ==) so restored sessions still trigger."""
+
+    async def test_streak_fires_after_restore_past_threshold(
+        self, tracker: PresenceTracker, database: EconomyDatabase,
+    ):
+        """If cumulative_minutes restored above threshold, streak should still fire."""
+        today = now_utc().strftime("%Y-%m-%d")
+        min_minutes = tracker._streak_config.daily.min_presence_minutes
+
+        await database.get_or_create_account("Alice", "testchannel")
+        # Simulate: user had min_minutes - 1, service restarted, one more tick needed
+        await database.increment_daily_minutes_present(
+            "Alice", "testchannel", today, min_minutes - 1,
+        )
+
+        # Seed user (restores cumulative = min_minutes - 1)
+        users = [{"name": "Alice", "rank": 0}]
+        await tracker.seed_initial_users("testchannel", users)
+        session = tracker._sessions[("alice", "testchannel")]
+        assert session.cumulative_minutes_today == min_minutes - 1
+        assert session._streak_checked_today is False
+
+        # Simulate one tick incrementing cumulative_minutes
+        session.cumulative_minutes_today += 1
+
+        # Now >= threshold and not checked → should evaluate
+        streak_cfg = tracker._streak_config.daily
+        should_fire = (
+            streak_cfg.enabled
+            and not session._streak_checked_today
+            and session.cumulative_minutes_today >= streak_cfg.min_presence_minutes
+        )
+        assert should_fire is True

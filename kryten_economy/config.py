@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 from kryten import KrytenConfig
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -40,6 +40,10 @@ class OnboardingConfig(BaseModel):
     welcome_message: str = (
         "Welcome! You've got {amount} {currency}. "
         "Stick around and you'll earn more. Try 'help' to see what you can do."
+    )
+    welcome_delay_seconds: int = Field(
+        default=90,
+        description="Seconds to wait after a new user joins before sending the welcome PM",
     )
     min_account_age_minutes: int = 0
     min_messages_to_earn: int = 0
@@ -308,6 +312,61 @@ class DailyFreeSpinConfig(BaseModel):
     equivalent_wager: int = 50
 
 
+class HeistLLMConfig(BaseModel):
+    """LLM back-end for dynamic heist narrative generation."""
+    endpoint: str = Field(
+        default="http://localhost:11434/v1/chat/completions",
+        description="OpenAI-compatible chat-completions URL",
+    )
+    api_key: str = Field(
+        default="",
+        description="Bearer token (leave blank for local Ollama)",
+    )
+    model: str = Field(
+        default="llama3",
+        description="Model name, e.g. 'gpt-4o-mini', 'llama3', 'mistral'",
+    )
+    system_prompt: str = Field(
+        default=(
+            "You are a dramatic narrator for a heist game in a chat room. "
+            "Generate a short, punchy heist scenario (2-3 sentences) plus "
+            "a win line, a lose line, and a push (near-miss) line. "
+            "Use the placeholder {user} for a crew member's name, "
+            "{payout} for the reward amount, and {symbol} for the currency symbol. "
+            "Respond ONLY with valid JSON: "
+            '{"scenario":"...","win":"...","lose":"...","push":"..."}'
+        ),
+        description="System prompt sent to the LLM",
+    )
+    temperature: float = Field(default=1.0, description="LLM sampling temperature (0.0–2.0)")
+    max_tokens: int = Field(default=600, description="Max tokens in LLM response")
+    timeout_seconds: int = Field(default=10, description="HTTP timeout per request")
+    max_retries: int = Field(default=1, description="Retry count on failure before falling back")
+
+
+class HeistNarrativeConfig(BaseModel):
+    """Controls where heist text comes from: static library, LLM, or hybrid."""
+    mode: str = Field(
+        default="static",
+        description="'static' = built-in library, 'llm' = LLM-generated, 'hybrid' = try LLM then fall back",
+    )
+    llm: HeistLLMConfig = Field(default_factory=HeistLLMConfig)
+    # Optional user-supplied extra templates (merged with built-in library)
+    custom_scenarios: list[str] = Field(default_factory=list)
+    custom_win_lines: list[str] = Field(default_factory=list)
+    custom_lose_lines: list[str] = Field(default_factory=list)
+    custom_push_lines: list[str] = Field(default_factory=list)
+    custom_join_lines: list[str] = Field(default_factory=list)
+
+    @field_validator("llm", mode="before")
+    @classmethod
+    def _coerce_llm_none(cls, v):  # noqa: N805
+        """YAML `llm:` with all sub-keys commented out parses as None."""
+        if v is None:
+            return HeistLLMConfig()
+        return v
+
+
 class HeistConfig(BaseModel):
     enabled: bool = False
     min_participants: int = 3
@@ -321,6 +380,14 @@ class HeistConfig(BaseModel):
     min_wager: int = 20
     max_wager: int = 5000
     announce_public: bool = True
+    narrative: HeistNarrativeConfig = Field(default_factory=HeistNarrativeConfig)
+
+    @field_validator("narrative", mode="before")
+    @classmethod
+    def _coerce_narrative_none(cls, v):  # noqa: N805
+        if v is None:
+            return HeistNarrativeConfig()
+        return v
 
 
 class GamblingConfig(BaseModel):

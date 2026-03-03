@@ -39,6 +39,7 @@ class UserSession:
     cumulative_minutes_today: int = 0
     is_genuine_arrival: bool = False
     _current_date: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    _streak_checked_today: bool = False
 
 
 class PresenceTracker:
@@ -120,17 +121,30 @@ class PresenceTracker:
             account = await self._db.get_or_create_account(username, channel)
             await self._db.update_last_seen(username, channel)
 
+            # ── Restore cumulative minutes from DB (survives restart) ──
+            today = now.strftime("%Y-%m-%d")
+            restored = await self._db.get_daily_minutes_present(username, channel, today)
+            if restored > 0:
+                session.cumulative_minutes_today = restored
+                # Check if streak already evaluated today
+                streak_cfg = self._streak_config.daily
+                if (
+                    streak_cfg.enabled
+                    and restored >= streak_cfg.min_presence_minutes
+                ):
+                    streak = await self._db.get_or_create_streak(username, channel)
+                    if streak.get("last_streak_date") == today:
+                        session._streak_checked_today = True
+
             # ── Welcome wallet (Sprint 2: new users) ────────
             if not account.get("welcome_wallet_claimed"):
                 wallet_amount = self._onboarding_config.welcome_wallet
                 if wallet_amount > 0:
                     claimed = await self._db.claim_welcome_wallet(username, channel, wallet_amount)
                     if claimed:
-                        msg = self._onboarding_config.welcome_message.format(
-                            amount=wallet_amount,
-                            currency=self._currency_name,
+                        asyncio.create_task(
+                            self._delayed_welcome_pm(channel, username, wallet_amount)
                         )
-                        await self._send_pm(channel, username, msg)
 
             # ── Welcome-back bonus (Sprint 2: returning users) ──
             elif self._retention_config.welcome_back.enabled:
@@ -161,12 +175,15 @@ class PresenceTracker:
             # Use original connection time if available
             departure_time = self._last_departure.get(key)
             connected_at = departure_time if departure_time else now
+            today = now.strftime("%Y-%m-%d")
+            restored = await self._db.get_daily_minutes_present(username, channel, today)
             session = UserSession(
                 username=username,
                 channel=channel,
                 connected_at=connected_at,
                 last_tick_at=now,
                 is_genuine_arrival=False,
+                cumulative_minutes_today=restored,
             )
             self._sessions[key] = session
             self._logger.debug(
@@ -262,6 +279,8 @@ class PresenceTracker:
 
         Creates sessions for users already in the channel **without**
         triggering welcome wallets, greetings, or other arrival logic.
+        Restores ``cumulative_minutes_today`` from the database so that
+        streak / milestone progress survives service restarts.
 
         Args:
             channel: Channel name (exact case from config)
@@ -274,6 +293,9 @@ class PresenceTracker:
         """
         count = 0
         now = now_utc()
+        today = now.strftime("%Y-%m-%d")
+        streak_cfg = self._streak_config.daily
+
         for user_data in users:
             username = user_data.get("name", "")
             if not username or self._is_ignored(username):
@@ -287,6 +309,20 @@ class PresenceTracker:
             meta = user_data.get("meta") or {}
             is_afk = meta.get("afk", False)
 
+            # Restore cumulative minutes from DB (survives restart)
+            restored_minutes = await self._db.get_daily_minutes_present(username, channel, today)
+
+            # If user already crossed the streak threshold today and the
+            # streak was recorded, mark the flag so we don't re-evaluate.
+            streak_already_done = False
+            if (
+                streak_cfg.enabled
+                and restored_minutes >= streak_cfg.min_presence_minutes
+            ):
+                streak = await self._db.get_or_create_streak(username, channel)
+                if streak.get("last_streak_date") == today:
+                    streak_already_done = True
+
             session = UserSession(
                 username=username,
                 channel=channel,
@@ -294,6 +330,8 @@ class PresenceTracker:
                 last_tick_at=now,
                 is_afk=is_afk,
                 is_genuine_arrival=False,  # suppress arrival bonuses
+                cumulative_minutes_today=restored_minutes,
+                _streak_checked_today=streak_already_done,
             )
             self._sessions[key] = session
             self.update_user_rank(channel, username, rank)
@@ -413,6 +451,7 @@ class PresenceTracker:
                     if session._current_date != today:
                         session.cumulative_minutes_today = 0
                         session._current_date = today
+                        session._streak_checked_today = False
 
                     # ── 1. Base presence earning ─────────────────
                     amount = self._presence_config.base_rate_per_minute
@@ -453,8 +492,10 @@ class PresenceTracker:
                     streak_cfg = self._streak_config.daily
                     if (
                         streak_cfg.enabled
-                        and session.cumulative_minutes_today == streak_cfg.min_presence_minutes
+                        and not session._streak_checked_today
+                        and session.cumulative_minutes_today >= streak_cfg.min_presence_minutes
                     ):
+                        session._streak_checked_today = True
                         # Exact threshold crossing — evaluate streak once
                         await self._evaluate_daily_streak(username, channel, today)
                         await self._evaluate_bridge(username, channel, today)
@@ -653,6 +694,22 @@ class PresenceTracker:
     # ══════════════════════════════════════════════════════════
 
     _QUIET_HINT: str = "(PM 'quiet' to mute notifications)"
+
+    async def _delayed_welcome_pm(
+        self, channel: str, username: str, wallet_amount: int,
+    ) -> None:
+        """Send the welcome-wallet PM after a configurable delay.
+
+        Runs as a background task so it doesn't block join processing.
+        """
+        delay = self._onboarding_config.welcome_delay_seconds
+        if delay > 0:
+            await asyncio.sleep(delay)
+        msg = self._onboarding_config.welcome_message.format(
+            amount=wallet_amount,
+            currency=self._currency_name,
+        )
+        await self._send_pm(channel, username, msg)
 
     async def _send_pm(self, channel: str, username: str, message: str) -> None:
         """Send PM via kryten-py client. Safe to call if client is None (testing)."""

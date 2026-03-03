@@ -9,6 +9,7 @@ import pytest
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
+from kryten_economy.metrics_collector import MetricsCollector
 from kryten_economy.metrics_server import EconomyMetricsServer
 from kryten_economy.presence_tracker import PresenceTracker
 
@@ -21,25 +22,22 @@ def mock_app(sample_config: EconomyConfig, database: EconomyDatabase, mock_clien
     app.db = database
     app.client = mock_client
     app.logger = logging.getLogger("test.app")
-    app.events_processed = 42
-    app.commands_processed = 7
-    type(app).z_earned_total = PropertyMock(return_value=1000)
+
+    # Shared MetricsCollector
+    metrics = MetricsCollector()
+    metrics.events_processed = 42
+    metrics.commands_processed = 7
+    metrics.z_earned_total = 1000
+    app.metrics = metrics
+
     app.presence_tracker = PresenceTracker(
         config=sample_config,
         database=database,
         client=mock_client,
         logger=logging.getLogger("test.presence"),
     )
-    # Sprint 8 expanded metrics need these attributes
-    app.z_spent_total = 0
-    app.tips_total = 0
-    app.queues_total = 0
-    app.vanity_purchases_total = 0
-    app.achievements_awarded_total = 0
-    app.rank_promotions_total = 0
-    app.competition_awards_total = 0
-    app.bounties_created_total = 0
-    app.bounties_claimed_total = 0
+    # pm_handler for operational gauges
+    app.pm_handler = None
     # multiplier_engine must return a tuple from get_combined_multiplier
     mult = MagicMock()
     mult.get_combined_multiplier.return_value = (1.0, [])
@@ -80,6 +78,7 @@ class TestMetricsServer:
         """Circulation metric should reflect actual database state."""
         await database.credit("user1", "testchannel", 500, "earn")
         lines = await metrics_server._collect_custom_metrics()
-        circ_lines = [l for l in lines if "economy_total_circulation" in l]
+        # Filter to data lines only (skip HELP/TYPE comments)
+        circ_lines = [l for l in lines if "economy_total_circulation{" in l]
         assert len(circ_lines) >= 1
         assert "500" in circ_lines[0]

@@ -39,6 +39,7 @@ class Scheduler:
         self._client = client
         self._gambling_engine = gambling_engine
         self._logger = logger or logging.getLogger("economy.scheduler")
+        self._metrics = None  # Wired by EconomyApp after construction
         self._tasks: list[asyncio.Task] = []
 
     async def start(self) -> None:
@@ -115,6 +116,8 @@ class Scheduler:
                     await self._send_pm(channel, username, msg)
 
             self._logger.info("Rain: %d Z to %d users in %s", amount, len(users), channel)
+            if self._metrics:
+                self._metrics.record_rain(amount, len(users))
 
     # ══════════════════════════════════════════════════════════
     #  Balance Maintenance (Interest / Decay)
@@ -193,9 +196,17 @@ class Scheduler:
                     channel = ch_config.channel
                     heist = self._gambling_engine.get_active_heist(channel)
                     if heist and now > heist.expires_at:
+                        # Capture heist wager total before resolution
+                        heist_total_wagered = sum(heist.participants.values())
+                        heist_participants = list(heist.participants.keys())
                         result = await self._gambling_engine.resolve_heist(channel)
                         if result:
-                            lines, participants = result
+                            if self._metrics:
+                                # Count one heist per participant
+                                for _ in heist_participants:
+                                    self._metrics.heists_total += 1
+                                self._metrics.gambling_z_wagered_total += heist_total_wagered
+                            lines, participants, per_user_pm = result
                             if self._config.gambling.heist.announce_public and lines:
                                 # Send scenario line first
                                 await self._announce_chat(channel, lines[0])
@@ -205,10 +216,11 @@ class Scheduler:
                                     for line in lines[1:]:
                                         await self._announce_chat(channel, line)
                                         await asyncio.sleep(2)
-                            # PM all participants with the full result
-                            full_msg = "\n".join(lines)
+                            # PM each participant only their personal result (win/loss/push + amount)
                             for user in participants:
-                                await self._send_pm(channel, user, full_msg)
+                                pm_text = per_user_pm.get(user)
+                                if pm_text:
+                                    await self._send_pm(channel, user, pm_text)
             except Exception:
                 self._logger.exception("Heist check failed")
 

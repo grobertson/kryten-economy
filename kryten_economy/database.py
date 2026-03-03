@@ -345,6 +345,15 @@ class EconomyDatabase:
                 )
             """)
 
+            # ── Service metrics (lifetime counters) ───────
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS service_metrics (
+                    key TEXT PRIMARY KEY,
+                    value INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # ── Migrations: add columns if missing ────────
             try:
                 conn.execute("ALTER TABLE accounts ADD COLUMN quiet_mode BOOLEAN DEFAULT 0")
@@ -355,6 +364,49 @@ class EconomyDatabase:
             self._logger.info("Database tables created/verified")
         finally:
             conn.close()
+
+    # ══════════════════════════════════════════════════════════
+    #  Service Metrics Persistence
+    # ══════════════════════════════════════════════════════════
+
+    async def save_metrics(self, data: dict[str, int]) -> None:
+        """Upsert all counter key/value pairs into service_metrics."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                conn.executemany(
+                    """
+                    INSERT INTO service_metrics (key, value, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(key) DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = excluded.updated_at
+                    """,
+                    [(k, int(v)) for k, v in data.items()],
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def restore_metrics(self) -> dict[str, int]:
+        """Load all rows from service_metrics as a {key: value} dict."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> dict[str, int]:
+            conn = self._get_connection()
+            try:
+                rows = conn.execute(
+                    "SELECT key, value FROM service_metrics"
+                ).fetchall()
+                return {row["key"]: int(row["value"]) for row in rows}
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
 
     # ══════════════════════════════════════════════════════════
     #  Account Operations
@@ -544,6 +596,26 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
     #  Daily Activity
     # ══════════════════════════════════════════════════════════
+
+    async def get_daily_minutes_present(
+        self, username: str, channel: str, date: str,
+    ) -> int:
+        """Return minutes_present from daily_activity for a given day, or 0."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> int:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT minutes_present FROM daily_activity "
+                    "WHERE username = ? AND channel = ? AND date = ?",
+                    (username, channel, date),
+                ).fetchone()
+                return row["minutes_present"] if row else 0
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
 
     async def increment_daily_minutes_present(
         self, username: str, channel: str, date: str, minutes: int = 1

@@ -694,9 +694,12 @@ class PmHandler:
             return
         heist = self._gambling_engine.get_active_heist(channel)
         if not heist:
+            self._logger.debug("Heist join ignored for %s — no active heist in %s", username, channel)
             return
         wager = list(heist.participants.values())[0]
+        self._logger.debug("Heist join attempt: %s in %s, wager=%d", username, channel, wager)
         result = await self._gambling_engine.join_heist(username, channel, wager)
+        self._logger.debug("Heist join result for %s: %s", username, result)
         if result.startswith("heist_joined:"):
             parts = result.split(":", 3)
             crew_size = int(parts[3])

@@ -56,6 +56,7 @@ def make_config_dict(**overrides) -> dict:
         "onboarding": {
             "welcome_wallet": 100,
             "welcome_message": "Welcome! Here's {amount} {currency}.",
+            "welcome_delay_seconds": 0,
         },
         "presence": {
             "base_rate_per_minute": 1,

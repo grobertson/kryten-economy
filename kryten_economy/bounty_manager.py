@@ -29,6 +29,7 @@ class BountyManager:
         self._db = database
         self._client = client
         self._logger = logger
+        self._metrics = None  # Wired by EconomyApp after construction
 
     def update_config(self, new_config) -> None:
         """Hot-swap the config reference."""
@@ -96,6 +97,9 @@ class BountyManager:
             creator, channel, description, amount, expires_at,
         )
 
+        if self._metrics:
+            self._metrics.record_bounty_created(amount)
+
         self._logger.info(
             "Bounty #%d created by %s: %d Z '%s'",
             bounty_id,
@@ -142,6 +146,9 @@ class BountyManager:
             trigger_id=f"bounty.claim.{bounty_id}",
             reason=f"Bounty #{bounty_id}: {bounty['description'][:50]}",
         )
+
+        if self._metrics:
+            self._metrics.record_bounty_claimed()
 
         # Notify creator
         await self._client.send_pm(

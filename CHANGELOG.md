@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-03-03
+
+### Added
+
+- **Heist Narrator** — `HeistNarrator` and `heist_narratives` modules with 160+ built-in narrative templates; supports static, LLM, and hybrid generation modes
+- **Metrics Collector** — Centralised `MetricsCollector` replacing per-attribute counters; SQLite-backed counter persistence (replaces NATS KV)
+- **Chat heist join** — Users can now type "join" in chat to join an active heist (in addition to PMs); debug logging added to `handle_chat_heist_join`
+- **Grafana dashboard** — JSON dashboard definition for economy metrics
+- **Releasing guide** — `docs/releasing.md` with release workflow documentation
+- **Start script** — `start-economy.ps1` convenience launcher for Windows
+
+### Changed
+
+- **Config hardening** — `config.yaml` removed from version control and added to `.gitignore` (contains secrets)
+- **Scheduler / presence / database** — Various robustness improvements and metrics integration
+
+### Fixed
+
+- **Heist join unreachable on production** — Chat-based heist join hook in `handle_chatmsg` was never committed; production heists timed out because nobody could join via chat
+
+[0.7.3]: https://github.com/grobertson/kryten-economy/releases/tag/v0.7.3
+
 ## [0.7.2] - 2026-03-03
 
 ### Fixed

@@ -26,6 +26,7 @@ from .event_announcer import EventAnnouncer
 from .gambling_engine import GamblingEngine
 from .greeting_handler import GreetingHandler
 from .media_client import MediaCMSClient
+from .metrics_collector import MetricsCollector
 from .metrics_server import EconomyMetricsServer
 from .multiplier_engine import MultiplierEngine
 from .pm_handler import PmHandler
@@ -73,18 +74,28 @@ class EconomyApp:
         self._start_time: float | None = None
         self._counter_persistence_task: asyncio.Task | None = None
 
-        # Counters (for metrics)
-        self.events_processed: int = 0
-        self.commands_processed: int = 0
-        self.z_spent_total: int = 0
-        self.tips_total: int = 0
-        self.queues_total: int = 0
-        self.vanity_purchases_total: int = 0
-        self.achievements_awarded_total: int = 0
-        self.rank_promotions_total: int = 0
-        self.competition_awards_total: int = 0
-        self.bounties_created_total: int = 0
-        self.bounties_claimed_total: int = 0
+        # Shared metrics collector (passed to all engines)
+        self.metrics = MetricsCollector()
+
+    # ------------------------------------------------------------------
+    # Convenience counter accessors (backwards compat)
+    # ------------------------------------------------------------------
+
+    @property
+    def events_processed(self) -> int:
+        return self.metrics.events_processed
+
+    @events_processed.setter
+    def events_processed(self, value: int) -> None:
+        self.metrics.events_processed = value
+
+    @property
+    def commands_processed(self) -> int:
+        return self.metrics.commands_processed
+
+    @commands_processed.setter
+    def commands_processed(self, value: int) -> None:
+        self.metrics.commands_processed = value
 
     @property
     def z_earned_total(self) -> int:
@@ -100,62 +111,35 @@ class EconomyApp:
         return time.time() - self._start_time
 
     # ------------------------------------------------------------------
-    # Metrics counter persistence (NATS KV)
+    # Metrics counter persistence (SQLite)
     # ------------------------------------------------------------------
-    _COUNTERS_KV_BUCKET = "kryten_economy_state"
-    _COUNTERS_KV_KEY = "counters"
     _COUNTERS_SAVE_INTERVAL = 300  # seconds (5 minutes)
-    _COUNTER_NAMES = [
-        "events_processed",
-        "commands_processed",
-        "z_spent_total",
-        "tips_total",
-        "queues_total",
-        "vanity_purchases_total",
-        "achievements_awarded_total",
-        "rank_promotions_total",
-        "competition_awards_total",
-        "bounties_created_total",
-        "bounties_claimed_total",
-    ]
 
     async def _save_counters(self) -> None:
-        """Persist volatile metrics counters to NATS KV."""
-        data = {name: getattr(self, name) for name in self._COUNTER_NAMES}
+        """Persist lifetime metrics counters to SQLite service_metrics table."""
+        data = self.metrics.to_dict()
         data["z_earned_total"] = (
             self.presence_tracker.metrics_z_earned if self.presence_tracker else 0
         )
         try:
-            await self.client.kv_put(
-                self._COUNTERS_KV_BUCKET,
-                self._COUNTERS_KV_KEY,
-                data,
-                as_json=True,
-            )
-            self.logger.debug("Persisted metrics counters to KV")
+            await self.db.save_metrics(data)
+            self.logger.debug("Persisted metrics counters to SQLite")
         except Exception:
             self.logger.exception("Failed to persist metrics counters")
 
     async def _restore_counters(self) -> None:
-        """Restore volatile metrics counters from NATS KV on startup."""
+        """Restore lifetime metrics counters from SQLite on startup."""
         try:
-            data = await self.client.kv_get(
-                self._COUNTERS_KV_BUCKET,
-                self._COUNTERS_KV_KEY,
-                default={},
-                parse_json=True,
-            )
+            data = await self.db.restore_metrics()
             if not data:
                 self.logger.info("No persisted counters found — starting fresh")
                 return
-            for name in self._COUNTER_NAMES:
-                if name in data:
-                    setattr(self, name, int(data[name]))
+            self.metrics.restore(data)
             if self.presence_tracker and "z_earned_total" in data:
                 self.presence_tracker.metrics_z_earned = int(data["z_earned_total"])
-            self.logger.info("Restored metrics counters from KV: %s", data)
+            self.logger.info("Restored metrics counters from SQLite: %s", data)
         except Exception:
-            self.logger.exception("Failed to restore metrics counters from KV")
+            self.logger.exception("Failed to restore metrics counters")
 
     async def _counter_persistence_loop(self) -> None:
         """Periodically save counters to KV."""
@@ -294,6 +278,13 @@ class EconomyApp:
         self.bounty_manager._client = self.client
         self.event_announcer._client = self.client
 
+        # Wire up shared metrics collector
+        self.pm_handler._metrics = self.metrics
+        self.achievement_engine._metrics = self.metrics
+        self.rank_engine._metrics = self.metrics
+        self.competition_engine._metrics = self.metrics
+        self.bounty_manager._metrics = self.metrics
+
         # 4b. Start MediaCMS HTTP client
         if self.config.mediacms.base_url:
             await self.media_client.start()
@@ -351,6 +342,10 @@ class EconomyApp:
                             last_human, channel, timestamp,
                         )
                     return
+
+                # Chat-based heist join: user says "join" while a heist is active
+                if message.strip().lower() == "join" and self.pm_handler is not None:
+                    await self.pm_handler.handle_chat_heist_join(username, channel)
 
                 # Main earning pipeline
                 outcome = await self.earning_engine.evaluate_chat_message(
@@ -417,11 +412,7 @@ class EconomyApp:
                     ch_cfg.channel, exc,
                 )
 
-        # 6c. Restore persisted metrics counters from KV
-        await self.client.get_or_create_kv_store(
-            self._COUNTERS_KV_BUCKET,
-            description="kryten-economy volatile metrics counters",
-        )
+        # 6c. Restore persisted metrics counters from SQLite
         await self._restore_counters()
 
         # 6d. Start periodic counter persistence (every 5 min)
@@ -458,6 +449,7 @@ class EconomyApp:
             logger=self.logger,
             gambling_engine=self.gambling_engine,
         )
+        self.scheduler._metrics = self.metrics
         await self.scheduler.start()
 
         # 11b. Start scheduled event manager (Sprint 7)

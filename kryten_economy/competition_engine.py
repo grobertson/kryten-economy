@@ -27,6 +27,7 @@ class CompetitionEngine:
         self._db = database
         self._client = client
         self._logger = logger
+        self._metrics = None  # Wired by EconomyApp after construction
         self._competitions = config.daily_competitions
 
     def update_config(self, new_config) -> None:
@@ -64,6 +65,8 @@ class CompetitionEngine:
                 trigger_id=f"competition.{award['competition_id']}",
                 reason=award["reason"],
             )
+            if self._metrics:
+                self._metrics.record_competition_award()
             await self._client.send_pm(
                 channel,
                 award["username"],

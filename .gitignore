@@ -36,3 +36,6 @@ Thumbs.db
 *.db-wal
 *.db-shm
 *.log
+
+# Runtime config (contains secrets)
+config.yaml

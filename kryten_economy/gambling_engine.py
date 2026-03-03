@@ -16,6 +16,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from .database import EconomyDatabase
+from .heist_narrator import HeistNarrator
 from .utils import parse_timestamp
 
 if TYPE_CHECKING:
@@ -105,6 +106,11 @@ class GamblingEngine:
         # Heist cooldown: channel → last_resolve_time
         self._heist_cooldowns: dict[str, datetime] = {}
 
+        # Heist narrator (static / LLM / hybrid text generation)
+        self._narrator = HeistNarrator(
+            config.gambling.heist.narrative, logger,
+        )
+
     def update_config(self, new_config) -> None:
         """Hot-swap the config reference. Rebuild payout table."""
         self._config = new_config
@@ -112,6 +118,7 @@ class GamblingEngine:
         self._symbol = new_config.currency.symbol
         self._slot_payouts = self._build_payout_table(new_config.gambling.spin.payouts)
         self._ignored_users = {u.lower() for u in new_config.ignored_users}
+        self._narrator.update_config(new_config.gambling.heist.narrative)
 
     # ══════════════════════════════════════════════════════════
     #  Payout table
@@ -666,52 +673,27 @@ class GamblingEngine:
     #  Heist
     # ══════════════════════════════════════════════════════════
 
-    # ── Dramatic scenario text pools ──────────────────────────
+    # ── Narrator access (backwards-compatible properties) ────
 
-    HEIST_SCENARIOS: list[str] = [
-        "🏦 Your team enters the casino. {user} disables the cameras while the rest get to work…",
-        "🏦 As the bank doors swing open, {user} yells, \"EVERYONE ON THE FLOOR!!!\" 💰",
-        "🏦 __SMASH!__ 💎 Alarms ring as {user} _removes_ the top of the glass cabinet. It's full of jewels! The team better move quickly…",
-        "🏦 The crew rolls up to the armored truck in a black sedan. {user} pulls out the acetylene torch… 🔥",
-        "🏦 Under cover of night, the crew slides down ropes into the vault. {user} whispers: \"Nobody make a sound…\" 🤫",
-        "🏦 {user} hacks the security mainframe — \"We've got 90 seconds before the grid resets!\" 💻🔓",
-        "🏦 The tunnel breaks through the floor of the vault. Gold bars everywhere. {user} grins: \"Jackpot.\" 🪙",
-    ]
+    @property
+    def HEIST_SCENARIOS(self) -> list[str]:
+        return self._narrator.scenarios
 
-    HEIST_WIN_LINES: list[str] = [
-        "💰 THAT WAS CLOSE! Sirens in the distance, but the crew vanishes into the night. Everyone collects {payout} {symbol}!",
-        "💰 Like taking candy from a baby. Everyone collects {payout} {symbol}! 😎",
-        "💰 The getaway driver floors it — tires screech, but the crew is CLEAN! Everyone collects {payout} {symbol}! 🚗💨",
-        "💰 The doors slam shut behind them and the safe house erupts in cheers! Everyone collects {payout} {symbol}! 🎉",
-        "💰 Not a single alarm tripped. The perfect crime. Everyone collects {payout} {symbol}! 🤌",
-    ]
+    @property
+    def HEIST_WIN_LINES(self) -> list[str]:
+        return self._narrator.win_lines
 
-    HEIST_LOSE_LINES: list[str] = [
-        "🚨 CAUGHT! {user} tripped the laser grid. Everyone loses their wager! 👮",
-        "🚨 BUSTED! Undercover cops were waiting the whole time. The crew is going DOWNTOWN! 🚔",
-        "🚨 {user} left prints on the vault door — the feds traced it in minutes. Wagers forfeited! 🔍",
-        "🚨 The getaway van won't start! Surrounded by SWAT. It's over. Everyone's busted! 💀",
-        "🚨 A dye pack exploded in the bag — {user} is covered in blue and the cops are closing in! 🔵👮",
-    ]
+    @property
+    def HEIST_LOSE_LINES(self) -> list[str]:
+        return self._narrator.lose_lines
 
-    HEIST_PUSH_LINES: list[str] = [
-        "😰 The alarm trips! The crew scatters — most of the loot falls out of the bags during the escape. Refunded minus a 5% \"dry cleaning\" fee.",
-        "😰 A guard spots the crew at the last second — they bail but drop most of the cash. Refunded minus 5% for the getaway fuel. ⛽",
-        "😰 {user} accidentally sets off a smoke bomb in the van. Chaos. The crew saves MOST of the take… minus 5%.",
-    ]
+    @property
+    def HEIST_PUSH_LINES(self) -> list[str]:
+        return self._narrator.push_lines
 
-    HEIST_JOIN_LINES: list[str] = [
-        "🔫 \"You son of a bitch, I'm in!\" — {user}",
-        "🤝 \"One last job. After this, we're even. Understood?\" — {user}",
-        "😏 \"{user} cracks their knuckles. \"Let's do this.\"",
-        "🎭 {user} puts on the mask. \"Nobody knows me in there.\"",
-        "🗺️ \"I know a guy on the inside…\" — {user}",
-        "💣 {user} opens a briefcase full of explosives. \"I brought party favors.\"",
-        "🕶️ {user} slides on sunglasses. \"I was born for this.\"",
-        "🤫 {user} slips in through the back. \"What? I was already here.\"",
-        "🔒 \"I can crack any safe in under 60 seconds.\" — {user}",
-        "🏎️ \"{user} revs the engine. \"I'll be the getaway.\"",
-    ]
+    @property
+    def HEIST_JOIN_LINES(self) -> list[str]:
+        return self._narrator.join_lines
 
     def get_active_heist(self, channel: str) -> ActiveHeist | None:
         return self._active_heists.get(channel)
@@ -797,15 +779,17 @@ class GamblingEngine:
 
     def pick_heist_scenario(self, participants: list[str]) -> str:
         """Pick a random heist scenario line with a random participant name."""
-        user = random.choice(participants)
-        return random.choice(self.HEIST_SCENARIOS).format(user=user)
+        return self._narrator.get_scenario(participants)
 
-    async def resolve_heist(self, channel: str) -> tuple[list[str], list[str]] | None:
+    async def resolve_heist(
+        self, channel: str,
+    ) -> tuple[list[str], list[str], dict[str, str]] | None:
         """Resolve an active heist.
 
-        Returns ``([message_lines], [participant_usernames])`` or ``None``.
+        Returns ``([message_lines], [participant_usernames], {user: pm_text})`` or ``None``.
         The first line is the scenario (sent before the delay).
         Subsequent lines are the outcome (sent after the delay).
+        The per-user dict contains a brief win/loss/push/refund message for each participant.
         """
         cfg = self._config.gambling.heist
 
@@ -822,6 +806,7 @@ class GamblingEngine:
 
         # ---- Not enough crew → refund ----
         if crew_size < cfg.min_participants:
+            per_user_pm: dict[str, str] = {}
             for user, wager in heist.participants.items():
                 await self._db.credit(
                     user, channel, wager,
@@ -829,13 +814,21 @@ class GamblingEngine:
                     trigger_id="gambling.heist.refund",
                     reason="Heist cancelled — not enough participants",
                 )
+                per_user_pm[user] = (
+                    f"🏦 Heist cancelled — not enough participants. "
+                    f"{wager:,} {self._symbol} refunded."
+                )
             return (
                 [
                     f"🏦 Heist cancelled — only {crew_size} participant(s) "
                     f"(need {cfg.min_participants}). Everyone was refunded.",
                 ],
                 participants,
+                per_user_pm,
             )
+
+        # ---- Pre-generate LLM story if applicable ----
+        await self._narrator.prepare_story()
 
         # ---- Determine outcome ----
         scenario_line = self.pick_heist_scenario(participants)
@@ -845,6 +838,7 @@ class GamblingEngine:
 
         if roll < cfg.success_chance:
             # ── WIN ──
+            per_user_pm = {}
             for user, wager in heist.participants.items():
                 payout = int(wager * multiplier)
                 await self._db.credit(
@@ -858,22 +852,28 @@ class GamblingEngine:
                     user, channel, "heist", net=net,
                     biggest_win=max(0, net), biggest_loss=0,
                 )
+                per_user_pm[user] = (
+                    f"✅ Heist succeeded! You received {payout:,} {self._symbol} "
+                    f"(+{net:,} net, {multiplier:.1f}x)."
+                )
 
             total_payout = int(total_pot * multiplier)
             per_user_display = int((total_pot // crew_size) * multiplier)
             random_user = random.choice(participants)
-            win_line = random.choice(self.HEIST_WIN_LINES).format(
+            win_line = self._narrator.get_win_line(
                 payout=f"{per_user_display:,}", symbol=self._symbol, user=random_user,
             )
             summary = (
                 f"💰 Crew of {crew_size} split {total_payout:,} {self._symbol} "
                 f"({multiplier:.1f}x multiplier)!"
             )
-            return ([scenario_line, win_line, summary], participants)
+            self._narrator.consume_cached_story()
+            return ([scenario_line, win_line, summary], participants, per_user_pm)
 
         elif roll < cfg.success_chance + cfg.push_chance:
             # ── PUSH — refund minus fee ──
             fee_pct = cfg.push_fee_pct
+            per_user_pm = {}
             for user, wager in heist.participants.items():
                 refund = int(wager * (1.0 - fee_pct))
                 await self._db.credit(
@@ -887,28 +887,39 @@ class GamblingEngine:
                     user, channel, "heist", net=-loss,
                     biggest_win=0, biggest_loss=loss,
                 )
+                per_user_pm[user] = (
+                    f"↩️ Heist pushed. You got back {refund:,} {self._symbol} "
+                    f"(-{loss:,} fee)."
+                )
 
             random_user = random.choice(participants)
-            push_line = random.choice(self.HEIST_PUSH_LINES).format(
+            push_line = self._narrator.get_push_line(
                 user=random_user, symbol=self._symbol,
             )
-            return ([scenario_line, push_line], participants)
+            self._narrator.consume_cached_story()
+            return ([scenario_line, push_line], participants, per_user_pm)
 
         else:
             # ── LOSS ──
+            per_user_pm = {}
             for user, wager in heist.participants.items():
                 await self._db.update_gambling_stats(
                     user, channel, "heist", net=-wager,
                     biggest_win=0, biggest_loss=wager,
                 )
+                per_user_pm[user] = f"❌ Heist failed. You lost {wager:,} {self._symbol}."
 
             random_user = random.choice(participants)
-            lose_line = random.choice(self.HEIST_LOSE_LINES).format(
+            lose_line = self._narrator.get_lose_line(
                 user=random_user, symbol=self._symbol,
             )
             total_lost = sum(heist.participants.values())
             summary = f"The crew lost {total_lost:,} {self._symbol} total. 💸"
-            return ([scenario_line, lose_line, summary], participants)
+
+            # Clear cached story now that it's consumed
+            self._narrator.consume_cached_story()
+
+            return ([scenario_line, lose_line, summary], participants, per_user_pm)
 
     # ══════════════════════════════════════════════════════════
     #  Gambling Stats

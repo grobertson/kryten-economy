@@ -104,3 +104,25 @@ class TestDailyStreaks:
         # Verify balance is higher than sum of configured rewards
         balance = await database.get_balance("alice", "testchannel")
         assert balance > 0
+
+
+class TestGetDailyMinutesPresent:
+    """Tests for database.get_daily_minutes_present (streak restoration helper)."""
+
+    async def test_returns_zero_when_no_row(self, database: EconomyDatabase):
+        """Should return 0 when no daily_activity row exists."""
+        result = await database.get_daily_minutes_present("alice", "testchannel", "2026-01-01")
+        assert result == 0
+
+    async def test_returns_accumulated_minutes(self, database: EconomyDatabase):
+        """Should return the current minutes_present value."""
+        await database.increment_daily_minutes_present("alice", "testchannel", "2026-01-01", 42)
+        result = await database.get_daily_minutes_present("alice", "testchannel", "2026-01-01")
+        assert result == 42
+
+    async def test_different_dates_are_independent(self, database: EconomyDatabase):
+        """Minutes for different dates should not interfere."""
+        await database.increment_daily_minutes_present("alice", "testchannel", "2026-01-01", 30)
+        await database.increment_daily_minutes_present("alice", "testchannel", "2026-01-02", 15)
+        assert await database.get_daily_minutes_present("alice", "testchannel", "2026-01-01") == 30
+        assert await database.get_daily_minutes_present("alice", "testchannel", "2026-01-02") == 15

@@ -158,7 +158,7 @@ async def test_heist_success_crew_scaled(gambling_engine: GamblingEngine, databa
             result = await gambling_engine.resolve_heist(CH)
 
     assert result is not None
-    lines, participants = result
+    lines, participants, _ = result
     assert len(participants) == 2
     # At least one line should reference payouts
     full = " ".join(lines)
@@ -191,7 +191,7 @@ async def test_heist_failure_dramatic(gambling_engine: GamblingEngine, database:
             result = await gambling_engine.resolve_heist(CH)
 
     assert result is not None
-    lines, _ = result
+    lines, _, _ = result
     full = " ".join(lines)
     assert "🚨" in full or "lost" in full.lower()
 
@@ -220,7 +220,7 @@ async def test_heist_push(gambling_engine: GamblingEngine, database: EconomyData
             result = await gambling_engine.resolve_heist(CH)
 
     assert result is not None
-    lines, participants = result
+    lines, participants, _ = result
     full = " ".join(lines)
     assert "😰" in full or "refund" in full.lower()
 
@@ -242,7 +242,7 @@ async def test_heist_insufficient_participants(gambling_engine: GamblingEngine, 
 
     result = await gambling_engine.resolve_heist(CH)
     assert result is not None
-    lines, participants = result
+    lines, participants, _ = result
     full = " ".join(lines)
     assert "cancelled" in full.lower()
 
@@ -363,3 +363,118 @@ def test_scenario_text_pools(gambling_engine: GamblingEngine):
     for pool_name in ("HEIST_WIN_LINES", "HEIST_LOSE_LINES", "HEIST_PUSH_LINES"):
         pool = getattr(gambling_engine, pool_name)
         assert len(pool) > 0
+
+
+# ══════════════════════════════════════════════════════════════
+#  Narrator tests
+# ══════════════════════════════════════════════════════════════
+
+
+def test_narrator_static_pools_large(gambling_engine: GamblingEngine):
+    """Static pools should have 10x+ the original counts (was 7/5/5/3/10)."""
+    narrator = gambling_engine._narrator
+    assert len(narrator.scenarios) >= 50
+    assert len(narrator.win_lines) >= 28
+    assert len(narrator.lose_lines) >= 28
+    assert len(narrator.push_lines) >= 14
+    assert len(narrator.join_lines) >= 38
+
+
+def test_narrator_get_scenario(gambling_engine: GamblingEngine):
+    """get_scenario returns a formatted string with a participant name."""
+    narrator = gambling_engine._narrator
+    result = narrator.get_scenario(["Alice", "Bob"])
+    assert isinstance(result, str)
+    assert len(result) > 10
+    # Should not contain raw placeholder
+    assert "{user}" not in result
+
+
+def test_narrator_get_win_line(gambling_engine: GamblingEngine):
+    """get_win_line returns a formatted string with payout info."""
+    narrator = gambling_engine._narrator
+    result = narrator.get_win_line("1,000", "Z", "Alice")
+    assert isinstance(result, str)
+    assert "{payout}" not in result
+    assert "{symbol}" not in result
+
+
+def test_narrator_get_lose_line(gambling_engine: GamblingEngine):
+    narrator = gambling_engine._narrator
+    result = narrator.get_lose_line("Alice", "Z")
+    assert isinstance(result, str)
+    assert "{user}" not in result
+
+
+def test_narrator_get_push_line(gambling_engine: GamblingEngine):
+    narrator = gambling_engine._narrator
+    result = narrator.get_push_line("Alice", "Z")
+    assert isinstance(result, str)
+
+
+def test_narrator_get_join_line(gambling_engine: GamblingEngine):
+    narrator = gambling_engine._narrator
+    result = narrator.get_join_line("Alice")
+    assert isinstance(result, str)
+    assert "{user}" not in result
+
+
+def test_narrator_custom_templates(gambling_engine: GamblingEngine):
+    """Custom templates from config are merged into pools."""
+    from kryten_economy.config import HeistNarrativeConfig
+
+    custom_cfg = HeistNarrativeConfig(
+        mode="static",
+        custom_scenarios=["CUSTOM: {user} robs the moon! 🌕"],
+        custom_join_lines=["CUSTOM: {user} arrives via teleporter! ⚡"],
+    )
+    gambling_engine._narrator.update_config(custom_cfg)
+
+    assert "CUSTOM: {user} robs the moon! 🌕" in gambling_engine._narrator.scenarios
+    assert "CUSTOM: {user} arrives via teleporter! ⚡" in gambling_engine._narrator.join_lines
+
+
+@pytest.mark.asyncio
+async def test_narrator_prepare_story_static_mode(gambling_engine: GamblingEngine):
+    """In static mode, prepare_story does not generate a cached story."""
+    narrator = gambling_engine._narrator
+    await narrator.prepare_story()
+    assert narrator._cached_story is None
+
+
+@pytest.mark.asyncio
+async def test_narrator_consume_cached_story(gambling_engine: GamblingEngine):
+    """consume_cached_story clears any cached story."""
+    from kryten_economy.heist_narrator import HeistStory
+    narrator = gambling_engine._narrator
+    narrator._cached_story = HeistStory(
+        scenario="Test", win="Win", lose="Lose", push="Push",
+    )
+    narrator.consume_cached_story()
+    assert narrator._cached_story is None
+
+
+@pytest.mark.asyncio
+async def test_narrator_llm_fallback_on_failure(gambling_engine: GamblingEngine):
+    """In hybrid mode, LLM failure falls back to static."""
+    from kryten_economy.config import HeistNarrativeConfig, HeistLLMConfig
+
+    hybrid_cfg = HeistNarrativeConfig(
+        mode="hybrid",
+        llm=HeistLLMConfig(
+            endpoint="http://localhost:99999/v1/chat/completions",
+            timeout_seconds=1,
+            max_retries=0,
+        ),
+    )
+    gambling_engine._narrator.update_config(hybrid_cfg)
+    gambling_engine._narrator._cfg = hybrid_cfg
+
+    await gambling_engine._narrator.prepare_story()
+    # LLM should fail (bad port), cached story should be None
+    assert gambling_engine._narrator._cached_story is None
+
+    # Static fallback should still work
+    result = gambling_engine._narrator.get_scenario(["Alice"])
+    assert isinstance(result, str)
+    assert len(result) > 5
