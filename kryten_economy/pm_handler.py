@@ -891,18 +891,30 @@ class PmHandler:
             uid for uid in pending if uid in uid_to_index and uid != cur_uid_int
         ]
 
-        # Identify the newly added UID.
+        # Resolve a move anchor from pending paid queue state.
+        anchor_uid: int | None = None
+        if pending:
+            candidate = pending[-1]
+            if candidate in uid_to_index:
+                anchor_uid = candidate
+
+        # Identify the newly added UID with retries (state KV can lag briefly).
         new_uid: int | None = None
-        for row in after_items:
-            if not isinstance(row, dict):
-                continue
-            uid = row.get("uid")
-            if uid is None:
-                continue
-            uid_int = int(uid)
-            if uid_int not in before_uids:
-                new_uid = uid_int
+        for _ in range(6):
+            for row in after_items:
+                if not isinstance(row, dict):
+                    continue
+                uid = row.get("uid")
+                if uid is None:
+                    continue
+                uid_int = int(uid)
+                if uid_int not in before_uids:
+                    new_uid = uid_int
+                    break
+            if new_uid is not None:
                 break
+            await asyncio.sleep(0.35)
+            after_items = await get_playlist(channel) or []
 
         if new_uid is None:
             # Could not resolve new UID, keep default "next" placement.
@@ -910,11 +922,9 @@ class PmHandler:
 
         # Robot/CyTube move semantics are "after UID", not numeric index.
         # Keep first paid queue request as next; place subsequent requests after
-        # the most recent pending paid queue item.
-        if pending:
-            after_uid = pending[-1]
-            if after_uid in uid_to_index:
-                await move_media(channel, new_uid, after_uid)
+        # the selected anchor item.
+        if anchor_uid is not None and new_uid != anchor_uid:
+            await move_media(channel, new_uid, anchor_uid)
 
         pending.append(new_uid)
 

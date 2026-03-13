@@ -394,6 +394,59 @@ async def test_paid_queue_fifo_after_current(
     mock_client.move_media.assert_called_once_with(CH, 302, 301)
 
 
+@pytest.mark.asyncio
+async def test_paid_queue_fifo_with_lagged_uid_visibility(
+    sample_config: EconomyConfig, database: EconomyDatabase,
+    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+):
+    """Lagged state visibility still discovers new UID and preserves FIFO moves."""
+    mock_media_client.get_by_id = AsyncMock(side_effect=[
+        _fake_media("v1", "First", 300),
+        _fake_media("v2", "Second", 300),
+    ])
+
+    await _seed_account(database, "Alice", 500000)
+    await _seed_account(database, "Bob", 500000)
+
+    mock_client = MagicMock()
+    # First queue: after add, first read is stale (no 301 yet), retry sees 301.
+    # Second queue: normal visibility, then moved after 301.
+    playlist_states = [
+        [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
+        [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
+        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [{"uid": 100, "media": {}}, {"uid": 302, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+    ]
+    mock_client.get_state_playlist_items = AsyncMock(side_effect=playlist_states)
+    mock_client.get_state_current_uid = AsyncMock(return_value=100)
+    mock_client.add_media = AsyncMock(return_value=None)
+    mock_client.move_media = AsyncMock(return_value=None)
+
+    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+
+    # First queue purchase
+    resp = await handler._cmd_queue("Alice", CH, ["v1"])
+    pending = handler._pending_confirm.pop("alice")
+    resp = await handler._execute_confirmed_queue("Alice", CH, pending)
+    assert "queued" in resp.lower()
+
+    # Bypass cooldown for Bob
+    original_get_last = database.get_last_queue_time
+
+    async def _no_cooldown(username, channel):
+        return None
+
+    database.get_last_queue_time = _no_cooldown
+    resp = await handler._cmd_queue("Bob", CH, ["v2"])
+    pending = handler._pending_confirm.pop("bob")
+    resp = await handler._execute_confirmed_queue("Bob", CH, pending)
+    assert "queued" in resp.lower()
+    database.get_last_queue_time = original_get_last
+
+    mock_client.move_media.assert_called_once_with(CH, 302, 301)
+
+
 # ═══════════════════════════════════════════════════════════════
 #  forcenow
 # ═══════════════════════════════════════════════════════════════
