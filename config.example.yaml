@@ -546,6 +546,16 @@ multipliers:
       presence_bonus: 0
       announce: true
 
+# ── User Bounties ────────────────────────────────────────────
+bounties:
+  enabled: true
+  min_amount: 100
+  max_amount: 50000
+  max_open_per_user: 3
+  default_expiry_hours: 168      # 7 days
+  expiry_refund_percent: 50      # Partial refund when a bounty expires
+  description_max_length: 200
+
 # ── Public Announcements ─────────────────────────────────────
 announcements:
   queue_purchase: true
