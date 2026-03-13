@@ -322,7 +322,21 @@ spending:
   force_play_requires_admin: true
   max_queues_per_day: 3
   queue_cooldown_minutes: 30
-  blackout_windows: []
+  blackout_windows:
+    # NOTE: Cron is evaluated in UTC. These map Pacific time windows using UTC-7.
+    # If you need strict local-time behavior across DST changes, adjust these seasonally.
+    - name: "Wednesday Prime Event"
+      cron: "0 0 * * 4"   # Wed 5:00 PM Pacific
+      duration_hours: 3     # Until 8:00 PM Pacific
+    - name: "Friday Night Event"
+      cron: "0 22 * * 5"  # Fri 3:00 PM Pacific
+      duration_hours: 11    # Until Sat 2:00 AM Pacific
+    - name: "Saturday Morning Event"
+      cron: "0 14 * * 6"  # Sat 7:00 AM Pacific
+      duration_hours: 4     # Until 11:00 AM Pacific
+    - name: "Saturday Night Event"
+      cron: "0 22 * * 6"  # Sat 3:00 PM Pacific
+      duration_hours: 11    # Until Sun 2:00 AM Pacific
 
 # ── MediaCMS Integration ─────────────────────────────────────
 mediacms:
@@ -513,11 +527,30 @@ multipliers:
     announce: true
 
   scheduled_events:
-    - name: "Weird Wednesday"
-      cron: "0 20 * * 3"
+    # Keep these aligned with spending.blackout_windows.
+    - name: "Wednesday Prime Event"
+      cron: "0 0 * * 4"
+      duration_hours: 3
+      multiplier: 3.0
+      presence_bonus: 0
+      announce: true
+    - name: "Friday Night Event"
+      cron: "0 22 * * 5"
+      duration_hours: 11
+      multiplier: 3.0
+      presence_bonus: 0
+      announce: true
+    - name: "Saturday Morning Event"
+      cron: "0 14 * * 6"
       duration_hours: 4
-      multiplier: 2.0
-      presence_bonus: 500
+      multiplier: 3.0
+      presence_bonus: 0
+      announce: true
+    - name: "Saturday Night Event"
+      cron: "0 22 * * 6"
+      duration_hours: 11
+      multiplier: 3.0
+      presence_bonus: 0
       announce: true
 
 # ── Public Announcements ─────────────────────────────────────

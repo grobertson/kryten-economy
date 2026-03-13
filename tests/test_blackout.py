@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from kryten_economy.config import EconomyConfig
+from kryten_economy.config import BlackoutWindowConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.pm_handler import PmHandler
 from kryten_economy.presence_tracker import PresenceTracker
@@ -56,9 +57,8 @@ def _fake_media(mid: str = "abc123") -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  Blackout tests — note: blackout is currently a pass-through
-#  in the code (placeholder). These tests verify the config
-#  structure works and queue still functions without blackouts.
+#  Blackout tests — queue/search should block during active
+#  windows and shortly before upcoming events.
 # ═══════════════════════════════════════════════════════════════
 
 
@@ -80,6 +80,51 @@ async def test_queue_no_blackout(
     pending = handler._pending_confirm.pop("alice")
     resp = await handler._execute_confirmed_queue("Alice", CH, pending)
     assert "queued" in resp.lower()
+
+
+@pytest.mark.asyncio
+async def test_queue_block_message_active_window(
+    sample_config: EconomyConfig, database: EconomyDatabase,
+    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+):
+    """Queue is blocked with friendly message while blackout is active."""
+    sample_config.spending.blackout_windows = [
+        BlackoutWindowConfig(
+            name="Prime Event",
+            cron="0 20 * * *",
+            duration_hours=3,
+        ),
+    ]
+    handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
+
+    now = datetime(2026, 3, 14, 21, 0, tzinfo=timezone.utc)
+    msg = handler._get_queue_block_message(CH, now=now)
+    assert msg is not None
+    assert "unavailable" in msg.lower()
+    assert "3x dwell bonus" in msg.lower()
+    assert "prime event" in msg.lower()
+
+
+@pytest.mark.asyncio
+async def test_queue_block_message_upcoming_window(
+    sample_config: EconomyConfig, database: EconomyDatabase,
+    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+):
+    """Queue is blocked shortly before blackout begins."""
+    sample_config.spending.blackout_windows = [
+        BlackoutWindowConfig(
+            name="Prime Event",
+            cron="0 20 * * *",
+            duration_hours=3,
+        ),
+    ]
+    handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
+
+    now = datetime(2026, 3, 14, 19, 30, tzinfo=timezone.utc)
+    msg = handler._get_queue_block_message(CH, now=now)
+    assert msg is not None
+    assert "upcoming" in msg.lower()
+    assert "3x dwell bonus" in msg.lower()
 
 
 @pytest.mark.asyncio

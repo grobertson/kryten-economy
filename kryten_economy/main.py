@@ -448,6 +448,7 @@ class EconomyApp:
             client=self.client,
             logger=self.logger,
             gambling_engine=self.gambling_engine,
+            multiplier_engine=self.multiplier_engine,
         )
         self.scheduler._metrics = self.metrics
         await self.scheduler.start()

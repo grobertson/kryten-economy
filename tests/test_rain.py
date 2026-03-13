@@ -9,6 +9,7 @@ import pytest
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
+from kryten_economy.multiplier_engine import ActiveMultiplier
 from kryten_economy.presence_tracker import PresenceTracker
 from kryten_economy.scheduler import Scheduler
 
@@ -101,3 +102,31 @@ class TestRain:
         conn.close()
         assert rain_tx is not None
         assert rain_tx["amount"] == 20
+
+    async def test_rain_uses_scheduled_event_multiplier(
+        self, sample_config: EconomyConfig, database: EconomyDatabase,
+        presence: PresenceTracker, mock_client: MagicMock,
+    ):
+        """Scheduled event multiplier should scale rain drops."""
+        await presence.handle_user_join("Alice", "testchannel")
+
+        mock_multiplier = MagicMock()
+        mock_multiplier.get_active_multipliers.return_value = [
+            ActiveMultiplier(source="scheduled:Weekend Event", multiplier=3.0, hidden=False),
+        ]
+        scheduler = Scheduler(
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            client=mock_client,
+            logger=logging.getLogger("test.scheduler"),
+            multiplier_engine=mock_multiplier,
+        )
+
+        with patch("kryten_economy.scheduler.random") as mock_random:
+            mock_random.randint.return_value = 10
+            await scheduler._execute_rain()
+
+        alice_bal = await database.get_balance("Alice", "testchannel")
+        # Welcome wallet (100) + rain (10 * 3)
+        assert alice_bal == 130

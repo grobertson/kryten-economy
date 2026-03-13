@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .config import EconomyConfig
     from .database import EconomyDatabase
     from .gambling_engine import GamblingEngine
+    from .multiplier_engine import MultiplierEngine
     from .presence_tracker import PresenceTracker
 
 
@@ -32,12 +33,14 @@ class Scheduler:
         client: KrytenClient,
         logger: logging.Logger | None = None,
         gambling_engine: GamblingEngine | None = None,
+        multiplier_engine: MultiplierEngine | None = None,
     ) -> None:
         self._config = config
         self._db = database
         self._presence_tracker = presence_tracker
         self._client = client
         self._gambling_engine = gambling_engine
+        self._multiplier_engine = multiplier_engine
         self._logger = logger or logging.getLogger("economy.scheduler")
         self._metrics = None  # Wired by EconomyApp after construction
         self._tasks: list[asyncio.Task] = []
@@ -95,9 +98,15 @@ class Scheduler:
 
             amount = random.randint(rain_cfg.min_amount, rain_cfg.max_amount)
 
+            event_multiplier = 1.0
+            if self._multiplier_engine is not None:
+                for mul in self._multiplier_engine.get_active_multipliers(channel):
+                    if mul.source.startswith("scheduled:"):
+                        event_multiplier *= mul.multiplier
+
             for username in users:
-                # TODO (Sprint 6): Apply rank-based rain bonus multiplier
-                rain_amount = amount
+                # Scheduled event multipliers apply to rain drops.
+                rain_amount = max(1, int(round(amount * event_multiplier)))
 
                 await self._db.credit(
                     username,
@@ -115,7 +124,14 @@ class Scheduler:
                     )
                     await self._send_pm(channel, username, msg)
 
-            self._logger.info("Rain: %d Z to %d users in %s", amount, len(users), channel)
+            self._logger.info(
+                "Rain: base=%d, event_multiplier=%.2f, final=%d to %d users in %s",
+                amount,
+                event_multiplier,
+                max(1, int(round(amount * event_multiplier))),
+                len(users),
+                channel,
+            )
             if self._metrics:
                 self._metrics.record_rain(amount, len(users))
 

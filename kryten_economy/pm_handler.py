@@ -12,8 +12,10 @@ import logging
 import random
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Awaitable
+
+from croniter import croniter
 
 from . import __version__
 from .database import EconomyDatabase
@@ -750,10 +752,65 @@ class PmHandler:
     #  Sprint 5: Queue / Search Commands
     # ══════════════════════════════════════════════════════════
 
+    def _get_queue_block_message(self, channel: str, now: datetime | None = None) -> str | None:
+        """Return a friendly queue block message if a blackout is active/starting soon."""
+        windows = self._config.spending.blackout_windows
+        if not windows:
+            return None
+
+        now_utc = now or datetime.now(timezone.utc)
+        # Treat events starting within 60 minutes as "upcoming" queue blocks.
+        upcoming_cutoff_seconds = 60 * 60
+
+        active_name: str | None = None
+        active_end: datetime | None = None
+        upcoming_name: str | None = None
+        upcoming_start: datetime | None = None
+
+        for win in windows:
+            try:
+                prev_fire = croniter(win.cron, now_utc).get_prev(datetime)
+                end_time = prev_fire + timedelta(hours=win.duration_hours)
+                if prev_fire <= now_utc < end_time:
+                    if active_end is None or end_time < active_end:
+                        active_name = win.name
+                        active_end = end_time
+                    continue
+
+                next_fire = croniter(win.cron, now_utc).get_next(datetime)
+                until_seconds = (next_fire - now_utc).total_seconds()
+                if 0 <= until_seconds <= upcoming_cutoff_seconds:
+                    if upcoming_start is None or next_fire < upcoming_start:
+                        upcoming_name = win.name
+                        upcoming_start = next_fire
+            except Exception:
+                self._logger.exception("Invalid blackout window config for %s", win.name)
+
+        if active_name and active_end:
+            end_str = active_end.strftime("%a %H:%M UTC")
+            return (
+                f"🎬 User queueing is temporarily unavailable during **{active_name}** "
+                f"(in progress until {end_str}).\n"
+                "Thanks for hanging out - you are receiving a 3x dwell bonus during event mode."
+            )
+
+        if upcoming_name and upcoming_start:
+            start_str = upcoming_start.strftime("%a %H:%M UTC")
+            return (
+                f"🎬 User queueing is temporarily unavailable due to the upcoming **{upcoming_name}** "
+                f"(starts {start_str}).\n"
+                "Thanks for hanging out - event mode includes a 3x dwell bonus."
+            )
+
+        return None
+
     async def _cmd_search(self, username: str, channel: str, args: list[str]) -> str:
         """Search the MediaCMS catalog."""
         if not self._media or not self._config.mediacms.base_url:
             return "📽️ Content queuing is not configured for this channel."
+        block_msg = self._get_queue_block_message(channel)
+        if block_msg:
+            return block_msg
         if not args:
             return "Usage: search <query>"
 
@@ -786,6 +843,10 @@ class PmHandler:
         """Show price and ask user to confirm with YES."""
         if not self._spending:
             return "📽️ Content queuing is not configured."
+        if queue_type != "forcenow":
+            block_msg = self._get_queue_block_message(channel)
+            if block_msg:
+                return block_msg
 
         account = await self._db.get_or_create_account(username, channel)
         rank_tier = self._spending.get_rank_tier_index(account)
@@ -939,6 +1000,11 @@ class PmHandler:
         final_cost = pending["cost"]
         discount = pending["discount"]
         queue_type = pending["queue_type"]
+
+        if queue_type != "forcenow":
+            block_msg = self._get_queue_block_message(channel)
+            if block_msg:
+                return block_msg
 
         # Daily limit
         queues_today = await self._db.get_queues_today(username, channel)
