@@ -384,7 +384,6 @@ class EconomyApp:
                 channel = event.channel
                 message = event.message
                 timestamp = event.timestamp
-                uid = event.uid
 
                 # Ignored user gate
                 if username.lower() in self._ignored_users:
