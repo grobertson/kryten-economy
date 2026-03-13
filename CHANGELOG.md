@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.10] - 2026-03-13
+
+### Fixed
+
+- **Lifecycle registration version mismatch** - Service lifecycle metadata is now injected during config load so `service.name` is always `economy` and `service.version` always matches the installed package version (instead of drifting to `1.0.0` defaults)
+
+### Changed
+
+- **Config example cleanup** - `config.example.yaml` no longer asks users to set service name/version manually; lifecycle toggles remain configurable
+- **Retention realism** - Removed inactive-user nudge example from `config.example.yaml` (no reliable contact path for absent/offline users)
+- **Bounties docs sync** - Restored `bounties` section in `config.example.yaml` with schema defaults
+
+[0.8.10]: https://github.com/grobertson/kryten-economy/releases/tag/v0.8.10
+
 ## [0.8.9] - 2026-03-13
 
 ### Fixed
