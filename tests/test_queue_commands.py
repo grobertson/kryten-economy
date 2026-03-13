@@ -390,8 +390,8 @@ async def test_paid_queue_fifo_after_current(
 
     database.get_last_queue_time = original_get_last
 
-    # New second item (uid=302) should be moved to index 2 (after uid=301)
-    mock_client.move_media.assert_called_once_with(CH, 302, 2)
+    # New second item (uid=302) should be moved after first pending item (uid=301)
+    mock_client.move_media.assert_called_once_with(CH, 302, 301)
 
 
 # ═══════════════════════════════════════════════════════════════

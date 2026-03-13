@@ -908,15 +908,13 @@ class PmHandler:
             # Could not resolve new UID, keep default "next" placement.
             return
 
-        # Desired slot is after current item plus existing pending paid items.
-        next_index = 0
-        if cur_uid_int is not None and cur_uid_int in uid_to_index:
-            next_index = uid_to_index[cur_uid_int] + 1
-        desired_index = min(next_index + len(pending), max(len(after_items) - 1, 0))
-        actual_index = uid_to_index.get(new_uid, desired_index)
-
-        if desired_index != actual_index:
-            await move_media(channel, new_uid, desired_index)
+        # Robot/CyTube move semantics are "after UID", not numeric index.
+        # Keep first paid queue request as next; place subsequent requests after
+        # the most recent pending paid queue item.
+        if pending:
+            after_uid = pending[-1]
+            if after_uid in uid_to_index:
+                await move_media(channel, new_uid, after_uid)
 
         pending.append(new_uid)
 
