@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2026-03-13
+
+### Added
+
+- **User guide** — New end-user documentation at `docs/user-guide.md` with PM command quick start, queue/search flow, event window behavior, and troubleshooting notes; written to render cleanly on GitHub and Reddit
+
+### Changed
+
+- **Admin guide refresh** — Updated `docs/admin-guide.md` to reflect 0.8.6/0.8.7 behavior, including `status`/`eventstatus`, queue/search event lockout semantics, now-playing queue credit announcement, and corrected ad-hoc event command syntax
+- **Repo hygiene** — Added `uv.lock` to `.gitignore` and documented the user guide in README
+
+[0.8.7]: https://github.com/grobertson/kryten-economy/releases/tag/v0.8.7
+
 ## [0.7.4] - 2026-03-03
 
 ### Fixed

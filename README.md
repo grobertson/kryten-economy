@@ -111,6 +111,11 @@ See [`config.example.yaml`](config.example.yaml) for the complete reference with
 
 Environment variable substitution is supported: `${NATS_URL}`, `${VAR:-default}`.
 
+## Documentation
+
+- [User Guide](docs/user-guide.md) - PM commands, queue flow, event window behavior, and troubleshooting
+- [Admin Guide](docs/admin-guide.md) - operator setup, admin commands, and full configuration reference
+
 ## PM Commands
 
 ### User Commands
@@ -126,6 +131,8 @@ Environment variable substitution is supported: `${NATS_URL}`, `${VAR:-default}`
 | `history` | Recent transaction history |
 | `search <query>` | Search MediaCMS catalog |
 | `queue <id>` | Queue content (costs Z) |
+| `playnext <id>` | Queue content with priority placement |
+| `forcenow <id>` | Attempt immediate play (typically expensive/admin-gated) |
 | `tip @user <amount>` | Transfer Z to another user |
 | `shop` | Browse vanity items |
 | `buy <item>` | Purchase a vanity item |
@@ -135,6 +142,7 @@ Environment variable substitution is supported: `${NATS_URL}`, `${VAR:-default}`
 | `bounty <amount> "<desc>"` | Create a bounty |
 | `bounties` | List open bounties |
 | `events` | View active multipliers |
+| `status` / `eventstatus` | Show event timing and queue availability |
 
 ### Admin Commands (CyTube Rank ≥ 4)
 
