@@ -1597,6 +1597,7 @@ class EconomyDatabase:
         self, username: str, channel: str, item_type: str, value: str,
     ) -> None:
         """Upsert a vanity item."""
+        normalized_username = username.lower()
         loop = asyncio.get_running_loop()
 
         def _sync() -> None:
@@ -1607,7 +1608,7 @@ class EconomyDatabase:
                     "VALUES (?, ?, ?, ?) "
                     "ON CONFLICT(username, channel, item_type) DO UPDATE "
                     "SET value = excluded.value, active = 1, purchased_at = CURRENT_TIMESTAMP",
-                    (username, channel, item_type, value),
+                    (normalized_username, channel, item_type, value),
                 )
                 conn.commit()
             finally:
@@ -1627,7 +1628,7 @@ class EconomyDatabase:
                 row = conn.execute(
                     "SELECT value FROM vanity_items WHERE username = ? AND channel = ? "
                     "AND item_type = ? AND active = 1",
-                    (username, channel, item_type),
+                    (username.lower(), channel, item_type),
                 ).fetchone()
                 return row["value"] if row else None
             finally:
@@ -1689,7 +1690,7 @@ class EconomyDatabase:
                 rows = conn.execute(
                     "SELECT item_type, value FROM vanity_items "
                     "WHERE username = ? AND channel = ? AND active = 1",
-                    (username, channel),
+                    (username.lower(), channel),
                 ).fetchall()
                 return {r["item_type"]: r["value"] for r in rows}
             finally:

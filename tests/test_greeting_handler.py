@@ -282,3 +282,40 @@ class TestGreetingHandler:
         new_config = MagicMock()
         handler.update_config(new_config)
         assert handler._config is new_config
+
+    @pytest.mark.asyncio
+    async def test_greeting_lookup_case_insensitive_username(
+        self,
+        sample_config: EconomyConfig,
+        database: EconomyDatabase,
+        mock_client: MagicMock,
+    ) -> None:
+        """Greeting still fires when join event username casing differs from stored purchase name."""
+        presence = PresenceTracker(
+            config=sample_config, database=database,
+            client=mock_client, logger=logging.getLogger("test"),
+        )
+        past = datetime.now(timezone.utc) - timedelta(hours=2)
+        presence._last_departure[("alice", "testchannel")] = past
+
+        await database.get_or_create_account("Alice", "testchannel")
+        await database.set_vanity_item("Alice", "testchannel", "custom_greeting", "Case works!")
+
+        announcer = EventAnnouncer(
+            config=sample_config, client=mock_client,
+            logger=logging.getLogger("test"),
+        )
+        handler = GreetingHandler(
+            config=sample_config, database=database,
+            presence_tracker=presence, announcer=announcer,
+            logger=logging.getLogger("test"),
+        )
+        handler._batch_delay = 0.05
+
+        # Lowercase join username should still find greeting bought as "Alice"
+        await handler.on_user_join("testchannel", "alice")
+        await asyncio.sleep(0.15)
+
+        assert not announcer._queue.empty()
+        _, msg = await announcer._queue.get()
+        assert "Case works!" in msg

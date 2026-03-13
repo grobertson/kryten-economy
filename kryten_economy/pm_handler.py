@@ -136,6 +136,8 @@ class PmHandler:
         self._last_search: dict[str, list[dict]] = {}  # user_lower → results
         # Per-user pending queue confirmation (for YES/NO flow)
         self._pending_confirm: dict[str, dict] = {}  # user_lower → {item, cost, ...}
+        # Per-channel pending paid queue UIDs (FIFO after current item)
+        self._paid_queue_pending: dict[str, list[int]] = {}
 
         # Command dispatch map
         self._command_map: dict[str, Callable[..., Awaitable[str]]] = {
@@ -788,9 +790,7 @@ class PmHandler:
         account = await self._db.get_or_create_account(username, channel)
         rank_tier = self._spending.get_rank_tier_index(account)
 
-        if queue_type == "playnext":
-            base_cost = self._config.spending.interrupt_play_next
-        elif queue_type == "forcenow":
+        if queue_type == "forcenow":
             base_cost = self._config.spending.force_play_now
         else:
             _tier_label, base_cost = self._spending.get_price_tier(item["duration"])
@@ -815,7 +815,6 @@ class PmHandler:
 
         action_label = {
             "queue": "Queue",
-            "playnext": "Play Next",
             "forcenow": "Force Play Now",
         }.get(queue_type, "Queue")
 
@@ -831,6 +830,95 @@ class PmHandler:
             "Enter anything else to cancel.",
         ]
         return "\n".join(lines)
+
+    async def _queue_paid_media(self, channel: str, item: dict, queue_type: str) -> None:
+        """Queue paid media so regular queue requests are FIFO after current item.
+
+        Behavior:
+        - queue/playnext: always insert at next, then move behind earlier pending paid items
+        - forcenow: insert at next and do not join FIFO backlog
+        """
+        if not self._client:
+            return
+
+        # Force-now should remain immediate.
+        if queue_type == "forcenow":
+            await self._client.add_media(channel, item["media_type"], item["media_id"], position="next")
+            return
+
+        get_playlist = getattr(self._client, "get_state_playlist_items", None)
+        move_media = getattr(self._client, "move_media", None)
+
+        # Fallback path when state/move helpers are unavailable or non-async.
+        if (
+            not callable(get_playlist)
+            or not callable(move_media)
+            or not asyncio.iscoroutinefunction(get_playlist)
+            or not asyncio.iscoroutinefunction(move_media)
+        ):
+            await self._client.add_media(channel, item["media_type"], item["media_id"], position="next")
+            return
+
+        before_items = await get_playlist(channel) or []
+        before_uids = {
+            int(row["uid"])
+            for row in before_items
+            if isinstance(row, dict) and row.get("uid") is not None
+        }
+
+        current_uid = None
+        get_current_uid = getattr(self._client, "get_state_current_uid", None)
+        if callable(get_current_uid) and asyncio.iscoroutinefunction(get_current_uid):
+            current_uid = await get_current_uid(channel)
+
+        await self._client.add_media(channel, item["media_type"], item["media_id"], position="next")
+
+        after_items = await get_playlist(channel) or []
+        uid_to_index: dict[int, int] = {}
+        for idx, row in enumerate(after_items):
+            if not isinstance(row, dict):
+                continue
+            uid = row.get("uid")
+            if uid is None:
+                continue
+            uid_to_index[int(uid)] = idx
+
+        pending = self._paid_queue_pending.setdefault(channel, [])
+
+        # Drop played/removed entries so backlog reflects queued-but-not-playing items.
+        cur_uid_int = int(current_uid) if current_uid is not None else None
+        pending[:] = [
+            uid for uid in pending if uid in uid_to_index and uid != cur_uid_int
+        ]
+
+        # Identify the newly added UID.
+        new_uid: int | None = None
+        for row in after_items:
+            if not isinstance(row, dict):
+                continue
+            uid = row.get("uid")
+            if uid is None:
+                continue
+            uid_int = int(uid)
+            if uid_int not in before_uids:
+                new_uid = uid_int
+                break
+
+        if new_uid is None:
+            # Could not resolve new UID, keep default "next" placement.
+            return
+
+        # Desired slot is after current item plus existing pending paid items.
+        next_index = 0
+        if cur_uid_int is not None and cur_uid_int in uid_to_index:
+            next_index = uid_to_index[cur_uid_int] + 1
+        desired_index = min(next_index + len(pending), max(len(after_items) - 1, 0))
+        actual_index = uid_to_index.get(new_uid, desired_index)
+
+        if desired_index != actual_index:
+            await move_media(channel, new_uid, desired_index)
+
+        pending.append(new_uid)
 
     async def _execute_confirmed_queue(
         self, username: str, channel: str, pending: dict,
@@ -866,7 +954,8 @@ class PmHandler:
             return validation.message
 
         # Debit
-        trigger_id = f"spend.{queue_type}"
+        bill_type = "queue" if queue_type == "playnext" else queue_type
+        trigger_id = f"spend.{bill_type}"
         new_balance = await self._db.debit(
             username, channel, final_cost,
             tx_type="spend", trigger_id=trigger_id,
@@ -878,13 +967,8 @@ class PmHandler:
         if self._metrics:
             self._metrics.record_queue(final_cost)
 
-        # Queue the media via kryten-py
-        position = "next" if queue_type in ("playnext", "forcenow") else None
-        if self._client:
-            if position:
-                await self._client.add_media(channel, item["media_type"], item["media_id"], position=position)
-            else:
-                await self._client.add_media(channel, item["media_type"], item["media_id"])
+        # Queue media as next with FIFO ordering among paid queue purchases.
+        await self._queue_paid_media(channel, item, queue_type)
 
         # Public announcement
         if self._config.announcements.queue_purchase and self._client:
@@ -916,7 +1000,7 @@ class PmHandler:
         return await self._start_queue_confirm(username, channel, item, queue_type="queue")
 
     async def _cmd_playnext(self, username: str, channel: str, args: list[str]) -> str:
-        """Queue a MediaCMS item to play next (premium cost)."""
+        """Legacy alias for queue command (same pricing and ordering)."""
         if not self._media or not self._spending:
             return "📽️ Content queuing is not configured for this channel."
         if not args:
@@ -926,7 +1010,7 @@ class PmHandler:
         item = await self._media.get_by_id(media_id)
         if not item:
             return f"Media '{media_id}' not found in the catalog."
-        return await self._start_queue_confirm(username, channel, item, queue_type="playnext")
+        return await self._start_queue_confirm(username, channel, item, queue_type="queue")
 
     async def _cmd_forcenow(self, username: str, channel: str, args: list[str]) -> str:
         """Force-play a MediaCMS item immediately (highest cost)."""
@@ -975,9 +1059,7 @@ class PmHandler:
         account = await self._db.get_or_create_account(username, channel)
         rank_tier = self._spending.get_rank_tier_index(account)
 
-        if queue_type == "playnext":
-            base_cost = self._config.spending.interrupt_play_next
-        elif queue_type == "forcenow":
+        if queue_type == "forcenow":
             base_cost = self._config.spending.force_play_now
         else:
             _tier_label, base_cost = self._spending.get_price_tier(item["duration"])
@@ -1014,7 +1096,8 @@ class PmHandler:
         if validation:
             return validation.message
 
-        trigger_id = f"spend.{queue_type}"
+        bill_type = "queue" if queue_type == "playnext" else queue_type
+        trigger_id = f"spend.{bill_type}"
         new_balance = await self._db.debit(
             username, channel, final_cost,
             tx_type="spend", trigger_id=trigger_id,
@@ -1023,13 +1106,8 @@ class PmHandler:
         if new_balance is None:
             return "Insufficient funds."
 
-        # Queue the media via kryten-py
-        position = "next" if queue_type in ("playnext", "forcenow") else None
-        if self._client:
-            if position:
-                await self._client.add_media(channel, item["media_type"], item["media_id"], position=position)
-            else:
-                await self._client.add_media(channel, item["media_type"], item["media_id"])
+        # Queue media as next with FIFO ordering among paid queue purchases.
+        await self._queue_paid_media(channel, item, queue_type)
 
         duration_str = self._format_duration(item["duration"])
         discount_str = ""

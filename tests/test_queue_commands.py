@@ -172,6 +172,10 @@ async def test_queue_success(
 
     # add_media called
     mock_client.add_media.assert_called_once()
+    call_args = mock_client.add_media.call_args
+    assert call_args.kwargs.get("position") == "next" or (
+        len(call_args.args) > 3 and call_args.args[3] == "next"
+    )
 
 
 @pytest.mark.asyncio
@@ -286,14 +290,14 @@ async def test_playnext_uses_position(
     await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
-    # Step 1: confirm prompt with queue_type=playnext
+    # Step 1: legacy playnext command uses queue behavior
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
     assert "You selected" in resp
-    assert "Play Next" in resp
+    assert "Queue for" in resp
 
     # Step 2: confirm
     pending = handler._pending_confirm.pop("alice")
-    assert pending["queue_type"] == "playnext"
+    assert pending["queue_type"] == "queue"
     resp = await handler._execute_confirmed_queue("Alice", CH, pending)
     assert "queued" in resp.lower()
 
@@ -308,21 +312,86 @@ async def test_playnext_higher_cost(
     spending_engine: SpendingEngine, mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
-    """playnext costs interrupt_play_next (100000) regardless of duration."""
+    """playnext is alias to queue with the same tiered pricing."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Short", 60))
     await _seed_account(database, "Alice", 500000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
 
-    # Confirm prompt shows the higher price
+    # Confirm prompt should match normal queue pricing, not premium interrupt cost
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
     assert "You selected" in resp
+    assert "100,000" not in resp
 
-    # Execute queue
+    # Execute playnext-as-queue
+    pending = handler._pending_confirm.pop("alice")
+    await handler._execute_confirmed_queue("Alice", CH, pending)
+    after_playnext = await database.get_account("Alice", CH)
+
+    # Run normal queue with same media and compare charge parity.
+    await _seed_account(database, "Bob", 500000)
+    resp = await handler._cmd_queue("Bob", CH, ["v1"])
+    assert "You selected" in resp
+    pending = handler._pending_confirm.pop("bob")
+    await handler._execute_confirmed_queue("Bob", CH, pending)
+    after_queue = await database.get_account("Bob", CH)
+
+    assert after_playnext["balance"] == after_queue["balance"]
+
+
+@pytest.mark.asyncio
+async def test_paid_queue_fifo_after_current(
+    sample_config: EconomyConfig, database: EconomyDatabase,
+    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+):
+    """Second paid queue item is moved behind the first pending paid item (FIFO)."""
+    # Two distinct media picks
+    mock_media_client.get_by_id = AsyncMock(side_effect=[
+        _fake_media("v1", "First", 300),
+        _fake_media("v2", "Second", 300),
+    ])
+
+    await _seed_account(database, "Alice", 500000)
+    await _seed_account(database, "Bob", 500000)
+
+    mock_client = MagicMock()
+    # Simulated playlist snapshots around each add_media call
+    playlist_states = [
+        [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
+        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [{"uid": 100, "media": {}}, {"uid": 302, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+    ]
+    mock_client.get_state_playlist_items = AsyncMock(side_effect=playlist_states)
+    mock_client.get_state_current_uid = AsyncMock(return_value=100)
+    mock_client.add_media = AsyncMock(return_value=None)
+    mock_client.move_media = AsyncMock(return_value=None)
+
+    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+
+    # First queue purchase
+    resp = await handler._cmd_queue("Alice", CH, ["v1"])
     pending = handler._pending_confirm.pop("alice")
     resp = await handler._execute_confirmed_queue("Alice", CH, pending)
-    account = await database.get_account("Alice", CH)
-    # Charged interrupt_play_next (100000), balance was 500000 → ~400000
-    assert account["balance"] <= 500000 - 80000  # At least 80000 charged (maybe discount)
+    assert "queued" in resp.lower()
+
+    # Bypass cooldown for Bob to simulate another immediate paid queue
+    original_get_last = database.get_last_queue_time
+
+    async def _no_cooldown(username, channel):
+        return None
+
+    database.get_last_queue_time = _no_cooldown
+
+    # Second queue purchase should be moved after first pending item
+    resp = await handler._cmd_queue("Bob", CH, ["v2"])
+    pending = handler._pending_confirm.pop("bob")
+    resp = await handler._execute_confirmed_queue("Bob", CH, pending)
+    assert "queued" in resp.lower()
+
+    database.get_last_queue_time = original_get_last
+
+    # New second item (uid=302) should be moved to index 2 (after uid=301)
+    mock_client.move_media.assert_called_once_with(CH, 302, 2)
 
 
 # ═══════════════════════════════════════════════════════════════
