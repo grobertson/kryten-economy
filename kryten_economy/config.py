@@ -655,6 +655,7 @@ class AdminConfig(BaseModel):
 
 class AnnouncementTemplatesConfig(BaseModel):
     queue: str = '🎬 {user} just queued "{title}"! ({cost} {currency})'
+    now_playing_credit: str = '🎬 Now playing: "{title}" — hat tip to {user} for the queue! 🎩'
     jackpot: str = "🎰 JACKPOT! {user} just won {amount} {currency}!"
     rank_up: str = "⭐ {user} is now a {rank}!"
     streak: str = "🔥 {user} hit a {days}-day streak!"
@@ -667,6 +668,7 @@ class AnnouncementTemplatesConfig(BaseModel):
 
 class AnnouncementsConfig(BaseModel):
     queue_purchase: bool = True
+    now_playing_credit: bool = True
     gambling_jackpot: bool = True
     jackpot_min_amount: int = 500
     achievement_milestone: bool = True

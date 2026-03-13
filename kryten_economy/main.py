@@ -150,6 +150,63 @@ class EconomyApp:
         except asyncio.CancelledError:
             pass
 
+    async def _resolve_queued_by(self, channel: str, uid: int, event) -> str | None:
+        """Resolve queue owner for a now-playing item from event payload or playlist state."""
+        for key in ("queued_by", "queueby", "queue_by", "queuedBy"):
+            value = getattr(event, key, None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        if not self.client:
+            return None
+
+        get_playlist = getattr(self.client, "get_state_playlist_items", None)
+        if not callable(get_playlist):
+            return None
+
+        try:
+            items = await get_playlist(channel) or []
+        except Exception:
+            self.logger.debug("Could not resolve playlist state for queued-by lookup in %s", channel)
+            return None
+
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            row_uid = row.get("uid")
+            if row_uid is None:
+                continue
+            if int(row_uid) != int(uid):
+                continue
+
+            for key in ("queued_by", "queueby", "queue_by", "queuedBy"):
+                value = row.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+
+        return None
+
+    async def _announce_now_playing_credit(
+        self, channel: str, title: str, uid: int, event,
+    ) -> None:
+        """Announce now-playing item credit to the user who queued it."""
+        if not self.client:
+            return
+        if not self.config.announcements.now_playing_credit:
+            return
+
+        queued_by = await self._resolve_queued_by(channel, uid, event)
+        if not queued_by:
+            return
+        if queued_by.lower() == self.config.bot.username.lower():
+            return
+        if queued_by.lower() in {u.lower() for u in self.config.ignored_users}:
+            return
+
+        template = self.config.announcements.templates.now_playing_credit
+        msg = template.format(title=title, user=queued_by)
+        await self.client.send_chat(channel, msg)
+
     async def start(self) -> None:
         """Start the economy service — canonical kryten-py sequence."""
         self.logger.info("Starting kryten-economy...")
@@ -327,6 +384,7 @@ class EconomyApp:
                 channel = event.channel
                 message = event.message
                 timestamp = event.timestamp
+                uid = event.uid
 
                 # Ignored user gate
                 if username.lower() in self._ignored_users:
@@ -367,6 +425,7 @@ class EconomyApp:
                 title = event.title
                 media_id = event.media_id
                 duration = event.duration
+                uid = event.uid
                 timestamp = event.timestamp
 
                 connected = self.presence_tracker.get_connected_users(channel)
@@ -384,6 +443,8 @@ class EconomyApp:
                             "survived_full_media: %d users rewarded for '%s' in %s",
                             len(rewarded), previous.title, channel,
                         )
+
+                await self._announce_now_playing_credit(channel, title, uid, event)
             except Exception:
                 self.logger.exception("changemedia handler error for %s", getattr(event, "channel", "?"))
 

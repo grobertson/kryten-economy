@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from kryten_economy.config import EconomyConfig
+from kryten_economy.config import BlackoutWindowConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.pm_handler import PmHandler
 from kryten_economy.presence_tracker import PresenceTracker
@@ -114,6 +115,27 @@ class TestPmDispatch:
         response = mock_client.send_pm.call_args_list[0][0][2]
         assert "Economy Bot" in response
 
+    async def test_status_command_available(self, pm_handler: PmHandler, mock_client: MagicMock):
+        """status should report queue available when no blackout is active/upcoming."""
+        event = make_pm_event("Alice", "status")
+        await pm_handler.handle_pm(event)
+        mock_client.send_pm.assert_called_once()
+        response = mock_client.send_pm.call_args[0][2]
+        assert "Event Status" in response
+        assert "Queueing: available" in response
+
+    async def test_status_command_blocked(self, pm_handler: PmHandler, mock_client: MagicMock):
+        """status should report queue unavailable for active/upcoming event windows."""
+        pm_handler._config.spending.blackout_windows = [
+            BlackoutWindowConfig(name="Always On", cron="* * * * *", duration_hours=1),
+        ]
+        event = make_pm_event("Alice", "eventstatus")
+        await pm_handler.handle_pm(event)
+        mock_client.send_pm.assert_called_once()
+        response = mock_client.send_pm.call_args[0][2]
+        assert "Event Status" in response
+        assert "Queueing: unavailable" in response
+
     async def test_balance_shows_rank(self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase):
         """Balance response should include rank name."""
         await database.get_or_create_account("Alice", "testchannel")
@@ -121,3 +143,10 @@ class TestPmDispatch:
         await pm_handler.handle_pm(event)
         response = mock_client.send_pm.call_args[0][2]
         assert "Extra" in response  # Default rank
+
+    async def test_help_includes_status(self, pm_handler: PmHandler, mock_client: MagicMock):
+        """help should list status command in events section."""
+        event = make_pm_event("Alice", "help")
+        await pm_handler.handle_pm(event)
+        response = "\n".join(call[0][2] for call in mock_client.send_pm.call_args_list)
+        assert "events · status" in response

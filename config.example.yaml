@@ -556,6 +556,7 @@ multipliers:
 # ── Public Announcements ─────────────────────────────────────
 announcements:
   queue_purchase: true
+  now_playing_credit: true
   gambling_jackpot: true
   jackpot_min_amount: 500
   achievement_milestone: true
@@ -569,6 +570,7 @@ announcements:
 
   templates:
     queue: '🎬 {user} just queued "{title}"! ({cost} {currency})'
+    now_playing_credit: '🎬 Now playing: "{title}" — hat tip to {user} for the queue! 🎩'
     jackpot: "🎰 JACKPOT! {user} just won {amount} {currency}!"
     rank_up: "⭐ {user} is now a {rank}!"
     streak: "🔥 {user} hit a {days}-day streak!"

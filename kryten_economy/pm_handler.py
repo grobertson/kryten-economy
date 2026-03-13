@@ -179,6 +179,8 @@ class PmHandler:
             "bounties": self._cmd_bounties,
             "events": self._cmd_events,
             "multipliers": self._cmd_events,
+            "status": self._cmd_status,
+            "eventstatus": self._cmd_status,
             # Notification opt-out
             "quiet": self._cmd_quiet,
             "unquiet": self._cmd_unquiet,
@@ -337,7 +339,7 @@ class PmHandler:
             "",
             "📌 Bounties & Events",
             "  bounty · bounties",
-            "  events",
+            "  events · status",
             "",
             "🔕 Notifications",
             "  quiet · unquiet",
@@ -752,39 +754,60 @@ class PmHandler:
     #  Sprint 5: Queue / Search Commands
     # ══════════════════════════════════════════════════════════
 
-    def _get_queue_block_message(self, channel: str, now: datetime | None = None) -> str | None:
-        """Return a friendly queue block message if a blackout is active/starting soon."""
+    def _get_queue_event_state(self, now: datetime | None = None) -> dict[str, Any]:
+        """Compute queue blackout status, upcoming lockout, and next scheduled event."""
         windows = self._config.spending.blackout_windows
-        if not windows:
-            return None
-
         now_utc = now or datetime.now(timezone.utc)
-        # Treat events starting within 60 minutes as "upcoming" queue blocks.
         upcoming_cutoff_seconds = 60 * 60
 
-        active_name: str | None = None
-        active_end: datetime | None = None
-        upcoming_name: str | None = None
-        upcoming_start: datetime | None = None
+        state: dict[str, Any] = {
+            "blocked": False,
+            "active_name": None,
+            "active_end": None,
+            "upcoming_name": None,
+            "upcoming_start": None,
+            "next_name": None,
+            "next_start": None,
+        }
+
+        if not windows:
+            return state
 
         for win in windows:
             try:
                 prev_fire = croniter(win.cron, now_utc).get_prev(datetime)
                 end_time = prev_fire + timedelta(hours=win.duration_hours)
+                next_fire = croniter(win.cron, now_utc).get_next(datetime)
+
+                if state["next_start"] is None or next_fire < state["next_start"]:
+                    state["next_name"] = win.name
+                    state["next_start"] = next_fire
+
                 if prev_fire <= now_utc < end_time:
-                    if active_end is None or end_time < active_end:
-                        active_name = win.name
-                        active_end = end_time
+                    if state["active_end"] is None or end_time < state["active_end"]:
+                        state["active_name"] = win.name
+                        state["active_end"] = end_time
                     continue
 
-                next_fire = croniter(win.cron, now_utc).get_next(datetime)
                 until_seconds = (next_fire - now_utc).total_seconds()
                 if 0 <= until_seconds <= upcoming_cutoff_seconds:
-                    if upcoming_start is None or next_fire < upcoming_start:
-                        upcoming_name = win.name
-                        upcoming_start = next_fire
+                    if state["upcoming_start"] is None or next_fire < state["upcoming_start"]:
+                        state["upcoming_name"] = win.name
+                        state["upcoming_start"] = next_fire
             except Exception:
                 self._logger.exception("Invalid blackout window config for %s", win.name)
+
+        state["blocked"] = bool(state["active_name"] or state["upcoming_name"])
+        return state
+
+    def _get_queue_block_message(self, channel: str, now: datetime | None = None) -> str | None:
+        """Return a friendly queue block message if a blackout is active/starting soon."""
+        _ = channel
+        state = self._get_queue_event_state(now=now)
+        active_name = state["active_name"]
+        active_end = state["active_end"]
+        upcoming_name = state["upcoming_name"]
+        upcoming_start = state["upcoming_start"]
 
         if active_name and active_end:
             end_str = active_end.strftime("%a %H:%M UTC")
@@ -803,6 +826,35 @@ class PmHandler:
             )
 
         return None
+
+    async def _cmd_status(self, username: str, channel: str, args: list[str]) -> str:
+        """Show queue availability and event timing summary."""
+        _ = username, args
+        state = self._get_queue_event_state()
+
+        lines = ["📡 Event Status"]
+        if state["blocked"]:
+            lines.append("Queueing: unavailable")
+        else:
+            lines.append("Queueing: available")
+
+        if state["active_name"] and state["active_end"]:
+            end_str = state["active_end"].strftime("%a %H:%M UTC")
+            lines.append(f"In progress: {state['active_name']} (until {end_str})")
+            lines.append("Dwell bonus: 3x")
+        elif state["upcoming_name"] and state["upcoming_start"]:
+            start_str = state["upcoming_start"].strftime("%a %H:%M UTC")
+            lines.append(f"Upcoming soon: {state['upcoming_name']} (starts {start_str})")
+            lines.append("Dwell bonus: 3x during event windows")
+        elif state["next_name"] and state["next_start"]:
+            next_str = state["next_start"].strftime("%a %H:%M UTC")
+            lines.append(f"Next event: {state['next_name']} (starts {next_str})")
+            lines.append("Dwell bonus: 3x during event windows")
+        else:
+            lines.append("No recurring event windows are configured.")
+
+        lines.append("Tip: use 'events' to see active earning multipliers.")
+        return "\n".join(lines)
 
     async def _cmd_search(self, username: str, channel: str, args: list[str]) -> str:
         """Search the MediaCMS catalog."""
