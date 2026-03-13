@@ -2,12 +2,13 @@ name: Publish to PyPI
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
 
 jobs:
   check-and-publish:
-    name: Check version & publish
+    name: Build and publish
     runs-on: ubuntu-latest
     permissions:
       id-token: write   # required for trusted publishing (OIDC)
@@ -30,21 +31,18 @@ jobs:
           VERSION=$(python -c "import tomllib; f=open('pyproject.toml','rb'); d=tomllib.load(f); print(d['project']['version'])")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch latest published version from PyPI
-        id: pypi_version
+      - name: Validate tag matches package version
+        if: github.event_name == 'push'
         run: |
-          LATEST=$(pip index versions kryten-economy 2>/dev/null | grep -oP '(?<=kryten-economy \()[^)]+' | head -1 || echo "none")
-          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
-
-      - name: Skip if version already published
-        if: steps.pkg_version.outputs.version == steps.pypi_version.outputs.latest
-        run: |
-          echo "Version ${{ steps.pkg_version.outputs.version }} is already on PyPI. Skipping publish."
+          TAG="${GITHUB_REF_NAME}"
+          EXPECTED_TAG="v${{ steps.pkg_version.outputs.version }}"
+          if [ "$TAG" != "$EXPECTED_TAG" ]; then
+            echo "Tag $TAG does not match package version $EXPECTED_TAG"
+            exit 1
+          fi
 
       - name: Build package
-        if: steps.pkg_version.outputs.version != steps.pypi_version.outputs.latest
         run: python -m build
 
       - name: Publish to PyPI (trusted publishing)
-        if: steps.pkg_version.outputs.version != steps.pypi_version.outputs.latest
         uses: pypa/gh-action-pypi-publish@release/v1
