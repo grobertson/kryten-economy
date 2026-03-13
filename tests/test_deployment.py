@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kryten_economy.config import EconomyConfig
+from kryten_economy.config import load_config
 
 
 # Resolve project root (tests/ is one level inside)
@@ -29,11 +29,8 @@ class TestConfigExample:
         config_path = PROJECT_ROOT / "config.example.yaml"
         assert config_path.exists(), f"Missing {config_path}"
 
-        with open(config_path, encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
-
         # Should not raise any validation errors
-        config = EconomyConfig(**raw)
+        config = load_config(str(config_path))
         assert config.currency.symbol == "Z"
 
     def test_config_example_all_sections(self) -> None:

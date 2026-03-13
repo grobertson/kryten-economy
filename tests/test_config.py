@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from kryten_economy import __version__
 from kryten_economy.config import (
     CurrencyConfig,
     DatabaseConfig,
@@ -135,3 +136,34 @@ class TestLoadConfig:
 
         with pytest.raises(ValueError, match="YAML mapping"):
             load_config(str(config_path))
+
+    def test_service_identity_auto_injected(self, sample_config_dict: dict, tmp_path: Path):
+        """service.name/version should be injected even when service block is omitted."""
+        sample_config_dict.pop("service", None)
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(sample_config_dict))
+
+        cfg = load_config(str(config_path))
+        assert cfg.service is not None
+        assert cfg.service.name == "economy"
+        assert cfg.service.version == __version__
+
+    def test_service_identity_overrides_config_values(self, sample_config_dict: dict, tmp_path: Path):
+        """User-provided service.name/version should be ignored in favor of runtime identity."""
+        sample_config_dict["service"] = {
+            "name": "not-economy",
+            "version": "9.9.9",
+            "enable_lifecycle": False,
+            "enable_heartbeat": False,
+            "heartbeat_interval": 45,
+        }
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(sample_config_dict))
+
+        cfg = load_config(str(config_path))
+        assert cfg.service is not None
+        assert cfg.service.name == "economy"
+        assert cfg.service.version == __version__
+        assert cfg.service.enable_lifecycle is False
+        assert cfg.service.enable_heartbeat is False
+        assert cfg.service.heartbeat_interval == 45

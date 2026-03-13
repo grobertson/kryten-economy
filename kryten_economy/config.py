@@ -16,6 +16,8 @@ import yaml
 from kryten import KrytenConfig
 from pydantic import BaseModel, Field, field_validator
 
+from . import __version__
+
 
 # ═══════════════════════════════════════════════════════════════
 #  Sprint 1 — Core Foundation
@@ -804,4 +806,16 @@ def load_config(config_path: str) -> EconomyConfig:
         raise ValueError("Config file must contain a YAML mapping at the top level.")
 
     raw = _expand_env_vars(raw)
+
+    # Service identity is owned by the application, not user config.
+    # Keep lifecycle toggles configurable, but always enforce name/version.
+    service_raw = raw.get("service")
+    if service_raw is None:
+        service_raw = {}
+    if not isinstance(service_raw, dict):
+        raise ValueError("Config field 'service' must be a mapping if provided.")
+    service_raw["name"] = "economy"
+    service_raw["version"] = __version__
+    raw["service"] = service_raw
+
     return EconomyConfig(**raw)

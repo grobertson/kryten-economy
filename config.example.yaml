@@ -16,17 +16,15 @@ channels:
   - domain: cytu.be
     channel: mychannel
 
-# ── Service Identity (standard kryten-py) ────────────────────
+# ── Service Lifecycle (name/version are auto-managed) ─────────
 service:
-  name: economy
-  version: "1.0.0"
   enable_lifecycle: true
   enable_heartbeat: true
   heartbeat_interval: 30
 
 # ── Prometheus Metrics (standard kryten-py) ──────────────────
 metrics:
-  port: 28286
+  port: 28290
 
 # ── Persistence ──────────────────────────────────────────────
 database:
@@ -147,11 +145,6 @@ retention:
     days_absent: 7
     bonus: 100
     message: "Welcome back! Here's {amount} {currency}. You've been missed. 💚"
-
-  inactivity_nudge:
-    enabled: false
-    days_absent: 14
-    message: "We miss you! Your balance of {balance} {currency} is waiting."
 
 # ══════════════════════════════════════════════════════════════
 #  Sprint 3+ — Defined in config.py with defaults, not yet used
