@@ -1,8 +1,8 @@
 # Kryten Economy — Channel Administrator Guide
 
 > **Audience:** Channel owners and moderators responsible for configuring and managing the economy bot.  
-> **Version:** kryten-economy 1.x  
-> **Updated:** 2026-02-26
+> **Version:** kryten-economy 0.8.6  
+> **Updated:** 2026-03-13
 
 ---
 
@@ -34,6 +34,7 @@ The economy bot runs as a background service and participates in your CyTube cha
 - **Running a shop** — users spend coins on queue slots, vanity items, tips, and more.
 - **Tracking progression** — ranks, achievements, streaks, and daily competitions.
 - **Running events** — scheduled multiplier events, bounties, and holiday bonuses.
+- **Protecting event windows** — queue/search are paused during active windows and during the 60-minute pre-event lockout.
 
 All interaction with the bot happens via **PM** (private message). Users type a command, the bot replies privately.
 
@@ -92,6 +93,8 @@ Send all commands as a **PM to the bot** (the bot's username is set in `config.y
 | `unban @user` | Restore a user's economy access |
 | `approve_gif @user` | Approve a pending channel GIF purchase |
 | `reject_gif @user` | Reject a pending GIF and refund the user |
+
+User PM commands available during normal operation include `events` (active multipliers) and `status` / `eventstatus` (queue + event window state).
 
 ---
 
@@ -674,10 +677,17 @@ spending:
   max_queues_per_day: 3          # Queue slots per user per day
   queue_cooldown_minutes: 30     # Must wait this long between queues
 
-  blackout_windows: []           # Time windows when queuing is disabled
+  blackout_windows: []           # Time windows when queue/search is disabled
 ```
 
-**Blackout window example** (disable queuing during curated movie nights):
+When a blackout window is configured, users cannot run `search`, `queue`, `playnext`, or confirmation queue actions while:
+
+- The window is active
+- The next window starts within 60 minutes (pre-event lockout)
+
+Users receive a friendly PM explaining queueing is temporarily unavailable and that event-mode dwell bonus is active.
+
+**Blackout window example** (disable queue/search during curated movie nights):
 
 ```yaml
 spending:
@@ -727,6 +737,7 @@ announcements:
   rain_drop: true
   daily_champion: true
   streak_milestone: true
+  now_playing_credit: true
 
   templates:
     queue:         '🎬 {user} just queued "{title}"! ({cost} {currency})'
@@ -735,7 +746,10 @@ announcements:
     streak:        "🔥 {user} hit a {days}-day streak!"
     rain:          "☔ Rain! {count} users just got free {currency}."
     challenge_win: "⚔️ {winner} defeated {loser} and won {amount} {currency}!"
+    now_playing_credit: '▶️ Now playing: "{title}" (queued by {user})'
 ```
+
+`now_playing_credit` posts a public shoutout when a queued item begins playing.
 
 ---
 
@@ -825,13 +839,15 @@ multipliers:
       announce: true
 ```
 
+    Scheduled event multipliers affect normal earning and rain payouts while active.
+
 Admins can also trigger one-off events via the `event` PM command:
 
 ```
-event start "Double Coins" 2 2.0
+    event start 2.0 120 "Double Coins"
 ```
 
-*(name, duration_hours, multiplier)*
+    *(multiplier, minutes, name)*
 
 ---
 

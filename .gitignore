@@ -9,6 +9,7 @@ dist/
 build/
 *.egg-info/
 *.egg
+uv.lock
 
 # Virtual environments
 .venv/
