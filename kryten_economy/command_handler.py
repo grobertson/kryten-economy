@@ -21,6 +21,50 @@ if TYPE_CHECKING:
     from .main import EconomyApp
 
 
+# ══════════════════════════════════════════════════════════
+#  Module-level helpers for queue spending
+# ══════════════════════════════════════════════════════════
+
+def _is_blackout_active(
+    windows: list, now_utc: "datetime"
+) -> bool:
+    """Return True if any blackout window covers now_utc.
+
+    Each window has `cron` (start schedule) and `duration_hours`.
+    Uses croniter to find the most recent trigger and checks if
+    now_utc falls within [trigger, trigger + duration).
+    """
+    try:
+        from croniter import croniter
+    except ImportError:
+        return False  # croniter not installed — blackout disabled
+
+    for win in windows:
+        cron_expr = getattr(win, "cron", None) or win.get("cron") if isinstance(win, dict) else win.cron
+        duration_h = getattr(win, "duration_hours", None) or win.get("duration_hours") if isinstance(win, dict) else win.duration_hours
+        if not cron_expr or not duration_h:
+            continue
+        it = croniter(cron_expr, now_utc)
+        prev_fire = it.get_prev(datetime)
+        if prev_fire.tzinfo is None:
+            prev_fire = prev_fire.replace(tzinfo=timezone.utc)
+        if prev_fire <= now_utc < prev_fire + timedelta(hours=duration_h):
+            return True
+    return False
+
+
+def _rank_queue_bonus(account: dict | None) -> int:
+    """Extra queues per day granted by rank perks.
+
+    Users with elevated rank names get +1 queue/day.
+    """
+    if not account:
+        return 0
+    elevated = {"vip", "mod", "admin", "owner", "trusted", "regular"}
+    rank_name = str(account.get("rank_name", "")).lower()
+    return 1 if rank_name in elevated else 0
+
+
 class CommandHandler:
     """Handles request-reply commands on kryten.economy.command."""
 
@@ -301,6 +345,213 @@ class CommandHandler:
             "channel": channel,
             "limit": limit,
             "transactions": transactions,
+        }
+
+    # ══════════════════════════════════════════════════════════
+    #  Sprint 5: Queue Spending Commands
+    # ══════════════════════════════════════════════════════════
+
+    async def _handle_spending_queue_preview(
+        self, request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Read-only cost estimate. No state changed."""
+        username = self._username(request)
+        channel = self._channel(request)
+        duration_sec = int(request.get("duration_sec", 0))
+        if duration_sec <= 0:
+            raise ValueError("duration_sec must be positive")
+
+        engine = self._app.spending_engine
+        cfg = self._app.config.spending
+        db = self._app.db
+
+        # --- Pricing ---
+        tier_label, base_cost = engine.get_price_tier(duration_sec)
+        account = await db.get_account(username, channel)
+        rank_index = engine.get_rank_tier_index(account) if account else 0
+        final_cost, discount_frac = engine.apply_discount(base_cost, rank_index)
+        discount_pct = round(discount_frac * 100, 1)
+
+        # --- Eligibility checks (in priority order) ---
+        error_code = None
+        cooldown_remaining_sec = None
+        daily_remaining = cfg.max_queues_per_day
+
+        # 1. Blackout
+        now_utc = datetime.now(timezone.utc)
+        if _is_blackout_active(cfg.blackout_windows, now_utc):
+            error_code = "blackout_active"
+
+        # 2. Daily limit
+        if error_code is None:
+            today = self._utc_today()
+            activity = await db.get_or_create_daily_activity(username, channel, today)
+            queues_used = activity.get("queues_used", 0)
+            max_queues = cfg.max_queues_per_day + _rank_queue_bonus(account)
+            daily_remaining = max(0, max_queues - queues_used)
+            if queues_used >= max_queues:
+                error_code = "daily_limit_reached"
+
+        # 3. Cooldown
+        if error_code is None:
+            last_queue_time = await db.get_last_queue_time(username, channel)
+            if last_queue_time is not None:
+                elapsed = (now_utc - last_queue_time).total_seconds()
+                cooldown_total = cfg.queue_cooldown_minutes * 60
+                if elapsed < cooldown_total:
+                    cooldown_remaining_sec = int(cooldown_total - elapsed)
+                    error_code = "cooldown_active"
+
+        # 4. Balance
+        if error_code is None:
+            outcome = await engine.validate_spend(username, channel, final_cost, "queue")
+            if outcome is not None:
+                error_code = "insufficient_balance"
+
+        result: dict[str, Any] = {
+            "available": error_code is None,
+            "cost_z": final_cost,
+            "tier_label": tier_label,
+            "discount_pct": discount_pct,
+            "daily_remaining": daily_remaining,
+            "error_code": error_code,
+        }
+        if cooldown_remaining_sec is not None:
+            result["cooldown_remaining_sec"] = cooldown_remaining_sec
+        return result
+
+    async def _handle_spending_queue(
+        self, request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Atomic validate + debit. Idempotent via request_id."""
+        username = self._username(request)
+        channel = self._channel(request)
+        duration_sec = int(request.get("duration_sec", 0))
+        tier = str(request.get("tier", "queue"))
+        request_id = str(request.get("request_id", "")).strip()
+        if not request_id:
+            raise ValueError("request_id is required")
+        if duration_sec <= 0:
+            raise ValueError("duration_sec must be positive")
+
+        engine = self._app.spending_engine
+        cfg = self._app.config.spending
+        db = self._app.db
+
+        # --- Idempotency check ---
+        existing = await db.get_queue_spend_request(request_id)
+        if existing is not None:
+            # Already processed — return stored outcome without re-debiting
+            return {
+                "success": True,
+                "cost_z": existing["cost_z"],
+                "tier": existing["tier"],
+                "request_id": request_id,
+                "idempotent_replay": True,
+            }
+
+        # --- Pricing ---
+        tier_label, base_cost = engine.get_price_tier(duration_sec)
+        account = await db.get_account(username, channel)
+        rank_index = engine.get_rank_tier_index(account) if account else 0
+        final_cost, _ = engine.apply_discount(base_cost, rank_index)
+
+        # --- Eligibility (same order as preview) ---
+        now_utc = datetime.now(timezone.utc)
+        if _is_blackout_active(cfg.blackout_windows, now_utc):
+            return {"success": False, "cost_z": final_cost, "error_code": "blackout_active"}
+
+        today = self._utc_today()
+        activity = await db.get_or_create_daily_activity(username, channel, today)
+        queues_used = activity.get("queues_used", 0)
+        max_queues = cfg.max_queues_per_day + _rank_queue_bonus(account)
+        if queues_used >= max_queues:
+            return {"success": False, "cost_z": final_cost, "error_code": "daily_limit_reached"}
+
+        last_queue_time = await db.get_last_queue_time(username, channel)
+        if last_queue_time is not None:
+            elapsed = (now_utc - last_queue_time).total_seconds()
+            cooldown_total = cfg.queue_cooldown_minutes * 60
+            if elapsed < cooldown_total:
+                return {"success": False, "cost_z": final_cost, "error_code": "cooldown_active"}
+
+        outcome = await engine.validate_spend(username, channel, final_cost, "queue")
+        if outcome is not None:
+            return {"success": False, "cost_z": final_cost, "error_code": "insufficient_balance"}
+
+        # --- Debit ---
+        new_balance = await db.debit(
+            username, channel, final_cost,
+            tx_type="spend",
+            reason=f"Queue spend ({tier_label})",
+            trigger_id=f"spend.queue.{request_id}",
+        )
+        if new_balance is None:
+            return {"success": False, "cost_z": final_cost, "error_code": "insufficient_balance"}
+
+        # --- Record idempotency + daily counter ---
+        await db.insert_queue_spend_request(
+            request_id=request_id,
+            username=username,
+            channel=channel,
+            cost_z=final_cost,
+            tier=tier,
+        )
+        await db.increment_daily_queues_used(username, channel, today)
+
+        return {
+            "success": True,
+            "cost_z": final_cost,
+            "tier": tier,
+            "tier_label": tier_label,
+            "new_balance": new_balance,
+            "request_id": request_id,
+        }
+
+    async def _handle_spending_queue_refund(
+        self, request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Compensating credit. Idempotent via request_id."""
+        username = self._username(request)
+        channel = self._channel(request)
+        request_id = str(request.get("request_id", "")).strip()
+        reason = str(request.get("reason", "refund"))
+        if not request_id:
+            raise ValueError("request_id is required")
+
+        db = self._app.db
+
+        # Look up the original spend
+        existing = await db.get_queue_spend_request(request_id)
+        if existing is None:
+            return {"success": False, "error": "unknown_request_id"}
+
+        # Idempotency: already refunded
+        if existing.get("refunded"):
+            return {
+                "success": True,
+                "refunded": existing["cost_z"],
+                "request_id": request_id,
+                "idempotent_replay": True,
+            }
+
+        # Credit the user back
+        cost = existing["cost_z"]
+        new_balance = await db.credit(
+            username, channel, cost,
+            tx_type="refund",
+            reason=f"Queue refund: {reason}",
+            trigger_id=f"refund.queue.{request_id}",
+        )
+
+        # Mark as refunded
+        await db.mark_queue_spend_refunded(request_id)
+
+        return {
+            "success": True,
+            "refunded": cost,
+            "new_balance": new_balance,
+            "request_id": request_id,
         }
 
     async def _handle_stats_float(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -707,4 +958,7 @@ class CommandHandler:
         "approval.approve_gif": _handle_approval_approve_gif,
         "approval.reject_gif": _handle_approval_reject_gif,
         "leaderboard": _handle_leaderboard,
+        "spending.queue_preview": _handle_spending_queue_preview,
+        "spending.queue": _handle_spending_queue,
+        "spending.queue_refund": _handle_spending_queue_refund,
     }

@@ -345,6 +345,25 @@ class EconomyDatabase:
                 )
             """)
 
+            # ── Sprint 5: Queue spend requests (idempotency) ─
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS queue_spend_requests (
+                    request_id TEXT PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    cost_z INTEGER NOT NULL,
+                    tier TEXT NOT NULL,
+                    transaction_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    refunded INTEGER DEFAULT 0,
+                    refunded_at TEXT
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_qsr_username_channel "
+                "ON queue_spend_requests(username, channel)"
+            )
+
             # ── Service metrics (lifetime counters) ───────
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS service_metrics (
@@ -1878,6 +1897,98 @@ class EconomyDatabase:
                 conn.close()
 
         return await loop.run_in_executor(None, _sync)
+
+    # ══════════════════════════════════════════════════════════
+    #  Sprint 5: Queue Spend Requests
+    # ══════════════════════════════════════════════════════════
+
+    async def insert_queue_spend_request(
+        self,
+        request_id: str,
+        username: str,
+        channel: str,
+        cost_z: int,
+        tier: str,
+        transaction_id: int | None = None,
+    ) -> bool:
+        """Insert idempotency record. Returns True if inserted, False if already exists."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> bool:
+            conn = self._get_connection()
+            try:
+                try:
+                    conn.execute(
+                        "INSERT INTO queue_spend_requests "
+                        "(request_id, username, channel, cost_z, tier, transaction_id) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (request_id, username, channel, cost_z, tier, transaction_id),
+                    )
+                    conn.commit()
+                    return True
+                except Exception:
+                    return False
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
+    async def get_queue_spend_request(self, request_id: str) -> dict | None:
+        """Return queue_spend_requests row or None."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> dict | None:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM queue_spend_requests WHERE request_id = ?",
+                    (request_id,),
+                ).fetchone()
+                return dict(row) if row else None
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
+    async def mark_queue_spend_refunded(self, request_id: str) -> None:
+        """Set refunded=1 and refunded_at=now() on a spend request."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    "UPDATE queue_spend_requests SET refunded = 1, refunded_at = datetime('now') "
+                    "WHERE request_id = ?",
+                    (request_id,),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def increment_daily_queues_used(
+        self, username: str, channel: str, date: str,
+    ) -> None:
+        """Increment queues_used in daily_activity, creating row if needed."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    "INSERT INTO daily_activity (username, channel, date, queues_used) "
+                    "VALUES (?, ?, ?, 1) "
+                    "ON CONFLICT(username, channel, date) DO UPDATE "
+                    "SET queues_used = queues_used + 1",
+                    (username, channel, date),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
 
     # ══════════════════════════════════════════════════════════
     #  Sprint 6: Achievements

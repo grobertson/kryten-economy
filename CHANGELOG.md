@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.11] - 2026-05-30
+
+### Added
+
+- **Queue spending commands** — Three new NATS command handlers: `spending.queue_preview` (read-only cost estimate with eligibility checks), `spending.queue` (atomic validate + debit with idempotency via `request_id`), and `spending.queue_refund` (compensating credit, also idempotent)
+- **`queue_spend_requests` table** — Idempotency ledger for queue spend/refund operations; prevents double-debits and double-credits
+- **DB helpers** — `insert_queue_spend_request`, `get_queue_spend_request`, `mark_queue_spend_refunded`, `increment_daily_queues_used`
+- **Blackout window support** — `_is_blackout_active` helper uses croniter to check if current time falls within a configured blackout window
+- **Rank queue bonus** — Elevated ranks (vip, mod, admin, owner, trusted, regular) receive +1 queue/day
+
+[0.8.11]: https://github.com/grobertson/kryten-economy/releases/tag/v0.8.11
+
 ## [0.8.10] - 2026-03-13
 
 ### Fixed
