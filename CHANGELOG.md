@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.13] - 2026-06-05
+
+### Added
+
+- **`base_cost` in queue-preview response** — `spending.queue_preview` now returns the pre-discount `base_cost` alongside the discounted `cost_z`, allowing clients to render an exact receipt (price, discount amount, total) without deriving the base from the discount percentage.
+
+[0.8.13]: https://github.com/grobertson/kryten-economy/releases/tag/v0.8.13
+
 ## [0.8.12] - 2026-06-04
 
 ### Changed

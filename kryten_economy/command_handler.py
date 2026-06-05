@@ -411,6 +411,7 @@ class CommandHandler:
         result: dict[str, Any] = {
             "available": error_code is None,
             "cost_z": final_cost,
+            "base_cost": base_cost,
             "tier_label": tier_label,
             "discount_pct": discount_pct,
             "daily_remaining": daily_remaining,
