@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.14] - 2026-06-14
+
+### Added
+
+- **`account.summary` command** — User-facing account snapshot returning balance, lifetime earned, current rank (name, level, tier count), next-rank progress (remaining + progress percent), active perks, spend discount, currency name/symbol, and editable vanity items (`custom_greeting`, `custom_color`) with their costs and enabled flags. Purpose-built for surfaces like the webqueue dashboard so a single round-trip renders the full progression panel.
+- **`vanity.set_greeting` command** — Validates (≤200 chars), applies rank discount, debits, and persists the user's `custom_greeting`. Returns `{charged, discount, new_balance, value}`.
+- **`vanity.set_color` command** — Accepts an arbitrary 6-digit hex (normalized to `#RRGGBB`), applies rank discount, debits, and persists it as the `chat_color` vanity item. Replaces the palette-only restriction for API-driven purchases (the `buy color` PM command is unchanged). Returns `{charged, discount, new_balance, value}`.
+
+[0.8.14]: https://github.com/grobertson/kryten-economy/releases/tag/v0.8.14
+
 ## [0.8.13] - 2026-06-05
 
 ### Added

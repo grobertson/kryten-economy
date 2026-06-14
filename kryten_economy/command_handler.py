@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import logging
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Any
 
 from . import __version__
@@ -63,6 +64,17 @@ def _rank_queue_bonus(account: dict | None) -> int:
     elevated = {"vip", "mod", "admin", "owner", "trusted", "regular"}
     rank_name = str(account.get("rank_name", "")).lower()
     return 1 if rank_name in elevated else 0
+
+
+_HEX_COLOR_RE = re.compile(r"^#?([0-9A-Fa-f]{6})$")
+
+
+def _normalize_hex_color(value: str) -> str | None:
+    """Normalize a user-supplied colour to ``#RRGGBB`` upper-case, or None."""
+    match = _HEX_COLOR_RE.match(value.strip())
+    if not match:
+        return None
+    return "#" + match.group(1).upper()
 
 
 class CommandHandler:
@@ -776,6 +788,185 @@ class CommandHandler:
             "gambling": gambling or {},
         }
 
+    async def _handle_account_summary(self, request: dict[str, Any]) -> dict[str, Any]:
+        """User-facing account snapshot: balance, rank progression, perks, vanity.
+
+        Designed for surfaces like the webqueue dashboard. Returns everything
+        needed to render rank progress and editable vanity items in one call.
+        """
+        username = self._username(request)
+        channel = self._channel(request)
+
+        account = await self._app.db.get_account(username, channel)
+        if not account:
+            return {"found": False, "username": username, "channel": channel}
+
+        lifetime = int(account.get("lifetime_earned", 0))
+        rank_engine = self._app.rank_engine
+        spending = self._app.spending_engine
+        config = self._app.config
+
+        rank_block: dict[str, Any]
+        next_block: dict[str, Any] | None = None
+        perks: list[str] = []
+        discount_fraction = 0.0
+
+        if rank_engine is not None:
+            tier_index, current_tier = rank_engine.get_rank_for_lifetime(lifetime)
+            next_tier = rank_engine.get_next_tier(tier_index)
+            tier_count = len(rank_engine._tiers)  # noqa: SLF001
+            perks = list(current_tier.perks)
+            if spending is not None:
+                discount_fraction = spending.get_rank_discount(tier_index)
+
+            rank_block = {
+                "name": current_tier.name,
+                "index": tier_index,
+                "level": tier_index + 1,
+                "tier_count": tier_count,
+                "min_lifetime_earned": current_tier.min_lifetime_earned,
+            }
+
+            if next_tier is not None:
+                target = next_tier.min_lifetime_earned
+                remaining = max(0, target - lifetime)
+                progress = (lifetime / target * 100.0) if target > 0 else 100.0
+                next_block = {
+                    "name": next_tier.name,
+                    "min_lifetime_earned": target,
+                    "remaining": remaining,
+                    "progress_percent": round(min(100.0, progress), 1),
+                }
+        else:
+            rank_block = {
+                "name": account.get("rank_name", "Extra"),
+                "index": 0,
+                "level": 1,
+                "tier_count": 1,
+                "min_lifetime_earned": 0,
+            }
+
+        vanity = await self._app.db.get_all_vanity_items(username, channel)
+        currency_name = (
+            vanity.get("personal_currency_name")
+            or config.currency.name
+        )
+
+        greeting_cfg = config.vanity_shop.custom_greeting
+        color_cfg = config.vanity_shop.chat_color
+
+        return {
+            "found": True,
+            "username": username,
+            "channel": channel,
+            "balance": int(account.get("balance", 0)),
+            "lifetime_earned": lifetime,
+            "lifetime_spent": int(account.get("lifetime_spent", 0)),
+            "currency_name": currency_name,
+            "currency_symbol": config.currency.symbol,
+            "rank": rank_block,
+            "next_rank": next_block,
+            "perks": perks,
+            "spend_discount_percent": round(discount_fraction * 100.0, 1),
+            "vanity": {
+                "custom_greeting": vanity.get("custom_greeting"),
+                "custom_color": vanity.get("chat_color"),
+            },
+            "vanity_costs": {
+                "custom_greeting": greeting_cfg.cost,
+                "custom_color": color_cfg.cost,
+            },
+            "vanity_enabled": {
+                "custom_greeting": bool(greeting_cfg.enabled),
+                "custom_color": bool(color_cfg.enabled),
+            },
+        }
+
+    async def _purchase_vanity(
+        self,
+        username: str,
+        channel: str,
+        base_cost: int,
+        item_type: str,
+        value: str,
+        trigger_id: str,
+    ) -> dict[str, Any]:
+        """Shared debit + persist logic for vanity purchases via the API.
+
+        Raises ValueError (surfaced as a command error) on validation or
+        funding failure.
+        """
+        spending = self._app.spending_engine
+        account = await self._app.db.get_or_create_account(username, channel)
+
+        if spending is not None:
+            rank_tier = spending.get_rank_tier_index(account)
+            final_cost, discount = spending.apply_discount(base_cost, rank_tier)
+            validation = await spending.validate_spend(
+                username, channel, final_cost, "vanity",
+            )
+            if validation is not None:
+                raise ValueError(validation.message)
+        else:
+            final_cost, discount = base_cost, 0.0
+
+        new_balance = await self._app.db.debit(
+            username, channel, final_cost,
+            tx_type="spend", trigger_id=trigger_id,
+            reason=f"Vanity: {item_type}",
+        )
+        if new_balance is None:
+            raise ValueError("Insufficient funds.")
+
+        await self._app.db.set_vanity_item(username, channel, item_type, value)
+        if getattr(self._app, "metrics", None):
+            self._app.metrics.record_vanity_purchase(final_cost)
+
+        return {
+            "username": username,
+            "channel": channel,
+            "item_type": item_type,
+            "value": value,
+            "charged": final_cost,
+            "discount": discount,
+            "new_balance": new_balance,
+        }
+
+    async def _handle_vanity_set_greeting(self, request: dict[str, Any]) -> dict[str, Any]:
+        username = self._username(request)
+        channel = self._channel(request)
+        value = str(request.get("value", "")).strip()
+
+        cfg = self._app.config.vanity_shop.custom_greeting
+        if not cfg.enabled:
+            raise ValueError("Custom greetings are not available.")
+        if not value:
+            raise ValueError("Greeting text is required.")
+        if len(value) > 200:
+            raise ValueError("Greeting text too long (max 200 characters).")
+
+        return await self._purchase_vanity(
+            username, channel, cfg.cost, "custom_greeting", value,
+            "spend.vanity.custom_greeting",
+        )
+
+    async def _handle_vanity_set_color(self, request: dict[str, Any]) -> dict[str, Any]:
+        username = self._username(request)
+        channel = self._channel(request)
+        raw = str(request.get("value", ""))
+
+        cfg = self._app.config.vanity_shop.chat_color
+        if not cfg.enabled:
+            raise ValueError("Chat colors are not available.")
+        hex_value = _normalize_hex_color(raw)
+        if hex_value is None:
+            raise ValueError("Invalid color. Provide a 6-digit hex like #1A2B3C.")
+
+        return await self._purchase_vanity(
+            username, channel, cfg.cost, "chat_color", hex_value,
+            "spend.vanity.chat_color",
+        )
+
     async def _handle_rank_set(self, request: dict[str, Any]) -> dict[str, Any]:
         username = self._username(request)
         channel = self._channel(request)
@@ -951,6 +1142,9 @@ class CommandHandler:
         "events.list": _handle_events_list,
         "triggers.stats": _handle_triggers_stats,
         "user.detail": _handle_user_detail,
+        "account.summary": _handle_account_summary,
+        "vanity.set_greeting": _handle_vanity_set_greeting,
+        "vanity.set_color": _handle_vanity_set_color,
         "rank.set": _handle_rank_set,
         "rain": _handle_rain,
         "user.ban": _handle_user_ban,
