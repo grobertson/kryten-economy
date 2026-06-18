@@ -193,7 +193,10 @@ class RaceEngine:
         task) during the betting window so a themed story is ready before the
         race-start line.
         """
-        await self._narrator.prepare_story(channel)
+        race = self._active_races.get(channel)
+        if race is None:
+            return
+        await self._narrator.prepare_story(channel, race.race_id)
 
     def get_race_start_line(self, channel: str) -> str:
         """The 'and they're off!' line shown when betting closes.
@@ -248,7 +251,7 @@ class RaceEngine:
             betting_closes_at=now + timedelta(seconds=cfg.betting_window_seconds),
         )
         self._active_races[channel] = race
-        self._narrator.reset_for_race(channel)
+        self._narrator.reset_for_race(channel, race.race_id)
 
         self._logger.info(
             "Race %s started in %s by %s (%d racers)",

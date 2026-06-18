@@ -39,7 +39,7 @@ class TestStaticMode:
 
     def test_budget_caps_capped_lines(self) -> None:
         n = _narrator("static")
-        n.reset_for_race(CH)
+        n.reset_for_race(CH, "race-1")
         emitted = []
         for _ in range(10):
             line = n.get_lead_change_line(CH, "Red", "🔴")
@@ -50,7 +50,7 @@ class TestStaticMode:
 
     def test_finish_line_not_budget_capped(self) -> None:
         n = _narrator("static")
-        n.reset_for_race(CH)
+        n.reset_for_race(CH, "race-1")
         # Exhaust the budget
         for _ in range(5):
             n.get_lead_change_line(CH, "Red", "🔴")
@@ -63,30 +63,32 @@ class TestStaticMode:
 class TestPrepareStory:
     async def test_static_mode_is_noop(self) -> None:
         n = _narrator("static")
-        await n.prepare_story(CH)
+        await n.prepare_story(CH, "race-1")
         assert not n.has_story(CH)
 
     async def test_llm_mode_caches_story(self) -> None:
         n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
         with patch.object(
             n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
         ):
-            await n.prepare_story(CH)
+            await n.prepare_story(CH, "race-1")
         assert n.has_story(CH)
         assert n.get_story_start(CH) == "🏁 The themed race begins!"
 
     async def test_getters_use_cached_story(self) -> None:
         n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
         with patch.object(
             n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
         ):
-            await n.prepare_story(CH)
-        n.reset_for_race(CH)
+            await n.prepare_story(CH, "race-1")
+        n.reset_for_race(CH, "race-2")
         # reset clears the story too — re-prepare
         with patch.object(
             n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
         ):
-            await n.prepare_story(CH)
+            await n.prepare_story(CH, "race-2")
 
         assert n.get_start_line(CH) == "🏁 The themed race begins!"
         lead = n.get_lead_change_line(CH, "Red", "🔴")
@@ -96,10 +98,11 @@ class TestPrepareStory:
 
     async def test_hybrid_falls_back_to_static(self) -> None:
         n = _narrator("hybrid")
+        n.reset_for_race(CH, "race-1")
         with patch.object(
             n, "_generate_llm_story", AsyncMock(return_value=None),
         ):
-            await n.prepare_story(CH)
+            await n.prepare_story(CH, "race-1")
         assert not n.has_story(CH)
         # Static getters still work
         line = n.get_finish_line(CH, "Green", "🟢")
@@ -107,21 +110,23 @@ class TestPrepareStory:
 
     async def test_consume_story_clears_state(self) -> None:
         n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
         with patch.object(
             n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
         ):
-            await n.prepare_story(CH)
+            await n.prepare_story(CH, "race-1")
         assert n.has_story(CH)
         n.consume_story(CH)
         assert not n.has_story(CH)
 
     async def test_per_channel_isolation(self) -> None:
         n = _narrator("llm")
+        n.reset_for_race("chan-a", "race-a")
         story_a = RaceStory(
             start="A start", lead_change="A {racer}", event="A ev", finish="A fin {racer}",
         )
         with patch.object(n, "_generate_llm_story", AsyncMock(return_value=story_a)):
-            await n.prepare_story("chan-a")
+            await n.prepare_story("chan-a", "race-a")
         # chan-b has no story
         assert n.has_story("chan-a")
         assert not n.has_story("chan-b")
@@ -130,17 +135,58 @@ class TestPrepareStory:
 
     async def test_safe_format_tolerates_bad_placeholders(self) -> None:
         n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
         bad = RaceStory(
             start="ok",
-            lead_change="{winner} took it!",  # unknown placeholder
+            lead_change="{winner} took it!",  # unknown placeholder → KeyError
             event="ev",
-            finish="done {oops}",  # unknown placeholder
+            finish="done {oops}",  # unknown placeholder → KeyError
         )
         with patch.object(n, "_generate_llm_story", AsyncMock(return_value=bad)):
-            await n.prepare_story(CH)
+            await n.prepare_story(CH, "race-1")
         # Should not raise; returns the raw template on KeyError
         assert n.get_lead_change_line(CH, "Red", "🔴") == "{winner} took it!"
         assert n.get_finish_line(CH, "Red", "🔴") == "done {oops}"
+
+    async def test_safe_format_tolerates_malformed_template(self) -> None:
+        """A malformed template (unmatched brace) raises ValueError → raw text."""
+        n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
+        bad = RaceStory(
+            start="ok",
+            lead_change="{emoji} {racer} leads { unbalanced",  # ValueError
+            event="ev",
+            finish="winner is {racer} }",  # ValueError
+        )
+        with patch.object(n, "_generate_llm_story", AsyncMock(return_value=bad)):
+            await n.prepare_story(CH, "race-1")
+        # Must not raise; falls back to the raw template text.
+        assert n.get_lead_change_line(CH, "Red", "🔴") == "{emoji} {racer} leads { unbalanced"
+        assert n.get_finish_line(CH, "Red", "🔴") == "winner is {racer} }"
+
+    async def test_stale_prep_for_replaced_race_is_discarded(self) -> None:
+        """A slow prep that completes after a new race started is dropped."""
+        n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
+        # A new race begins in the same channel before race-1's prep finishes.
+        n.reset_for_race(CH, "race-2")
+        with patch.object(
+            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+        ):
+            await n.prepare_story(CH, "race-1")
+        # race-1's late story must not clobber the active race-2.
+        assert not n.has_story(CH)
+
+    async def test_prep_after_resolve_is_discarded(self) -> None:
+        """A prep that finishes after its race resolved is dropped."""
+        n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
+        n.consume_story(CH)  # race resolved before prep returned
+        with patch.object(
+            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+        ):
+            await n.prepare_story(CH, "race-1")
+        assert not n.has_story(CH)
 
 
 @pytest.mark.asyncio

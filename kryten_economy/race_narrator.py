@@ -56,6 +56,10 @@ class RaceNarrator:
         # concurrent races in different channels stay independent.
         self._stories: dict[str, RaceStory] = {}
         self._counts: dict[str, int] = {}
+        # channel → race_id that the current story/budget belongs to. Used to
+        # discard a slow background LLM prep that finishes after its race was
+        # cancelled/resolved (or replaced by a new race in the same channel).
+        self._race_ids: dict[str, str] = {}
 
     def _build_pools(self, config: RaceCommentaryConfig) -> None:
         """(Re)build all static narrative pools from built-in + custom lines."""
@@ -85,15 +89,22 @@ class RaceNarrator:
 
     # ── Per-race lifecycle ────────────────────────────────────
 
-    def reset_for_race(self, channel: str) -> None:
-        """Reset per-race state for a channel (budget + any stale story)."""
+    def reset_for_race(self, channel: str, race_id: str) -> None:
+        """Reset per-race state for a channel and bind it to ``race_id``.
+
+        ``race_id`` ties any later background LLM story to this specific race,
+        so a slow prep task from a previous race can't overwrite the story of a
+        race that has since started in the same channel.
+        """
         self._counts[channel] = 0
         self._stories.pop(channel, None)
+        self._race_ids[channel] = race_id
 
     def consume_story(self, channel: str) -> None:
         """Clear per-race narration state once a race resolves."""
         self._stories.pop(channel, None)
         self._counts.pop(channel, None)
+        self._race_ids.pop(channel, None)
 
     def has_story(self, channel: str) -> bool:
         return channel in self._stories
@@ -105,18 +116,32 @@ class RaceNarrator:
 
     # ── LLM generation ────────────────────────────────────────
 
-    async def prepare_story(self, channel: str) -> None:
+    async def prepare_story(self, channel: str, race_id: str) -> None:
         """Pre-generate an LLM story for a channel if the mode requires it.
 
         A no-op for static mode. Safe to run as a background task during the
         betting window so the themed story is ready before the first
         commentary line. On failure (or ``mode='hybrid'`` timeout) nothing is
         cached and the getters transparently fall back to the static pools.
+
+        ``race_id`` binds the result to a specific race: if the race was
+        cancelled/resolved — or replaced by a new race in the same channel —
+        while the (possibly slow) LLM call was in flight, the story is
+        discarded instead of clobbering the current race's commentary.
         """
         mode = self._cfg.mode.lower()
         if mode not in ("llm", "hybrid"):
             return
         story = await self._generate_llm_story()
+        # The race may have ended (or a new one started in this channel) while
+        # we awaited the LLM. Only commit if the story still belongs to the
+        # race that is currently active here.
+        if self._race_ids.get(channel) != race_id:
+            self._log.debug(
+                "Discarding stale LLM race story for %s (race %s no longer active)",
+                channel, race_id,
+            )
+            return
         if story is not None:
             self._stories[channel] = story
         elif mode == "llm":
@@ -225,10 +250,15 @@ class RaceNarrator:
 
     @staticmethod
     def _safe_format(template: str, **kwargs: str) -> str:
-        """Format a (possibly LLM-authored) template, tolerating bad keys."""
+        """Format a (possibly LLM-authored) template, tolerating bad input.
+
+        Unknown placeholders raise ``KeyError``/``IndexError``; a malformed
+        template (e.g. an unmatched ``{``) raises ``ValueError``. All three are
+        caught so an LLM-authored line can always fall back to its raw text.
+        """
         try:
             return template.format(**kwargs)
-        except (KeyError, IndexError):
+        except (KeyError, IndexError, ValueError):
             return template
 
     # ── Line getters ──────────────────────────────────────────
