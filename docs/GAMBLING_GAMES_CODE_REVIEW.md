@@ -9,9 +9,15 @@
 > account validation and daily-count tracking; Blackjack enforces its cooldown
 > and daily limit; Trivia's join path enforces the account-age gate; date
 > helpers from `utils.py` are reused; the Race payout is computed once; race
-> balance values are named constants; the unimplemented Race LLM surface was
-> removed; and dead code / unused imports were cleaned up. Regression tests were
-> added for H1, H2, and M4.
+> balance values are named constants; and dead code / unused imports were
+> cleaned up. Regression tests were added for H1, H2, and M4.
+>
+> **Update (M3 → track B implemented):** rather than removing the Race LLM
+> surface, the full **static / LLM / hybrid** commentary feature was
+> implemented (see *Fix 4* below) — `RaceNarrator` now ports
+> `_generate_llm_story` / `prepare_story` / cached-story consumption from
+> `HeistNarrator`, stories are generated per-channel and pre-fetched during the
+> betting window, and `config` + docstrings + `config.example.yaml` agree.
 
 ---
 
@@ -166,6 +172,17 @@ Pick one:
 - **(B) Feature-complete — implement it.** Port `HeistNarrator._generate_llm_story` / `prepare_story` / cached-story consumption into `RaceNarrator`, and call `prepare_story()` at race start in the scheduler before the first commentary line.
 
 Recommend **(A)** now; track **(B)** as a follow-up feature. Whichever is chosen, config + docstring + implementation must agree.
+
+> **Resolved via track (B).** `RaceNarrator` now supports static / LLM / hybrid
+> modes: `_generate_llm_story()` + `prepare_story()` are ported from
+> `HeistNarrator`, with a dedicated `RaceLLMConfig` and a race-specific system
+> prompt (JSON keys `start`/`lead_change`/`event`/`finish`). To stay correct
+> under concurrency and avoid re-introducing the serial-loop stall flagged in
+> review, stories are cached **per channel** and `prepare_story()` is kicked off
+> as a background task during the betting window (so the themed story is ready
+> before the first commentary line without blocking other channels). Stories are
+> consumed when the race resolves or is cancelled; static remains the fallback.
+> Docstrings and `config.example.yaml` were updated to match.
 
 ### Fix 5 — Single payout source in `resolve_race` (resolves M4, L7)
 

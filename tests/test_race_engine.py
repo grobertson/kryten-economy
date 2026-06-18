@@ -300,3 +300,44 @@ class TestRaceConfigValidation:
         with _pytest.raises(ValidationError):
             RaceConfig(finish_distance=-5)
 
+
+@pytest.mark.asyncio
+class TestRaceStartLine:
+    """Engine ↔ narrator wiring for the LLM race-start line."""
+
+    async def test_static_default_when_no_story(self, race_engine: RaceEngine) -> None:
+        race_engine.start_race(CH, "Alice")
+        assert "Betting is closed" in race_engine.get_race_start_line(CH)
+
+    async def test_uses_llm_story_start_when_present(self, race_engine: RaceEngine) -> None:
+        from kryten_economy.race_narrator import RaceStory
+
+        race_engine.start_race(CH, "Alice")
+        race_engine._narrator._stories[CH] = RaceStory(
+            start="🏁 LLM: AND THEY'RE OFF!",
+            lead_change="{racer} leads",
+            finish="{racer} wins",
+        )
+        assert race_engine.get_race_start_line(CH) == "🏁 LLM: AND THEY'RE OFF!"
+
+    async def test_resolve_consumes_story(
+        self, race_engine: RaceEngine, database: EconomyDatabase,
+    ) -> None:
+        from kryten_economy.race_narrator import RaceStory
+
+        await _seed_account(database, "Alice")
+        race_engine.start_race(CH, "Bob")
+        race = race_engine.get_active_race(CH)
+        color = list(race.racers.keys())[0]
+        await race_engine.place_bet("Alice", CH, 100, color)
+
+        race_engine._narrator._stories[CH] = RaceStory(
+            start="s", lead_change="lc", finish="🏆 {racer} finishes!",
+        )
+        race.phase = RacePhase.RACING
+        race.racers[color].progress = 25.0
+        await race_engine.resolve_race(CH)
+        # Story cleared after resolution
+        assert not race_engine._narrator.has_story(CH)
+
+

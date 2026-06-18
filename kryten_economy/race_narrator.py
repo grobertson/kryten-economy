@@ -1,13 +1,24 @@
-"""Race narrator — static commentary for races.
+"""Race narrator — static / LLM / hybrid commentary for races.
 
-Picks race commentary lines from built-in + custom pools. (LLM/hybrid
-generation, as used by heists, is intentionally not wired up for races yet.)
+Supports three modes controlled by ``RaceCommentaryConfig.mode``:
+
+- **static** (default) — picks from the built-in pools in ``race_narratives``
+  plus any ``custom_*`` lines from config.
+- **llm** — calls an OpenAI-compatible chat-completions endpoint once per race
+  to generate a themed set of commentary lines.
+- **hybrid** — tries LLM first; falls back to static on timeout/error.
+
+LLM stories are generated and cached *per channel* (so concurrent races in
+different channels never clobber each other) and consumed when the race
+resolves. The static pools always remain available as a fallback.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import random
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from . import race_narratives
@@ -16,12 +27,23 @@ if TYPE_CHECKING:
     from .config import RaceCommentaryConfig
 
 
-class RaceNarrator:
-    """Generate static commentary lines for race events.
+@dataclass
+class RaceStory:
+    """A themed set of commentary lines from a single LLM call.
 
-    Lines are drawn randomly from the built-in pools in ``race_narratives``
-    merged with any operator-supplied custom lines.
+    Empty fields fall back to the static pools. ``lead_change``/``event``/
+    ``finish`` are templates formatted with ``{racer}``/``{emoji}`` each time
+    they are used; ``start`` is emitted verbatim when the race begins.
     """
+
+    start: str = ""
+    lead_change: str = ""
+    event: str = ""
+    finish: str = ""
+
+
+class RaceNarrator:
+    """Generate commentary lines for race events (static / LLM / hybrid)."""
 
     def __init__(
         self,
@@ -29,11 +51,14 @@ class RaceNarrator:
         logger: logging.Logger | None = None,
     ) -> None:
         self._log = logger or logging.getLogger(__name__)
-        self._commentary_count = 0
         self._build_pools(config)
+        # Per-channel narration state (LLM story + commentary budget) so
+        # concurrent races in different channels stay independent.
+        self._stories: dict[str, RaceStory] = {}
+        self._counts: dict[str, int] = {}
 
     def _build_pools(self, config: RaceCommentaryConfig) -> None:
-        """(Re)build all narrative pools from built-in + custom lines."""
+        """(Re)build all static narrative pools from built-in + custom lines."""
         self._cfg = config
 
         # Merge built-in + custom pools
@@ -55,48 +80,198 @@ class RaceNarrator:
     def max_lines(self) -> int:
         return self._cfg.max_lines_per_race
 
-    def reset_for_race(self) -> None:
-        """Reset per-race commentary budget."""
-        self._commentary_count = 0
-
     def update_config(self, new_config: RaceCommentaryConfig) -> None:
         self._build_pools(new_config)
 
-    def _can_emit(self) -> bool:
-        """Check if we've already emitted the max commentary for this race."""
-        return self._commentary_count < self._cfg.max_lines_per_race
+    # ── Per-race lifecycle ────────────────────────────────────
 
-    # ── Static pickers ────────────────────────────────────────
+    def reset_for_race(self, channel: str) -> None:
+        """Reset per-race state for a channel (budget + any stale story)."""
+        self._counts[channel] = 0
+        self._stories.pop(channel, None)
 
-    def get_start_line(self) -> str:
+    def consume_story(self, channel: str) -> None:
+        """Clear per-race narration state once a race resolves."""
+        self._stories.pop(channel, None)
+        self._counts.pop(channel, None)
+
+    def has_story(self, channel: str) -> bool:
+        return channel in self._stories
+
+    def get_story_start(self, channel: str) -> str | None:
+        """Return the LLM story's start line for a channel, if one exists."""
+        story = self._stories.get(channel)
+        return story.start if (story and story.start) else None
+
+    # ── LLM generation ────────────────────────────────────────
+
+    async def prepare_story(self, channel: str) -> None:
+        """Pre-generate an LLM story for a channel if the mode requires it.
+
+        A no-op for static mode. Safe to run as a background task during the
+        betting window so the themed story is ready before the first
+        commentary line. On failure (or ``mode='hybrid'`` timeout) nothing is
+        cached and the getters transparently fall back to the static pools.
+        """
+        mode = self._cfg.mode.lower()
+        if mode not in ("llm", "hybrid"):
+            return
+        story = await self._generate_llm_story()
+        if story is not None:
+            self._stories[channel] = story
+        elif mode == "llm":
+            self._log.warning(
+                "LLM race narrator failed with mode='llm'; using static fallback",
+            )
+
+    async def _generate_llm_story(self) -> RaceStory | None:
+        """Call an OpenAI-compatible endpoint to generate race commentary.
+
+        Returns ``None`` on any failure so callers can fall back to static.
+        """
+        llm_cfg = self._cfg.llm
+        if not llm_cfg.endpoint:
+            return None
+
+        try:
+            import aiohttp
+        except ImportError:
+            self._log.warning("aiohttp not installed — cannot use LLM narrator")
+            return None
+
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if llm_cfg.api_key:
+            headers["Authorization"] = f"Bearer {llm_cfg.api_key}"
+
+        payload = {
+            "model": llm_cfg.model,
+            "messages": [
+                {"role": "system", "content": llm_cfg.system_prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        "Generate fresh commentary for one race. Keep each line "
+                        "under 200 characters. Use emoji freely. Return ONLY valid "
+                        "JSON with keys: start, lead_change, event, finish."
+                    ),
+                },
+            ],
+            "temperature": llm_cfg.temperature,
+            "max_tokens": llm_cfg.max_tokens,
+        }
+
+        retries = llm_cfg.max_retries + 1
+        for attempt in range(retries):
+            try:
+                timeout = aiohttp.ClientTimeout(total=llm_cfg.timeout_seconds)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(
+                        llm_cfg.endpoint,
+                        headers=headers,
+                        json=payload,
+                    ) as resp:
+                        if resp.status != 200:
+                            body = await resp.text()
+                            self._log.warning(
+                                "LLM race narrator HTTP %s (attempt %d): %s",
+                                resp.status, attempt + 1, body[:200],
+                            )
+                            continue
+                        data = await resp.json()
+            except Exception as exc:
+                self._log.warning(
+                    "LLM race narrator error (attempt %d): %s", attempt + 1, exc,
+                )
+                continue
+
+            # Parse the response
+            try:
+                content = data["choices"][0]["message"]["content"].strip()
+                # Strip markdown code fences if present
+                if content.startswith("```"):
+                    content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                content = content.strip()
+
+                story_data = json.loads(content)
+                story = RaceStory(
+                    start=story_data.get("start", ""),
+                    lead_change=story_data.get("lead_change", ""),
+                    event=story_data.get("event", ""),
+                    finish=story_data.get("finish", ""),
+                )
+                # Validate we got the core commentary
+                if story.lead_change and story.finish:
+                    self._log.debug("LLM race narrator generated story successfully")
+                    return story
+                self._log.warning("LLM race narrator returned incomplete story")
+            except (json.JSONDecodeError, KeyError, IndexError) as exc:
+                self._log.warning(
+                    "LLM race narrator parse error (attempt %d): %s", attempt + 1, exc,
+                )
+                continue
+
+        return None
+
+    # ── Commentary budget ─────────────────────────────────────
+
+    def _can_emit(self, channel: str) -> bool:
+        """Whether more capped commentary may be emitted this race."""
+        return self._counts.get(channel, 0) < self._cfg.max_lines_per_race
+
+    def _spend(self, channel: str) -> None:
+        self._counts[channel] = self._counts.get(channel, 0) + 1
+
+    @staticmethod
+    def _safe_format(template: str, **kwargs: str) -> str:
+        """Format a (possibly LLM-authored) template, tolerating bad keys."""
+        try:
+            return template.format(**kwargs)
+        except (KeyError, IndexError):
+            return template
+
+    # ── Line getters ──────────────────────────────────────────
+
+    def get_start_line(self, channel: str) -> str:
+        story = self._stories.get(channel)
+        if story and story.start:
+            return story.start
         return random.choice(self._start_lines)
 
-    def get_lead_change_line(self, racer: str, emoji: str) -> str | None:
-        if not self._can_emit():
+    def get_lead_change_line(self, channel: str, racer: str, emoji: str) -> str | None:
+        if not self._can_emit(channel):
             return None
-        self._commentary_count += 1
-        line = random.choice(self._lead_change_lines)
-        return line.format(racer=racer, emoji=emoji)
+        self._spend(channel)
+        story = self._stories.get(channel)
+        if story and story.lead_change:
+            return self._safe_format(story.lead_change, racer=racer, emoji=emoji)
+        return random.choice(self._lead_change_lines).format(racer=racer, emoji=emoji)
 
-    def get_event_line(self, event_type: str, racer: str, emoji: str) -> str | None:
-        if not self._can_emit():
+    def get_event_line(self, channel: str, event_type: str, racer: str, emoji: str) -> str | None:
+        if not self._can_emit(channel):
             return None
+        story = self._stories.get(channel)
+        if story and story.event:
+            self._spend(channel)
+            return self._safe_format(story.event, racer=racer, emoji=emoji)
         pool = self._event_lines.get(event_type, self._event_lines.get("speed_boost", ()))
         if not pool:
             return None
-        self._commentary_count += 1
-        line = random.choice(pool)
-        return line.format(racer=racer, emoji=emoji)
+        self._spend(channel)
+        return random.choice(pool).format(racer=racer, emoji=emoji)
 
-    def get_close_finish_line(self) -> str | None:
-        if not self._can_emit():
+    def get_close_finish_line(self, channel: str) -> str | None:
+        if not self._can_emit(channel):
             return None
-        self._commentary_count += 1
+        self._spend(channel)
         return random.choice(self._close_finish_lines)
 
-    def get_finish_line(self, racer: str, emoji: str) -> str:
-        line = random.choice(self._finish_lines)
-        return line.format(racer=racer, emoji=emoji)
+    def get_finish_line(self, channel: str, racer: str, emoji: str) -> str:
+        story = self._stories.get(channel)
+        if story and story.finish:
+            return self._safe_format(story.finish, racer=racer, emoji=emoji)
+        return random.choice(self._finish_lines).format(racer=racer, emoji=emoji)
 
     def get_payout_line(self, user: str, payout: str, symbol: str) -> str:
         line = random.choice(self._payout_lines)

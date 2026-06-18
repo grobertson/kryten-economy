@@ -1,8 +1,8 @@
 """Race betting engine — weighted simulation with live betting, traits & events.
 
 The centerpiece spectacle game. Supports pari-mutuel (pool) and fixed-odds
-modes, racer traits, random mid-race events, live betting, and static
-commentary drawn from built-in narrative pools.
+modes, racer traits, random mid-race events, live betting, and static / LLM /
+hybrid commentary (see ``RaceNarrator``).
 """
 
 from __future__ import annotations
@@ -123,6 +123,7 @@ class ActiveRace:
     betting_closes_at: datetime
     tick_count: int = 0
     leader: str | None = None  # current leader color
+    commentary_prepared: bool = False  # LLM story prep kicked off (scheduler)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -183,6 +184,26 @@ class RaceEngine:
     def get_active_race(self, channel: str) -> ActiveRace | None:
         return self._active_races.get(channel)
 
+    # ── Commentary (LLM) ──────────────────────────────────────
+
+    async def prepare_commentary(self, channel: str) -> None:
+        """Pre-generate LLM race commentary for a channel.
+
+        A no-op in static mode. The scheduler kicks this off (as a background
+        task) during the betting window so a themed story is ready before the
+        race-start line.
+        """
+        await self._narrator.prepare_story(channel)
+
+    def get_race_start_line(self, channel: str) -> str:
+        """The 'and they're off!' line shown when betting closes.
+
+        Uses the LLM story's start line when one was generated, otherwise a
+        default static announcement.
+        """
+        llm_start = self._narrator.get_story_start(channel)
+        return llm_start or "⏳ Betting is closed! The race is starting… 🏁"
+
     # ── Start race ────────────────────────────────────────────
 
     def start_race(self, channel: str, initiator: str) -> str:
@@ -227,7 +248,7 @@ class RaceEngine:
             betting_closes_at=now + timedelta(seconds=cfg.betting_window_seconds),
         )
         self._active_races[channel] = race
-        self._narrator.reset_for_race()
+        self._narrator.reset_for_race(channel)
 
         self._logger.info(
             "Race %s started in %s by %s (%d racers)",
@@ -320,6 +341,7 @@ class RaceEngine:
         if not race.bets:
             # No bets placed — cancel
             self._active_races.pop(channel, None)
+            self._narrator.consume_story(channel)
             return False
 
         race.phase = RacePhase.RACING
@@ -384,7 +406,7 @@ class RaceEngine:
         # Lead change commentary
         if old_leader and new_leader != old_leader:
             lr = race.racers[new_leader]
-            line = self._narrator.get_lead_change_line(lr.color, lr.emoji)
+            line = self._narrator.get_lead_change_line(channel, lr.color, lr.emoji)
             if line:
                 commentary_lines.append(line)
 
@@ -395,7 +417,7 @@ class RaceEngine:
                 gap < finish * CLOSE_FINISH_GAP_PCT
                 and sorted_racers[0].progress > finish * CLOSE_FINISH_MIN_PROGRESS_PCT
             ):
-                line = self._narrator.get_close_finish_line()
+                line = self._narrator.get_close_finish_line(channel)
                 if line:
                     commentary_lines.append(line)
 
@@ -505,7 +527,7 @@ class RaceEngine:
         )
 
         # ── Build public announcement lines ──────────────────
-        finish_line = self._narrator.get_finish_line(winner.color, winner.emoji)
+        finish_line = self._narrator.get_finish_line(channel, winner.color, winner.emoji)
         lines = [finish_line]
 
         if winner_payouts:
@@ -517,6 +539,9 @@ class RaceEngine:
             lines.append("💸 Nobody bet on the winner! The house takes all.")
 
         lines.append(f"Pool: {total_pool:,} {self._symbol} | Bettors: {len(race.bets)}")
+
+        # Clear any cached LLM commentary for this channel.
+        self._narrator.consume_story(channel)
 
         return lines, race.bets, per_user_pm
 
@@ -533,7 +558,7 @@ class RaceEngine:
             (race.betting_closes_at - datetime.now(timezone.utc)).total_seconds()
         ))
 
-        lines = [self._narrator.get_start_line()]
+        lines = [self._narrator.get_start_line(channel)]
         lines.append(f"\n🏁 A race is starting! Betting closes in {remaining}s!")
         lines.append("")
 
@@ -609,7 +634,7 @@ class RaceEngine:
             target = random.choice(racers_list)
             target.speed_buff_ticks = SPEED_BOOST_TICKS
             target.speed_buff_multiplier = SPEED_BOOST_MULTIPLIER
-            msg = self._narrator.get_event_line("speed_boost", target.color, target.emoji)
+            msg = self._narrator.get_event_line(race.channel, "speed_boost", target.color, target.emoji)
             return RaceEvent(event_type, target.color, msg or f"⚡ {target.emoji} {target.color} boosts!")
 
         elif event_type == _EventType.STUMBLE:
@@ -619,7 +644,7 @@ class RaceEngine:
                 return None
             target = random.choice(eligible)
             target.frozen_ticks = STUMBLE_FREEZE_TICKS
-            msg = self._narrator.get_event_line("stumble", target.color, target.emoji)
+            msg = self._narrator.get_event_line(race.channel, "stumble", target.color, target.emoji)
             return RaceEvent(event_type, target.color, msg or f"💥 {target.emoji} {target.color} stumbles!")
 
         elif event_type == _EventType.MUDSLIDE:
@@ -628,7 +653,7 @@ class RaceEngine:
                 if r.trait != RacerTrait.RESILIENT:
                     r.speed_buff_ticks = MUDSLIDE_TICKS
                     r.speed_buff_multiplier = MUDSLIDE_MULTIPLIER
-            msg = self._narrator.get_event_line("mudslide", "", "")
+            msg = self._narrator.get_event_line(race.channel, "mudslide", "", "")
             return RaceEvent(event_type, None, msg or "🌊 Mudslide! Everyone slows down!")
 
         elif event_type == _EventType.SHORTCUT:
@@ -637,7 +662,7 @@ class RaceEngine:
             target = sorted_racers[0]  # most behind
             bonus = cfg.finish_distance * SHORTCUT_BONUS_PCT
             target.progress += bonus
-            msg = self._narrator.get_event_line("shortcut", target.color, target.emoji)
+            msg = self._narrator.get_event_line(race.channel, "shortcut", target.color, target.emoji)
             return RaceEvent(event_type, target.color, msg or f"🎯 {target.emoji} {target.color} finds a shortcut!")
 
         return None

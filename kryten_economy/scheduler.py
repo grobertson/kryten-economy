@@ -311,6 +311,14 @@ class Scheduler:
 
                     from .race_engine import RacePhase
 
+                    # Kick off LLM commentary prep once, during the betting
+                    # window, so a themed story is ready before the race-start
+                    # line. Runs as a background task (a no-op for static mode)
+                    # to keep the per-channel loop responsive.
+                    if race.phase == RacePhase.BETTING and not race.commentary_prepared:
+                        race.commentary_prepared = True
+                        self._spawn(self._race_engine.prepare_commentary(channel))
+
                     # Betting window expired → transition to racing
                     if race.phase == RacePhase.BETTING and now > race.betting_closes_at:
                         started = self._race_engine.close_betting(channel)
@@ -325,7 +333,7 @@ class Scheduler:
                             continue
                         await self._announce_chat(
                             channel,
-                            "⏳ Betting is closed! The race is starting… 🏁",
+                            self._race_engine.get_race_start_line(channel),
                         )
                         # Let the first tick land on the next loop pass (natural
                         # pause without blocking other channels with a sleep).

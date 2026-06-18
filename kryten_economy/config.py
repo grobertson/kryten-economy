@@ -428,17 +428,63 @@ class RaceTraitsConfig(BaseModel):
     enabled: bool = True
 
 
-class RaceCommentaryConfig(BaseModel):
-    """Static race commentary configuration.
+class RaceLLMConfig(BaseModel):
+    """LLM back-end for dynamic race commentary generation."""
+    endpoint: str = Field(
+        default="http://localhost:11434/v1/chat/completions",
+        description="OpenAI-compatible chat-completions URL",
+    )
+    api_key: str = Field(
+        default="",
+        description="Bearer token (leave blank for local Ollama)",
+    )
+    model: str = Field(
+        default="llama3",
+        description="Model name, e.g. 'gpt-4o-mini', 'llama3', 'mistral'",
+    )
+    system_prompt: str = Field(
+        default=(
+            "You are an energetic sports commentator for a chat-room racing game. "
+            "Generate punchy, exciting race commentary: a race-start hype line, a "
+            "lead-change line, a mid-race event line, and a winner/finish line. "
+            "Use the placeholder {racer} for a racer's name/colour and {emoji} for "
+            "its emoji. Keep each line under 200 characters and use emoji freely. "
+            "Respond ONLY with valid JSON: "
+            '{"start":"...","lead_change":"...","event":"...","finish":"..."}'
+        ),
+        description="System prompt sent to the LLM",
+    )
+    temperature: float = Field(default=1.0, description="LLM sampling temperature (0.0–2.0)")
+    max_tokens: int = Field(default=400, description="Max tokens in LLM response")
+    timeout_seconds: int = Field(default=10, description="HTTP timeout per request")
+    max_retries: int = Field(default=1, description="Retry count on failure before falling back")
 
-    Only static commentary (built-in pools + the custom lines below) is
-    implemented. The LLM/hybrid generation that heists support is
-    intentionally not wired up for races yet.
+
+class RaceCommentaryConfig(BaseModel):
+    """Race commentary configuration: static library, LLM, or hybrid.
+
+    - ``static`` (default) — pick from built-in pools + the ``custom_*`` lines.
+    - ``llm`` — generate a themed commentary set per race via an
+      OpenAI-compatible endpoint (falls back to static if generation fails).
+    - ``hybrid`` — try LLM first, fall back to static on timeout/error.
     """
+    mode: str = Field(
+        default="static",
+        description="'static' = built-in library, 'llm' = LLM-generated, 'hybrid' = try LLM then fall back",
+    )
     max_lines_per_race: int = 3
+    llm: RaceLLMConfig = Field(default_factory=RaceLLMConfig)
     custom_start_lines: list[str] = Field(default_factory=list)
     custom_finish_lines: list[str] = Field(default_factory=list)
     custom_event_lines: list[str] = Field(default_factory=list)
+
+    @field_validator("llm", mode="before")
+    @classmethod
+    def _coerce_llm_none(cls, v):  # noqa: N805
+        """YAML `llm:` with all sub-keys commented out parses as None."""
+        if v is None:
+            return RaceLLMConfig()
+        return v
 
 
 class RaceConfig(BaseModel):

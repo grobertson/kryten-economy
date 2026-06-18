@@ -309,7 +309,19 @@ gambling:
     traits:
       enabled: true
     commentary:
+      mode: "static"            # "static", "llm", or "hybrid"
       max_lines_per_race: 3
+      # LLM back-end — used when mode is "llm" or "hybrid". Generates a themed
+      # set of race-commentary lines once per race (start, lead_change, event,
+      # finish) and falls back to the static pools on any failure.
+      # llm:
+      #   endpoint: "http://localhost:11434/v1/chat/completions"
+      #   api_key: ""           # Bearer token (blank for local Ollama)
+      #   model: "llama3"
+      #   temperature: 1.0
+      #   max_tokens: 400
+      #   timeout_seconds: 10
+      #   max_retries: 1
 
   # ── Trivia Gamble ────────────────────────────────────────────
   trivia:
