@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-06-18
+
+### Added
+
+- **Race Betting** (spectacle game) — Weighted race simulation with pari-mutuel (pool) and fixed-odds modes, live in-race betting, racer traits, random mid-race events, and a progress-bar display. Commentary is provided by a new `RaceNarrator` supporting **static / LLM / hybrid** modes: in LLM/hybrid mode a themed commentary set is generated once per race (cached per channel, bound to the race instance) and falls back to the built-in narrative pools on any failure.
+- **Trivia Gamble** (spectacle game) — Multi-user wagered Q&A backed by a new async Open Trivia DB client (`TriviaClient`) with session-token handling and a local cache. Difficulty-scaled payouts, chat-answer grading, and a min-account-age gate on both start and join.
+- **Blackjack Lite** (PM-only solo game) — Hit/stand/double, dealer hits soft 17, natural pays 3:2, and inactivity auto-stand. Enforces its own `cooldown_seconds` and `daily_limit`.
+- **`SpectacleManager`** — Ensures only one spectacle game (heist, race, trivia) runs per channel at a time, with a shared post-game cooldown to prevent chat flooding.
+- **`gambling_common.py`** — Shared, single-source pre-wager account validation and daily game-count tracking, now reused by the existing `GamblingEngine` and all three new engines.
+- New database schema for race results/bets and trivia/blackjack stats, plus `total_races` / `total_trivias` / `total_blackjacks` gambling-stat columns.
+
+### Changed
+
+- **DRY remediation** — All gambling engines share `validate_gamble_account()` and the daily-count helpers; race payout is computed once as the single source of truth for crediting, PMs, and the public winners line; date helpers from `utils.py` are reused; race balance values are hoisted to named constants.
+
+[0.9.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.9.0
+
 ## [0.8.15] - 2026-06-18
 
 ### Changed
