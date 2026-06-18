@@ -36,6 +36,8 @@ def _make_handler(
     mock_client: MagicMock | None = None,
 ) -> PmHandler:
     logger = logging.getLogger("test")
+    # These tests exercise the legacy in-PM queue/search flow directly.
+    config.mediacms.web_queue_redirect = False
     presence = PresenceTracker(config, database, logger)
     return PmHandler(
         config=config,

@@ -129,9 +129,9 @@ Environment variable substitution is supported: `${NATS_URL}`, `${VAR:-default}`
 | `achievements` | Earned badges and progress |
 | `top` / `leaderboard` | Leaderboards |
 | `history` | Recent transaction history |
-| `search <query>` | Search MediaCMS catalog |
-| `queue <id>` | Queue content (costs Z) |
-| `playnext <id>` | Queue content with priority placement |
+| `search <query>` | Moved to the web queue → https://queue.dropsugar.co/ |
+| `queue <id>` | Moved to the web queue → https://queue.dropsugar.co/ |
+| `playnext <id>` | Moved to the web queue → https://queue.dropsugar.co/ |
 | `forcenow <id>` | Attempt immediate play (typically expensive/admin-gated) |
 | `tip @user <amount>` | Transfer Z to another user |
 | `shop` | Browse vanity items |

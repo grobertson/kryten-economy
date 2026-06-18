@@ -437,6 +437,10 @@ class MediaCMSConfig(BaseModel):
     base_url: str = "https://media.example.com"
     api_token: str = "your-token-here"
     search_results_limit: int = 10
+    # When enabled, the `search`, `queue`, and `playnext` PM commands are
+    # disabled and instead point users at the web queue (kryten-webqueue).
+    web_queue_redirect: bool = True
+    web_queue_url: str = "https://queue.dropsugar.co/"
 
 
 class VanityItemConfig(BaseModel):

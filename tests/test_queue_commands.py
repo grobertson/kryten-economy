@@ -54,6 +54,8 @@ def _make_handler(
 ) -> PmHandler:
     """Build PmHandler with Sprint 5 dependencies."""
     logger = logging.getLogger("test")
+    # These tests exercise the legacy in-PM queue/search flow directly.
+    config.mediacms.web_queue_redirect = False
     presence = PresenceTracker(config, database, logger)
     return PmHandler(
         config=config,
@@ -87,6 +89,7 @@ async def test_search_no_mediacms(
     spending_engine: SpendingEngine,
 ):
     """Search with no media client → not configured."""
+    sample_config.mediacms.web_queue_redirect = False
     handler = PmHandler(
         config=sample_config, database=database, client=None,
         presence_tracker=PresenceTracker(sample_config, database, logging.getLogger("test")),

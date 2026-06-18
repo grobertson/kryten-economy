@@ -417,6 +417,8 @@ mediacms:
   base_url: "https://www.dropsugar.co"
   api_token: "07cef36ea6fb4730220de94f106e769cf0f6c9cf"
   search_results_limit: 10            # Max results returned by !search
+  web_queue_redirect: true            # Send search/queue/playnext to the web queue
+  web_queue_url: "https://queue.dropsugar.co/"   # kryten-webqueue public URL
 
 # -- Vanity Shop ------------------------------------------------------
 # One-time Z purchases for cosmetic features. Each item can be

@@ -327,7 +327,15 @@ class PmHandler:
         lines.extend([
             "",
             "🎬 Media",
-            "  search · queue",
+        ])
+        if getattr(self._config.mediacms, "web_queue_redirect", False):
+            url = (getattr(self._config.mediacms, "web_queue_url", "") or "").strip()
+            lines.append("  Queue movies on the web:")
+            if url:
+                lines.append(f"  {url}")
+        else:
+            lines.append("  search · queue")
+        lines.extend([
             "",
             "🛒 Shop & Social",
             "  shop · tip",
@@ -856,8 +864,31 @@ class PmHandler:
         lines.append("Tip: use 'events' to see active earning multipliers.")
         return "\n".join(lines)
 
+    def _web_queue_redirect_message(self) -> str | None:
+        """Return the web-queue redirect message when media commands are disabled.
+
+        When ``mediacms.web_queue_redirect`` is enabled, the ``search``,
+        ``queue``, and ``playnext`` PM commands no longer run; users are pointed
+        at the web queue (kryten-webqueue) instead. Returns ``None`` when the
+        redirect is disabled and the legacy commands should run normally.
+        """
+        mediacms = self._config.mediacms
+        if not getattr(mediacms, "web_queue_redirect", False):
+            return None
+        url = (getattr(mediacms, "web_queue_url", "") or "").strip()
+        lines = [
+            "🎬 Searching and queueing movies has moved to the web!",
+            "Browse the catalog and queue your picks here:",
+        ]
+        if url:
+            lines.append(url)
+        return "\n".join(lines)
+
     async def _cmd_search(self, username: str, channel: str, args: list[str]) -> str:
         """Search the MediaCMS catalog."""
+        redirect = self._web_queue_redirect_message()
+        if redirect is not None:
+            return redirect
         if not self._media or not self._config.mediacms.base_url:
             return "📽️ Content queuing is not configured for this channel."
         block_msg = self._get_queue_block_message(channel)
@@ -1114,6 +1145,9 @@ class PmHandler:
 
     async def _cmd_queue(self, username: str, channel: str, args: list[str]) -> str:
         """Queue a MediaCMS item for the configured cost."""
+        redirect = self._web_queue_redirect_message()
+        if redirect is not None:
+            return redirect
         if not self._media or not self._spending:
             return "📽️ Content queuing is not configured for this channel."
         if not args:
@@ -1127,6 +1161,9 @@ class PmHandler:
 
     async def _cmd_playnext(self, username: str, channel: str, args: list[str]) -> str:
         """Legacy alias for queue command (same pricing and ordering)."""
+        redirect = self._web_queue_redirect_message()
+        if redirect is not None:
+            return redirect
         if not self._media or not self._spending:
             return "📽️ Content queuing is not configured for this channel."
         if not args:

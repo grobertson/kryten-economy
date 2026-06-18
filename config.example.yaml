@@ -336,6 +336,10 @@ mediacms:
   base_url: "https://media.example.com"
   api_token: "${MEDIACMS_TOKEN:-your-token-here}"
   search_results_limit: 10
+  # When true, the `search`, `queue`, and `playnext` PM commands are disabled
+  # and instead point users at the web queue (kryten-webqueue).
+  web_queue_redirect: true
+  web_queue_url: "https://queue.dropsugar.co/"
 
 # ── Vanity Shop ──────────────────────────────────────────────
 vanity_shop:

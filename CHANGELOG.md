@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.15] - 2026-06-18
+
+### Changed
+
+- **Movie search & queueing moved to the web queue.** The `search`, `queue`, and `playnext` PM commands are now disabled by default and instead point users at the kryten-webqueue instance (`https://queue.dropsugar.co/`). The `help` text Media section links to the same URL. This is controlled by two new `mediacms` config fields: `web_queue_redirect` (default `true`) and `web_queue_url` (default `https://queue.dropsugar.co/`). Set `web_queue_redirect: false` to restore the legacy in-PM search/queue flow. The underlying spend/queue engine and the `forcenow` command are unchanged.
+
+[0.8.15]: https://github.com/grobertson/kryten-economy/releases/tag/v0.8.15
+
 ## [0.8.14] - 2026-06-14
 
 ### Added
