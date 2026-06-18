@@ -343,6 +343,33 @@ class PmHandler:
         if self._config.gambling.heist.enabled:
             lines.append("  heist <wager>")
             lines.append("  (say 'join' in chat to join an active heist)")
+
+        gambling_cfg = self._config.gambling
+        game_lines: list[str] = []
+        if gambling_cfg.race.enabled:
+            game_lines.extend([
+                "  race — start a race",
+                "  race <amt> <color> — bet",
+                "  race odds · race stats",
+                "  (or !race <amt> <color> in chat)",
+            ])
+        if gambling_cfg.trivia.enabled:
+            game_lines.extend([
+                "  trivia <wager> — start/join",
+                "  (answer A/B/C/D in chat)",
+                "  trivia stats",
+            ])
+        if gambling_cfg.blackjack.enabled:
+            game_lines.extend([
+                "  blackjack <wager> · bj <wager>",
+                "  hit · stand · double",
+                "  blackjack stats",
+            ])
+        if game_lines:
+            lines.append("")
+            lines.append("🎲 Spectacle Games")
+            lines.extend(game_lines)
+
         lines.extend([
             "",
             "🎬 Media",

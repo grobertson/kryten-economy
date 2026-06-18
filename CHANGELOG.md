@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-06-18
+
+### Fixed
+
+- **`help` now lists the new spectacle games.** The PM `help` output gained a "🎲 Spectacle Games" section covering Race (`race`, `race <amt> <color>`, `race odds`, `race stats`, plus the `!race` chat shortcut), Trivia (`trivia <wager>`, answering A/B/C/D in chat, `trivia stats`), and Blackjack (`blackjack`/`bj <wager>`, `hit`/`stand`/`double`, `blackjack stats`). Each game only appears when it is enabled in config, so the v0.9.0 games are now discoverable instead of being undocumented.
+
+[0.9.1]: https://github.com/grobertson/kryten-economy/releases/tag/v0.9.1
+
 ## [0.9.0] - 2026-06-18
 
 ### Added

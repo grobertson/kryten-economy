@@ -150,3 +150,14 @@ class TestPmDispatch:
         await pm_handler.handle_pm(event)
         response = "\n".join(call[0][2] for call in mock_client.send_pm.call_args_list)
         assert "events · status" in response
+
+    async def test_help_includes_spectacle_games(self, pm_handler: PmHandler, mock_client: MagicMock):
+        """help should list the race, trivia, and blackjack games when enabled."""
+        event = make_pm_event("Alice", "help")
+        await pm_handler.handle_pm(event)
+        response = "\n".join(call[0][2] for call in mock_client.send_pm.call_args_list)
+        assert "Spectacle Games" in response
+        assert "race" in response
+        assert "trivia <wager>" in response
+        assert "blackjack <wager>" in response
+        assert "hit · stand · double" in response
