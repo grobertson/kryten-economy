@@ -435,8 +435,10 @@ class BlackjackEngine:
             lines.append(f"✅ You win! +{net:,} {self._symbol}")
         elif outcome == BJOutcome.PUSH:
             lines.append("↩️ Push. Wager returned.")
-        else:
+        elif game.player_hand.busted:
             lines.append(f"❌ Bust! -{wager:,} {self._symbol}")
+        else:
+            lines.append(f"❌ Dealer wins. -{wager:,} {self._symbol}")
 
         lines.append(f"Balance: {balance:,} {self._symbol}")
         return "\n".join(lines)

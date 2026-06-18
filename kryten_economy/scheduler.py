@@ -56,6 +56,15 @@ class Scheduler:
         self._logger = logger or logging.getLogger("economy.scheduler")
         self._metrics = None  # Wired by EconomyApp after construction
         self._tasks: list[asyncio.Task] = []
+        # Fire-and-forget announcement tasks (paced chat output) kept off the
+        # per-channel loops so one channel's pacing can't delay others.
+        self._bg_tasks: set[asyncio.Task] = set()
+
+    def _spawn(self, coro) -> None:
+        """Run a coroutine as a tracked fire-and-forget task."""
+        task = asyncio.create_task(coro)
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     async def start(self) -> None:
         """Start all scheduled tasks."""
@@ -94,8 +103,13 @@ class Scheduler:
         """Cancel all tasks."""
         for task in self._tasks:
             task.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        for task in self._bg_tasks:
+            task.cancel()
+        await asyncio.gather(
+            *self._tasks, *self._bg_tasks, return_exceptions=True,
+        )
         self._tasks.clear()
+        self._bg_tasks.clear()
 
     # ══════════════════════════════════════════════════════════
     #  Rain Drops
@@ -302,7 +316,9 @@ class Scheduler:
                             channel,
                             "⏳ Betting is closed! The race is starting… 🏁",
                         )
-                        await asyncio.sleep(2)
+                        # Let the first tick land on the next loop pass (natural
+                        # pause without blocking other channels with a sleep).
+                        continue
 
                     # Racing phase — advance simulation
                     if race.phase == RacePhase.RACING:
@@ -319,22 +335,32 @@ class Scheduler:
                                 channel, "\n".join(progress_lines),
                             )
 
-                        # Finished!
+                        # Finished! Mark synchronously so subsequent ticks skip
+                        # this race, then offload paced resolution/announcements.
                         if finished:
-                            await asyncio.sleep(1)  # Brief pause
-                            result = await self._race_engine.resolve_race(channel)
-                            if self._spectacle_manager:
-                                self._spectacle_manager.release(channel)
-                            if result:
-                                lines, bets, per_user_pm = result
-                                for line in lines:
-                                    await self._announce_chat(channel, line)
-                                    await asyncio.sleep(1.5)
-                                # PM each bettor
-                                for username, pm_text in per_user_pm.items():
-                                    await self._send_pm(channel, username, pm_text)
+                            race.phase = RacePhase.FINISHED
+                            self._spawn(self._finish_race(channel))
             except Exception:
                 self._logger.exception("Race tick failed")
+
+    async def _finish_race(self, channel: str) -> None:
+        """Resolve a finished race and deliver paced announcements off the loop."""
+        try:
+            await asyncio.sleep(1)  # brief dramatic pause
+            result = await self._race_engine.resolve_race(channel)
+            if self._spectacle_manager:
+                self._spectacle_manager.release(channel)
+            if not result:
+                return
+            lines, _bets, per_user_pm = result
+            for line in lines:
+                await self._announce_chat(channel, line)
+                await asyncio.sleep(1.5)
+            # PM each bettor
+            for username, pm_text in per_user_pm.items():
+                await self._send_pm(channel, username, pm_text)
+        except Exception:
+            self._logger.exception("Race finish handling failed")
 
     # ══════════════════════════════════════════════════════════
     #  Trivia Check
@@ -356,14 +382,27 @@ class Scheduler:
                         if self._spectacle_manager:
                             self._spectacle_manager.release(channel)
                         if result:
-                            lines, per_user_pm = result
-                            for line in lines:
-                                await self._announce_chat(channel, line)
-                                await asyncio.sleep(1)
-                            for username, pm_text in per_user_pm.items():
-                                await self._send_pm(channel, username, pm_text)
+                            # Offload paced announcements so a chatty channel
+                            # can't delay resolving others past their deadline.
+                            self._spawn(
+                                self._announce_trivia_result(channel, result),
+                            )
             except Exception:
                 self._logger.exception("Trivia check failed")
+
+    async def _announce_trivia_result(
+        self, channel: str, result: tuple[list[str], dict[str, str]],
+    ) -> None:
+        """Deliver trivia result announcements + PMs off the deadline loop."""
+        try:
+            lines, per_user_pm = result
+            for line in lines:
+                await self._announce_chat(channel, line)
+                await asyncio.sleep(1)
+            for username, pm_text in per_user_pm.items():
+                await self._send_pm(channel, username, pm_text)
+        except Exception:
+            self._logger.exception("Trivia announcement failed")
 
     # ══════════════════════════════════════════════════════════
     #  Blackjack Timeout

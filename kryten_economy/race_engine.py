@@ -1,7 +1,8 @@
 """Race betting engine — weighted simulation with live betting, traits & events.
 
 The centerpiece spectacle game. Supports pari-mutuel (pool) and fixed-odds
-modes, racer traits, random mid-race events, live betting, and AI commentary.
+modes, racer traits, random mid-race events, live betting, and static
+commentary drawn from built-in narrative pools.
 """
 
 from __future__ import annotations

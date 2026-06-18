@@ -297,7 +297,6 @@ gambling:
     finish_distance: 20.0
     min_bet: 10
     max_bet: 5000
-    racer_count: 4
     house_rake_pct: 0.05
     odds_mode: "pool"           # "fixed" or "pool" (pari-mutuel)
     announce_public: true

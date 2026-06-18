@@ -195,8 +195,8 @@ class EconomyDatabase:
                     total_challenges INTEGER DEFAULT 0,
                     total_heists INTEGER DEFAULT 0,
                     total_races INTEGER DEFAULT 0,
-                    total_trivia INTEGER DEFAULT 0,
-                    total_blackjack INTEGER DEFAULT 0,
+                    total_trivias INTEGER DEFAULT 0,
+                    total_blackjacks INTEGER DEFAULT 0,
                     biggest_win INTEGER DEFAULT 0,
                     biggest_loss INTEGER DEFAULT 0,
                     net_gambling INTEGER DEFAULT 0,
@@ -1378,8 +1378,8 @@ class EconomyDatabase:
             try:
                 valid_cols = {
                     "total_spins", "total_flips", "total_challenges",
-                    "total_heists", "total_races", "total_trivia",
-                    "total_blackjack",
+                    "total_heists", "total_races", "total_trivias",
+                    "total_blackjacks",
                 }
                 if game_col not in valid_cols:
                     self._logger.warning("Invalid gambling stat column: %s", game_col)

@@ -67,7 +67,6 @@ async def race_engine(database: EconomyDatabase) -> RaceEngine:
         "finish_distance": 10.0,
         "min_bet": 10,
         "max_bet": 5000,
-        "racer_count": 4,
         "house_rake_pct": 0.05,
         "odds_mode": "pool",
         "announce_public": True,

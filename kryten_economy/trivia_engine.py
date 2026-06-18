@@ -27,8 +27,9 @@ class ActiveTrivia:
 
     channel: str
     question: TriviaQuestion
-    wagers: dict[str, int]  # username → amount
-    answers: dict[str, str]  # username → letter (A/B/C/D)
+    wagers: dict[str, int]  # lower(username) → amount
+    answers: dict[str, str]  # lower(username) → letter (A/B/C/D)
+    display_names: dict[str, str]  # lower(username) → original-case username
     started_at: datetime
     betting_closes_at: datetime
     answer_deadline: datetime
@@ -121,11 +122,13 @@ class TriviaEngine:
             return "Insufficient funds."
 
         now = datetime.now(timezone.utc)
+        init_key = initiator.lower()
         trivia = ActiveTrivia(
             channel=channel,
             question=question,
-            wagers={initiator: wager},
+            wagers={init_key: wager},
             answers={},
+            display_names={init_key: initiator},
             started_at=now,
             betting_closes_at=now + timedelta(seconds=cfg.betting_window_seconds),
             answer_deadline=now + timedelta(seconds=cfg.answer_window_seconds),
@@ -159,7 +162,7 @@ class TriviaEngine:
         if now > trivia.betting_closes_at:
             return "Betting window has closed. Answer the question!"
 
-        if username.lower() in {u.lower() for u in trivia.wagers}:
+        if username.lower() in trivia.wagers:
             return "You've already bet in this trivia round."
 
         if amount < cfg.min_wager:
@@ -180,7 +183,9 @@ class TriviaEngine:
         if not success:
             return "Insufficient funds."
 
-        trivia.wagers[username] = amount
+        key = username.lower()
+        trivia.wagers[key] = amount
+        trivia.display_names[key] = username
         return f"trivia_bet:{channel}:{username}:{amount}"
 
     # ── Answer submission ─────────────────────────────────────
@@ -204,24 +209,25 @@ class TriviaEngine:
         if now > trivia.answer_deadline:
             return None
 
+        key = username.lower()
         # Must have bet
-        if username not in trivia.wagers:
+        if key not in trivia.wagers:
             return None
 
         # First answer only
-        if username in trivia.answers:
+        if key in trivia.answers:
             return None
 
         # Accept single letter A-D
         letter = answer.strip().upper()
         if len(letter) == 1 and letter in "ABCD":
-            trivia.answers[username] = letter
+            trivia.answers[key] = letter
             return f"trivia_answer:{channel}:{username}:{letter}"
 
         # Try matching full answer text
         for i, ans in enumerate(trivia.question.all_answers):
             if answer.strip().lower() == ans.lower():
-                trivia.answers[username] = chr(65 + i)
+                trivia.answers[key] = chr(65 + i)
                 return f"trivia_answer:{channel}:{username}:{chr(65 + i)}"
 
         return None
@@ -253,8 +259,9 @@ class TriviaEngine:
         losers: list[str] = []
         today = today_str()
 
-        for username, wager in trivia.wagers.items():
-            user_answer = trivia.answers.get(username)
+        for key, wager in trivia.wagers.items():
+            username = trivia.display_names.get(key, key)
+            user_answer = trivia.answers.get(key)
 
             if user_answer == correct_letter:
                 # Correct!

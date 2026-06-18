@@ -92,7 +92,7 @@ class TestTriviaStart:
         active = trivia_engine.get_active_trivia(CH)
         assert active is not None
         assert active.question.correct_answer == "Au"
-        assert "Alice" in active.wagers
+        assert "Alice" in active.display_names.values()
 
     async def test_start_disabled(
         self, trivia_engine: TriviaEngine, database: EconomyDatabase,
@@ -122,6 +122,22 @@ class TestTriviaAnswers:
         result = trivia_engine.submit_answer("Alice", CH, "A")
         assert result is not None
         assert result.startswith("trivia_answer:")
+
+    async def test_answer_case_insensitive_username(
+        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+    ) -> None:
+        """Regression for review #5 — answer must register even if the username
+        casing differs between the bet event and the chat answer event."""
+        await _seed_account(database, "Alice")
+        await trivia_engine.start_trivia(CH, "Alice", 100)
+        # Bet as "Alice", answer as "alice"
+        result = trivia_engine.submit_answer("alice", CH, "A")
+        assert result is not None
+        resolved = await trivia_engine.resolve_trivia(CH)
+        assert resolved is not None
+        _, per_user_pm = resolved
+        # Original display casing preserved, and graded correct
+        assert "✅" in per_user_pm["Alice"]
 
     async def test_submit_full_text(
         self, trivia_engine: TriviaEngine, database: EconomyDatabase,
@@ -162,6 +178,11 @@ class TestTriviaResolve:
         lines, per_user_pm = result
         assert "Au" in lines[0]
         assert "✅" in per_user_pm["Alice"]
+        # Regression for review #1 — gambling_stats must actually record the
+        # trivia play (column is total_trivias, matching f"total_{game}s").
+        stats = await database.get_gambling_stats("Alice", CH)
+        assert stats is not None
+        assert stats["total_trivias"] == 1
 
     async def test_wrong_answer_loses(
         self, trivia_engine: TriviaEngine, database: EconomyDatabase,

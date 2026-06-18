@@ -448,7 +448,6 @@ class RaceConfig(BaseModel):
     finish_distance: float = 20.0
     min_bet: int = 10
     max_bet: int = 5000
-    racer_count: int = 4
     house_rake_pct: float = 0.05
     odds_mode: str = Field(
         default="pool",

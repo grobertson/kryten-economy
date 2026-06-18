@@ -442,31 +442,43 @@ class EconomyApp:
                     cmd = parts[0].lower() if parts else ""
 
                     # !race <amount> <color>
-                    if cmd == "race" and len(parts) >= 3:
-                        try:
-                            amt = int(parts[1])
-                        except ValueError:
+                    if cmd == "race":
+                        if len(parts) >= 3:
+                            try:
+                                amt = int(parts[1])
+                            except ValueError:
+                                await self.pm_handler._send_pm(
+                                    channel, username,
+                                    "Usage: !race <amount> <color>",
+                                )
+                            else:
+                                await self.pm_handler.handle_chat_race_bet(
+                                    username, channel, amt, parts[2],
+                                )
+                        else:
                             await self.pm_handler._send_pm(
                                 channel, username,
                                 "Usage: !race <amount> <color>",
                             )
-                        else:
-                            await self.pm_handler.handle_chat_race_bet(
-                                username, channel, amt, parts[2],
-                            )
 
                     # !trivia <wager> — join an existing trivia round
-                    elif cmd == "trivia" and len(parts) >= 2:
-                        try:
-                            wager = int(parts[1])
-                        except ValueError:
+                    elif cmd == "trivia":
+                        if len(parts) >= 2:
+                            try:
+                                wager = int(parts[1])
+                            except ValueError:
+                                await self.pm_handler._send_pm(
+                                    channel, username,
+                                    "Usage: !trivia <wager>",
+                                )
+                            else:
+                                await self.pm_handler.handle_chat_trivia_bet(
+                                    username, channel, wager,
+                                )
+                        else:
                             await self.pm_handler._send_pm(
                                 channel, username,
                                 "Usage: !trivia <wager>",
-                            )
-                        else:
-                            await self.pm_handler.handle_chat_trivia_bet(
-                                username, channel, wager,
                             )
 
                     # !hit / !stand / !double — blackjack actions

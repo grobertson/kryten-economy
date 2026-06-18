@@ -306,3 +306,46 @@ class TestRateLimits:
         result = await bj_engine.deal("Alice", CH, 100)
         assert "Daily blackjack limit" in result
 
+
+@pytest.mark.asyncio
+class TestLossMessages:
+    """Regression for review #6 — a non-bust loss must not say 'Bust!'."""
+
+    async def test_dealer_wins_not_bust(
+        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+    ) -> None:
+        from kryten_economy.blackjack_engine import ActiveBlackjack
+
+        await _seed_account(database, "Alice", balance=10000)
+        # Player stands on 18; dealer holds 19 and stands (no draw, no bust).
+        game = ActiveBlackjack(
+            username="Alice",
+            channel=CH,
+            wager=100,
+            deck=[],
+            player_hand=Hand([Card("10", "♠"), Card("8", "♥")]),  # 18
+            dealer_hand=Hand([Card("10", "♦"), Card("9", "♣")]),  # 19
+        )
+        bj_engine._games[("alice", CH)] = game
+        result = await bj_engine.stand("Alice", CH)
+        assert "Dealer wins" in result
+        assert "Bust" not in result
+
+    async def test_player_bust_says_bust(
+        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+    ) -> None:
+        from kryten_economy.blackjack_engine import ActiveBlackjack
+
+        await _seed_account(database, "Alice", balance=10000)
+        game = ActiveBlackjack(
+            username="Alice",
+            channel=CH,
+            wager=100,
+            deck=[Card("10", "♠")],  # hit draws this → bust
+            player_hand=Hand([Card("10", "♥"), Card("9", "♦")]),  # 19
+            dealer_hand=Hand([Card("10", "♦"), Card("7", "♣")]),  # 17
+        )
+        bj_engine._games[("alice", CH)] = game
+        result = await bj_engine.hit("Alice", CH)  # 19 + 10 = 29 → bust
+        assert "Bust" in result
+
