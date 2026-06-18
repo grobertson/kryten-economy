@@ -195,7 +195,7 @@ async def test_tip_target_no_account(
 @pytest.mark.asyncio
 async def test_tip_disabled(database: EconomyDatabase):
     """Tipping disabled in config → blocked."""
-    from tests.conftest import make_config_dict
+    from conftest import make_config_dict
     cfg = EconomyConfig(**make_config_dict(tipping={"enabled": False}))
     handler = _make_handler(cfg, database)
 

@@ -11,7 +11,7 @@ import pytest_asyncio
 from kryten_economy.bounty_manager import BountyManager
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
-from tests.conftest import make_config_dict
+from conftest import make_config_dict
 from unittest.mock import AsyncMock, MagicMock
 
 CH = "testchannel"

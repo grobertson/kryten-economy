@@ -20,7 +20,7 @@ CH = "testchannel"
 
 def _write_config(path: Path, overrides: dict | None = None) -> None:
     """Write a valid config YAML file."""
-    from tests.conftest import make_config_dict
+    from conftest import make_config_dict
     cfg = make_config_dict(**(overrides or {}))
     path.write_text(yaml.dump(cfg))
 

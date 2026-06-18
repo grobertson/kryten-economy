@@ -25,17 +25,21 @@ from .earning_engine import EarningEngine
 from .event_announcer import EventAnnouncer
 from .gambling_engine import GamblingEngine
 from .greeting_handler import GreetingHandler
+from .blackjack_engine import BlackjackEngine
 from .media_client import MediaCMSClient
 from .metrics_collector import MetricsCollector
 from .metrics_server import EconomyMetricsServer
 from .multiplier_engine import MultiplierEngine
 from .pm_handler import PmHandler
 from .presence_tracker import PresenceTracker
+from .race_engine import RaceEngine
 from .rank_engine import RankEngine
 from .admin_scheduler import AdminScheduler
 from .scheduled_event_manager import ScheduledEventManager
 from .scheduler import Scheduler
+from .spectacle_manager import SpectacleManager
 from .spending_engine import SpendingEngine
+from .trivia_engine import TriviaEngine
 
 
 class EconomyApp:
@@ -59,6 +63,10 @@ class EconomyApp:
         self.competition_engine: CompetitionEngine | None = None
         self.multiplier_engine: MultiplierEngine | None = None
         self.bounty_manager: BountyManager | None = None
+        self.race_engine: RaceEngine | None = None
+        self.trivia_engine: TriviaEngine | None = None
+        self.blackjack_engine: BlackjackEngine | None = None
+        self.spectacle_manager: SpectacleManager | None = None
         self.scheduled_event_manager: ScheduledEventManager | None = None
         self.presence_tracker: PresenceTracker | None = None
         self.pm_handler: PmHandler | None = None
@@ -284,6 +292,25 @@ class EconomyApp:
             client=None,  # Set after client creation
             logger=self.logger,
         )
+        self.race_engine = RaceEngine(
+            config=self.config,
+            database=self.db,
+            logger=self.logger,
+        )
+        self.trivia_engine = TriviaEngine(
+            config=self.config,
+            database=self.db,
+            logger=self.logger,
+        )
+        self.blackjack_engine = BlackjackEngine(
+            config=self.config,
+            database=self.db,
+            logger=self.logger,
+        )
+        self.spectacle_manager = SpectacleManager(
+            config=self.config,
+            logger=self.logger,
+        )
         self.pm_handler = PmHandler(
             config=self.config,
             database=self.db,
@@ -299,6 +326,10 @@ class EconomyApp:
             rank_engine=self.rank_engine,
             multiplier_engine=self.multiplier_engine,
             bounty_manager=self.bounty_manager,
+            race_engine=self.race_engine,
+            trivia_engine=self.trivia_engine,
+            blackjack_engine=self.blackjack_engine,
+            spectacle_manager=self.spectacle_manager,
         )
 
         # Sprint 9: EventAnnouncer + GreetingHandler (client set later)
@@ -403,6 +434,76 @@ class EconomyApp:
                 # Chat-based heist join: user says "join" while a heist is active
                 if message.strip().lower() == "join" and self.pm_handler is not None:
                     await self.pm_handler.handle_chat_heist_join(username, channel)
+
+                # Chat-based spectacle game commands
+                stripped = message.strip()
+                if stripped.startswith("!") and self.pm_handler is not None:
+                    parts = stripped[1:].split(None, 2)
+                    cmd = parts[0].lower() if parts else ""
+
+                    # !race <amount> <color>
+                    if cmd == "race":
+                        if len(parts) >= 3:
+                            try:
+                                amt = int(parts[1])
+                            except ValueError:
+                                await self.pm_handler._send_pm(
+                                    channel, username,
+                                    "Usage: !race <amount> <color>",
+                                )
+                            else:
+                                await self.pm_handler.handle_chat_race_bet(
+                                    username, channel, amt, parts[2],
+                                )
+                        else:
+                            await self.pm_handler._send_pm(
+                                channel, username,
+                                "Usage: !race <amount> <color>",
+                            )
+
+                    # !trivia <wager> — join an existing trivia round
+                    elif cmd == "trivia":
+                        if len(parts) >= 2:
+                            try:
+                                wager = int(parts[1])
+                            except ValueError:
+                                await self.pm_handler._send_pm(
+                                    channel, username,
+                                    "Usage: !trivia <wager>",
+                                )
+                            else:
+                                await self.pm_handler.handle_chat_trivia_bet(
+                                    username, channel, wager,
+                                )
+                        else:
+                            await self.pm_handler._send_pm(
+                                channel, username,
+                                "Usage: !trivia <wager>",
+                            )
+
+                    # !hit / !stand / !double — blackjack actions
+                    elif cmd in ("hit", "stand", "double"):
+                        game = (
+                            self.blackjack_engine.get_game(username, channel)
+                            if self.blackjack_engine else None
+                        )
+                        if game:
+                            handler = {
+                                "hit": self.pm_handler._cmd_hit,
+                                "stand": self.pm_handler._cmd_stand,
+                                "double": self.pm_handler._cmd_double,
+                            }.get(cmd)
+                            if handler:
+                                result = await handler(username, channel, [])
+                                await self.pm_handler._send_pm(
+                                    channel, username, result,
+                                )
+
+                # Trivia answer detection (any chat msg during active trivia)
+                if self.pm_handler is not None:
+                    await self.pm_handler.handle_chat_trivia_answer(
+                        username, channel, message,
+                    )
 
                 # Main earning pipeline
                 outcome = await self.earning_engine.evaluate_chat_message(
@@ -509,6 +610,10 @@ class EconomyApp:
             logger=self.logger,
             gambling_engine=self.gambling_engine,
             multiplier_engine=self.multiplier_engine,
+            race_engine=self.race_engine,
+            trivia_engine=self.trivia_engine,
+            blackjack_engine=self.blackjack_engine,
+            spectacle_manager=self.spectacle_manager,
         )
         self.scheduler._metrics = self.metrics
         await self.scheduler.start()

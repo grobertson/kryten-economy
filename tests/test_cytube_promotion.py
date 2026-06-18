@@ -12,7 +12,7 @@ from kryten_economy.database import EconomyDatabase
 from kryten_economy.pm_handler import PmHandler
 from kryten_economy.presence_tracker import PresenceTracker
 from kryten_economy.spending_engine import SpendingEngine
-from tests.conftest import make_config_dict
+from conftest import make_config_dict
 
 CH = "testchannel"
 

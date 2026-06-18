@@ -132,7 +132,7 @@ async def test_queue_block_message_upcoming_window(
 @pytest.mark.asyncio
 async def test_blackout_config_loads():
     """BlackoutWindowConfig can be loaded in SpendingConfig."""
-    from tests.conftest import make_config_dict
+    from conftest import make_config_dict
     cfg = EconomyConfig(**make_config_dict(
         spending={
             "blackout_windows": [
@@ -148,7 +148,7 @@ async def test_blackout_config_loads():
 @pytest.mark.asyncio
 async def test_multiple_blackout_windows():
     """Multiple blackout windows are parsed."""
-    from tests.conftest import make_config_dict
+    from conftest import make_config_dict
     cfg = EconomyConfig(**make_config_dict(
         spending={
             "blackout_windows": [

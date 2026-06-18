@@ -480,7 +480,7 @@ async def test_forcenow_without_admin_gate(
 ):
     """forcenow with admin gate disabled → queues directly."""
     # Override config to disable admin gate
-    from tests.conftest import make_config_dict
+    from conftest import make_config_dict
     cfg_dict = make_config_dict(spending={"force_play_requires_admin": False})
     config = EconomyConfig(**cfg_dict)
     engine = SpendingEngine(config, database, mock_media_client, logging.getLogger("test"))

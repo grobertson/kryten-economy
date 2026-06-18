@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from kryten import ChatMessageEvent, KrytenClient
 
     from .achievement_engine import AchievementEngine
+    from .blackjack_engine import BlackjackEngine
     from .bounty_manager import BountyManager
     from .channel_state import ChannelStateTracker
     from .config import EconomyConfig
@@ -33,8 +34,11 @@ if TYPE_CHECKING:
     from .gambling_engine import GamblingEngine, GambleOutcome
     from .media_client import MediaCMSClient
     from .multiplier_engine import MultiplierEngine
+    from .race_engine import RaceEngine
     from .rank_engine import RankEngine
+    from .spectacle_manager import SpectacleManager
     from .spending_engine import SpendingEngine
+    from .trivia_engine import TriviaEngine
 
 
 # ══════════════════════════════════════════════════════════
@@ -93,6 +97,10 @@ class PmHandler:
         rank_engine: RankEngine | None = None,
         multiplier_engine: MultiplierEngine | None = None,
         bounty_manager: BountyManager | None = None,
+        race_engine: RaceEngine | None = None,
+        trivia_engine: TriviaEngine | None = None,
+        blackjack_engine: BlackjackEngine | None = None,
+        spectacle_manager: SpectacleManager | None = None,
     ) -> None:
         self._config = config
         self._db = database
@@ -107,6 +115,10 @@ class PmHandler:
         self._rank_engine = rank_engine
         self._multiplier_engine = multiplier_engine
         self._bounty_manager = bounty_manager
+        self._race_engine = race_engine
+        self._trivia_engine = trivia_engine
+        self._blackjack_engine = blackjack_engine
+        self._spectacle_manager = spectacle_manager
         self._logger = logger or logging.getLogger("economy.pm")
         self._metrics = None  # Wired by EconomyApp after construction
 
@@ -154,6 +166,13 @@ class PmHandler:
             "accept": self._cmd_accept,
             "decline": self._cmd_decline,
             "heist": self._cmd_heist,
+            "race": self._cmd_race,
+            "trivia": self._cmd_trivia,
+            "blackjack": self._cmd_blackjack,
+            "bj": self._cmd_blackjack,
+            "hit": self._cmd_hit,
+            "stand": self._cmd_stand,
+            "double": self._cmd_double,
             "gambling": self._cmd_gambling_stats,
             "stats": self._cmd_gambling_stats,
             # Sprint 5 — Spending
@@ -757,6 +776,243 @@ class PmHandler:
             return "Gambling is currently disabled."
 
         return await self._gambling_engine.get_stats_message(username, channel)
+
+    # ══════════════════════════════════════════════════════════
+    #  Race commands
+    # ══════════════════════════════════════════════════════════
+
+    async def _cmd_race(self, username: str, channel: str, args: list[str]) -> str:
+        """Start a race or place a bet.
+
+        Usage: race              — start a race
+               race <amt> <col>  — bet on a racer
+               race stats        — personal race stats
+               race odds         — show current odds
+        """
+        if self._race_engine is None:
+            return "Race betting is currently disabled."
+
+        arg_text = " ".join(args).strip().lower()
+
+        if arg_text in ("stats", "stat"):
+            stats = await self._db.get_race_stats(username, channel)
+            if not stats or not stats.get("races_bet"):
+                return "You haven't placed any race bets yet."
+            return (
+                f"🏁 Race Stats:\n"
+                f"Bets placed: {stats['races_bet']}\n"
+                f"Total wagered: {stats['total_wagered']:,} {self._symbol}\n"
+                f"Total won: {stats['total_won'] or 0:,} {self._symbol}\n"
+                f"Biggest win: {stats['biggest_win'] or 0:,} {self._symbol}"
+            )
+
+        if arg_text in ("odds", "live"):
+            lines = self._race_engine.get_live_odds(channel)
+            return "\n".join(lines)
+
+        # No args → start a race
+        if not args:
+            if self._spectacle_manager and not self._spectacle_manager.try_acquire(channel, "race"):
+                return self._spectacle_manager.status_text(channel)
+            result = self._race_engine.start_race(channel, username)
+            if result.startswith("race_started:"):
+                display = self._race_engine.get_betting_display(channel)
+                await self._announce_chat(channel, "\n".join(display))
+                return "Race started! Place your bets."
+            # Failed to start — release spectacle lock
+            if self._spectacle_manager:
+                self._spectacle_manager.release(channel)
+            return result
+
+        # Two args → place a bet: race <amount> <color>
+        if len(args) >= 2:
+            try:
+                amount = int(args[0])
+            except ValueError:
+                return "Usage: race <amount> <color>"
+            color = args[1]
+            result = await self._race_engine.place_bet(username, channel, amount, color)
+            if result.startswith("race_bet:"):
+                parts = result.split(":")
+                return f"🏁 Bet placed: {amount:,} {self._symbol} on {parts[3]}!"
+            return result
+
+        return "Usage: race | race <amount> <color> | race stats | race odds"
+
+    async def handle_chat_race_bet(
+        self, username: str, channel: str, amount: int, color: str,
+    ) -> None:
+        """Handle !race <amt> <color> from public chat."""
+        if self._race_engine is None:
+            return
+        race = self._race_engine.get_active_race(channel)
+        if not race:
+            return
+
+        result = await self._race_engine.place_bet(username, channel, amount, color)
+        if result.startswith("race_bet:"):
+            parts = result.split(":")
+            await self._announce_chat(
+                channel,
+                f"🏁 {username} bets {amount:,} {self._symbol} on {parts[3]}!",
+            )
+        elif "Insufficient" in result or "restricted" in result:
+            await self._send_pm(channel, username, f"🏁 {result}")
+
+    # ══════════════════════════════════════════════════════════
+    #  Trivia commands
+    # ══════════════════════════════════════════════════════════
+
+    async def _cmd_trivia(self, username: str, channel: str, args: list[str]) -> str:
+        """Start a trivia round.
+
+        Usage: trivia <wager>    — start trivia and bet
+               trivia stats      — personal trivia stats
+        """
+        if self._trivia_engine is None:
+            return "Trivia is currently disabled."
+
+        arg_text = " ".join(args).strip().lower()
+
+        if arg_text in ("stats", "stat"):
+            stats = await self._db.get_trivia_stats(username, channel)
+            if not stats:
+                return "You haven't played any trivia yet."
+            return (
+                f"🧠 Trivia Stats:\n"
+                f"Correct: {stats['correct']} | Incorrect: {stats['incorrect']}\n"
+                f"Current streak: {stats['streak']} | Best: {stats['best_streak']}\n"
+                f"Total wagered: {stats['total_wagered']:,} {self._symbol}\n"
+                f"Total won: {stats['total_won']:,} {self._symbol}"
+            )
+
+        if not args:
+            return "Usage: trivia <wager> | trivia stats"
+
+        try:
+            wager = int(args[0])
+        except ValueError:
+            return "Usage: trivia <wager>"
+
+        # Check if this is a new trivia or joining an existing one
+        active = self._trivia_engine.get_active_trivia(channel)
+        if active:
+            # Join existing round
+            result = await self._trivia_engine.place_bet(username, channel, wager)
+            if result.startswith("trivia_bet:"):
+                return f"🧠 Bet placed: {wager:,} {self._symbol}. Answer the question in chat!"
+            return result
+
+        # Start new trivia
+        if self._spectacle_manager and not self._spectacle_manager.try_acquire(channel, "trivia"):
+            return self._spectacle_manager.status_text(channel)
+
+        result = await self._trivia_engine.start_trivia(channel, username, wager)
+        if result.startswith("trivia_started:"):
+            display = self._trivia_engine.get_question_display(channel)
+            if display:
+                await self._announce_chat(channel, display)
+            cfg = self._config.gambling.trivia
+            return (
+                f"Trivia started! Answer in chat within {cfg.answer_window_seconds}s. "
+                f"Your bet: {wager:,} {self._symbol}"
+            )
+        # Failed — release lock
+        if self._spectacle_manager:
+            self._spectacle_manager.release(channel)
+        return result
+
+    async def handle_chat_trivia_bet(
+        self, username: str, channel: str, wager: int,
+    ) -> None:
+        """Handle !trivia <wager> from public chat (join an existing round)."""
+        if self._trivia_engine is None:
+            return
+        active = self._trivia_engine.get_active_trivia(channel)
+        if not active:
+            return
+        result = await self._trivia_engine.place_bet(username, channel, wager)
+        if result.startswith("trivia_bet:"):
+            await self._announce_chat(
+                channel,
+                f"🧠 {username} bets {wager:,} {self._symbol} on trivia!",
+            )
+        elif "Insufficient" in result or "restricted" in result:
+            await self._send_pm(channel, username, f"🧠 {result}")
+
+    async def handle_chat_trivia_answer(
+        self, username: str, channel: str, text: str,
+    ) -> None:
+        """Check if a chat message is a trivia answer."""
+        if self._trivia_engine is None:
+            return
+        active = self._trivia_engine.get_active_trivia(channel)
+        if not active:
+            return
+        result = self._trivia_engine.submit_answer(username, channel, text)
+        if result and result.startswith("trivia_answer:"):
+            parts = result.split(":")
+            letter = parts[3]
+            await self._send_pm(
+                channel, username,
+                f"🧠 Answer recorded: {letter}. Waiting for the round to end…",
+            )
+
+    # ══════════════════════════════════════════════════════════
+    #  Blackjack commands
+    # ══════════════════════════════════════════════════════════
+
+    async def _cmd_blackjack(self, username: str, channel: str, args: list[str]) -> str:
+        """Start a blackjack hand.
+
+        Usage: blackjack <wager>
+               bj <wager>
+        """
+        if self._blackjack_engine is None:
+            return "Blackjack is currently disabled."
+
+        arg_text = " ".join(args).strip().lower()
+
+        if arg_text in ("stats", "stat"):
+            stats = await self._db.get_blackjack_stats(username, channel)
+            if not stats:
+                return "You haven't played any blackjack yet."
+            return (
+                f"🃏 Blackjack Stats:\n"
+                f"Games: {stats['games_played']} | W/L/P: "
+                f"{stats['wins']}/{stats['losses']}/{stats['pushes']}\n"
+                f"Blackjacks: {stats['blackjacks']}\n"
+                f"Total wagered: {stats['total_wagered']:,} {self._symbol}\n"
+                f"Total won: {stats['total_won']:,} {self._symbol}"
+            )
+
+        if not args:
+            return "Usage: blackjack <wager> | bj <wager>"
+
+        try:
+            wager = int(args[0])
+        except ValueError:
+            return "Usage: blackjack <wager>"
+
+        return await self._blackjack_engine.deal(username, channel, wager)
+
+    async def _cmd_hit(self, username: str, channel: str, args: list[str]) -> str:
+        """Blackjack: draw a card."""
+        if self._blackjack_engine is None:
+            return "Blackjack is currently disabled."
+        return await self._blackjack_engine.hit(username, channel)
+
+    async def _cmd_stand(self, username: str, channel: str, args: list[str]) -> str:
+        """Blackjack: stand (dealer plays)."""
+        if self._blackjack_engine is None:
+            return "Blackjack is currently disabled."
+        return await self._blackjack_engine.stand(username, channel)
+
+    async def _cmd_double(self, username: str, channel: str, args: list[str]) -> str:
+        """Blackjack: double down."""
+        if self._blackjack_engine is None:
+            return "Blackjack is currently disabled."
+        return await self._blackjack_engine.double_down(username, channel)
 
     # ══════════════════════════════════════════════════════════
     #  Sprint 5: Queue / Search Commands

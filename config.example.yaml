@@ -286,6 +286,71 @@ gambling:
     payout_multiplier: 1.5
     announce_public: true
 
+  # ── Shared cooldown between spectacle games (heist, race, trivia)
+  spectacle_cooldown_seconds: 60
+
+  # ── Race Betting ─────────────────────────────────────────────
+  race:
+    enabled: true
+    betting_window_seconds: 20
+    tick_interval_seconds: 1.5
+    finish_distance: 20.0
+    min_bet: 10
+    max_bet: 5000
+    house_rake_pct: 0.05
+    odds_mode: "pool"           # "fixed" or "pool" (pari-mutuel)
+    announce_public: true
+    live_betting:
+      enabled: true
+      cutoff_pct: 0.75          # close live betting at 75% of finish
+    random_events:
+      enabled: true
+      chance_per_tick: 0.08
+    traits:
+      enabled: true
+    commentary:
+      mode: "static"            # "static", "llm", or "hybrid"
+      max_lines_per_race: 3
+      # LLM back-end — used when mode is "llm" or "hybrid". Generates a themed
+      # set of race-commentary lines once per race (start, lead_change, event,
+      # finish) and falls back to the static pools on any failure.
+      # llm:
+      #   endpoint: "http://localhost:11434/v1/chat/completions"
+      #   api_key: ""           # Bearer token (blank for local Ollama)
+      #   model: "llama3"
+      #   temperature: 1.0
+      #   max_tokens: 400
+      #   timeout_seconds: 10
+      #   max_retries: 1
+
+  # ── Trivia Gamble ────────────────────────────────────────────
+  trivia:
+    enabled: true
+    min_wager: 10
+    max_wager: 1000
+    answer_window_seconds: 30
+    betting_window_seconds: 15
+    difficulty: "random"        # easy, medium, hard, or random
+    payout_multipliers:
+      easy: 1.5
+      medium: 2.0
+      hard: 3.0
+    category: null              # null = random, or OpenTDB category ID
+    question_cache_size: 20
+    announce_public: true
+
+  # ── Blackjack Lite ───────────────────────────────────────────
+  blackjack:
+    enabled: true
+    min_wager: 20
+    max_wager: 2000
+    cooldown_seconds: 10
+    daily_limit: 50
+    timeout_seconds: 120
+    timeout_warning_seconds: 90
+    dealer_hits_soft_17: true
+    blackjack_payout: 1.5       # Natural BJ pays 3:2
+
 # ── Tipping ──────────────────────────────────────────────────
 tipping:
   enabled: true

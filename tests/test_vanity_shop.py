@@ -323,7 +323,7 @@ async def test_buy_rename_too_long(
 @pytest.mark.asyncio
 async def test_buy_disabled_item(database: EconomyDatabase):
     """Buying a disabled item → rejected."""
-    from tests.conftest import make_config_dict
+    from conftest import make_config_dict
     cfg = EconomyConfig(**make_config_dict(
         vanity_shop={"custom_greeting": {"cost": 500, "enabled": False}},
     ))
