@@ -12,7 +12,7 @@ import pytest
 from kryten_economy.competition_engine import CompetitionEngine
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
-from tests.conftest import make_config_dict
+from conftest import make_config_dict
 
 CH = "testchannel"
 

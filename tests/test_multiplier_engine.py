@@ -10,7 +10,7 @@ import pytest
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.multiplier_engine import ActiveMultiplier, MultiplierEngine
-from tests.conftest import make_config_dict
+from conftest import make_config_dict
 
 CH = "testchannel"
 

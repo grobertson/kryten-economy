@@ -20,7 +20,7 @@ from kryten_economy.pm_handler import PmHandler, PmRateLimiter
 from kryten_economy.presence_tracker import PresenceTracker
 from kryten_economy.event_announcer import EventAnnouncer
 from kryten_economy.greeting_handler import GreetingHandler
-from tests.conftest import MockKrytenClient, make_config_dict
+from conftest import MockKrytenClient, make_config_dict
 
 
 def _make_event(username: str, channel: str, message: str, rank: int = 0):
