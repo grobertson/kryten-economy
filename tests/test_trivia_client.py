@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.trivia_client import TriviaClient, TriviaQuestion
 

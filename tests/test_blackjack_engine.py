@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 
 from kryten_economy.blackjack_engine import (
     ActiveBlackjack,
-    BJOutcome,
     BlackjackEngine,
     Card,
     Hand,
@@ -188,7 +186,7 @@ class TestHitStand:
             return  # natural BJ
 
         initial_count = len(game.player_hand.cards)
-        result = await bj_engine.hit("Alice", CH)
+        await bj_engine.hit("Alice", CH)
         # Check if game is still active or resolved
         game = bj_engine.get_game("Alice", CH)
         if game:
@@ -314,8 +312,6 @@ class TestLossMessages:
     async def test_dealer_wins_not_bust(
         self, bj_engine: BlackjackEngine, database: EconomyDatabase,
     ) -> None:
-        from kryten_economy.blackjack_engine import ActiveBlackjack
-
         await _seed_account(database, "Alice", balance=10000)
         # Player stands on 18; dealer holds 19 and stands (no draw, no bust).
         game = ActiveBlackjack(
@@ -334,8 +330,6 @@ class TestLossMessages:
     async def test_player_bust_says_bust(
         self, bj_engine: BlackjackEngine, database: EconomyDatabase,
     ) -> None:
-        from kryten_economy.blackjack_engine import ActiveBlackjack
-
         await _seed_account(database, "Alice", balance=10000)
         game = ActiveBlackjack(
             username="Alice",

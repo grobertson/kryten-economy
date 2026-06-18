@@ -445,7 +445,11 @@ class RaceConfig(BaseModel):
     enabled: bool = True
     betting_window_seconds: int = 20
     tick_interval_seconds: float = 1.5
-    finish_distance: float = 20.0
+    finish_distance: float = Field(
+        default=20.0,
+        gt=0,
+        description="Track length in progress units; must be > 0 (used as a divisor in displays)",
+    )
     min_bet: int = 10
     max_bet: int = 5000
     house_rake_pct: float = 0.05

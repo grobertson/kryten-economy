@@ -64,7 +64,18 @@ class Scheduler:
         """Run a coroutine as a tracked fire-and-forget task."""
         task = asyncio.create_task(coro)
         self._bg_tasks.add(task)
-        task.add_done_callback(self._bg_tasks.discard)
+        task.add_done_callback(self._on_bg_task_done)
+
+    def _on_bg_task_done(self, task: asyncio.Task) -> None:
+        """Discard a finished background task and surface any exception."""
+        self._bg_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            self._logger.error(
+                "Background task failed", exc_info=exc,
+            )
 
     async def start(self) -> None:
         """Start all scheduled tasks."""

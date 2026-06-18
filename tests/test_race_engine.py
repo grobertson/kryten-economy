@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import random
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -12,7 +10,6 @@ import pytest_asyncio
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.race_engine import (
-    ActiveRace,
     RaceEngine,
     RacePhase,
     RacerTrait,
@@ -149,9 +146,8 @@ class TestSimulation:
         race_engine.start_race(CH, "Alice")
         race = race_engine.get_active_race(CH)
         race.phase = RacePhase.RACING
-        initial = {c: r.progress for c, r in race.racers.items()}
         race_engine.tick(CH)
-        for color, racer in race.racers.items():
+        for racer in race.racers.values():
             # May or may not advance (random), but should not go negative
             assert racer.progress >= 0
 
@@ -281,3 +277,26 @@ class TestProgressDisplay:
         for line in lines:
             assert "|" in line
             assert "█" in line or "░" in line
+
+
+class TestRaceConfigValidation:
+    """Regression for review — finish_distance is a divisor; reject <= 0 at load."""
+
+    def test_finish_distance_zero_rejected(self) -> None:
+        import pytest as _pytest
+        from pydantic import ValidationError
+
+        from kryten_economy.config import RaceConfig
+
+        with _pytest.raises(ValidationError):
+            RaceConfig(finish_distance=0)
+
+    def test_finish_distance_negative_rejected(self) -> None:
+        import pytest as _pytest
+        from pydantic import ValidationError
+
+        from kryten_economy.config import RaceConfig
+
+        with _pytest.raises(ValidationError):
+            RaceConfig(finish_distance=-5)
+
