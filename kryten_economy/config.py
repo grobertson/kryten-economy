@@ -392,14 +392,167 @@ class HeistConfig(BaseModel):
         return v
 
 
+# ── Race Betting ──────────────────────────────────────────────
+
+
+class RacerProfileConfig(BaseModel):
+    """A single racer colour/odds entry within an odds profile."""
+    color: str
+    emoji: str = ""
+    win_chance: float
+    speed_base: float
+
+
+class RaceOddsProfileConfig(BaseModel):
+    """One complete set of racers for a single race."""
+    racers: list[RacerProfileConfig]
+
+
+class RaceLiveBettingConfig(BaseModel):
+    enabled: bool = True
+    cutoff_pct: float = Field(
+        default=0.75,
+        description="Live betting closes when any racer reaches this fraction of finish distance",
+    )
+
+
+class RaceRandomEventConfig(BaseModel):
+    enabled: bool = True
+    chance_per_tick: float = Field(
+        default=0.08,
+        description="Probability of a random event per simulation tick",
+    )
+
+
+class RaceTraitsConfig(BaseModel):
+    enabled: bool = True
+
+
+class RaceCommentaryConfig(BaseModel):
+    """Static race commentary configuration.
+
+    Only static commentary (built-in pools + the custom lines below) is
+    implemented. The LLM/hybrid generation that heists support is
+    intentionally not wired up for races yet.
+    """
+    max_lines_per_race: int = 3
+    custom_start_lines: list[str] = Field(default_factory=list)
+    custom_finish_lines: list[str] = Field(default_factory=list)
+    custom_event_lines: list[str] = Field(default_factory=list)
+
+
+class RaceConfig(BaseModel):
+    enabled: bool = True
+    betting_window_seconds: int = 20
+    tick_interval_seconds: float = 1.5
+    finish_distance: float = 20.0
+    min_bet: int = 10
+    max_bet: int = 5000
+    racer_count: int = 4
+    house_rake_pct: float = 0.05
+    odds_mode: str = Field(
+        default="pool",
+        description="'fixed' = displayed odds are paid out; 'pool' = pari-mutuel pool split",
+    )
+    announce_public: bool = True
+    live_betting: RaceLiveBettingConfig = Field(default_factory=RaceLiveBettingConfig)
+    random_events: RaceRandomEventConfig = Field(default_factory=RaceRandomEventConfig)
+    traits: RaceTraitsConfig = Field(default_factory=RaceTraitsConfig)
+    commentary: RaceCommentaryConfig = Field(default_factory=RaceCommentaryConfig)
+    odds_profiles: list[RaceOddsProfileConfig] = Field(
+        default_factory=lambda: [
+            RaceOddsProfileConfig(racers=[
+                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.40, speed_base=1.4),
+                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.30, speed_base=1.2),
+                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.20, speed_base=0.9),
+                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.10, speed_base=0.6),
+            ]),
+            RaceOddsProfileConfig(racers=[
+                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.35, speed_base=1.35),
+                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.25, speed_base=1.1),
+                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.25, speed_base=1.1),
+                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.15, speed_base=0.75),
+            ]),
+            RaceOddsProfileConfig(racers=[
+                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.30, speed_base=1.25),
+                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.30, speed_base=1.25),
+                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.25, speed_base=1.05),
+                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.15, speed_base=0.75),
+            ]),
+        ],
+    )
+
+    @field_validator("commentary", mode="before")
+    @classmethod
+    def _coerce_commentary_none(cls, v):  # noqa: N805
+        if v is None:
+            return RaceCommentaryConfig()
+        return v
+
+
+# ── Trivia Gamble ─────────────────────────────────────────────
+
+
+class TriviaPayoutMultipliersConfig(BaseModel):
+    easy: float = 1.5
+    medium: float = 2.0
+    hard: float = 3.0
+
+
+class TriviaConfig(BaseModel):
+    enabled: bool = True
+    min_wager: int = 10
+    max_wager: int = 1000
+    answer_window_seconds: int = 30
+    betting_window_seconds: int = 15
+    difficulty: str = Field(
+        default="random",
+        description="'easy', 'medium', 'hard', or 'random'",
+    )
+    payout_multipliers: TriviaPayoutMultipliersConfig = Field(
+        default_factory=TriviaPayoutMultipliersConfig,
+    )
+    category: int | None = Field(
+        default=None,
+        description="OpenTDB category ID, or null for random",
+    )
+    question_cache_size: int = 20
+    announce_public: bool = True
+
+
+# ── Blackjack Lite ────────────────────────────────────────────
+
+
+class BlackjackConfig(BaseModel):
+    enabled: bool = True
+    min_wager: int = 20
+    max_wager: int = 2000
+    cooldown_seconds: int = 10
+    daily_limit: int = 50
+    timeout_seconds: int = 120
+    timeout_warning_seconds: int = 90
+    dealer_hits_soft_17: bool = True
+    blackjack_payout: float = Field(
+        default=1.5,
+        description="Natural blackjack pays wager × this (3:2 = 1.5)",
+    )
+
+
 class GamblingConfig(BaseModel):
     enabled: bool = True
     min_account_age_minutes: int = 60
+    spectacle_cooldown_seconds: int = Field(
+        default=60,
+        description="Shared cooldown between spectacle games (heist, race, trivia)",
+    )
     spin: SpinConfig = Field(default_factory=SpinConfig)
     flip: FlipConfig = Field(default_factory=FlipConfig)
     challenge: ChallengeConfig = Field(default_factory=ChallengeConfig)
     daily_free_spin: DailyFreeSpinConfig = Field(default_factory=DailyFreeSpinConfig)
     heist: HeistConfig = Field(default_factory=HeistConfig)
+    race: RaceConfig = Field(default_factory=RaceConfig)
+    trivia: TriviaConfig = Field(default_factory=TriviaConfig)
+    blackjack: BlackjackConfig = Field(default_factory=BlackjackConfig)
 
 
 # ═══════════════════════════════════════════════════════════════

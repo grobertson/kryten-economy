@@ -15,11 +15,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from kryten import KrytenClient
 
+    from .blackjack_engine import BlackjackEngine
     from .config import EconomyConfig
     from .database import EconomyDatabase
     from .gambling_engine import GamblingEngine
     from .multiplier_engine import MultiplierEngine
     from .presence_tracker import PresenceTracker
+    from .race_engine import RaceEngine
+    from .spectacle_manager import SpectacleManager
+    from .trivia_engine import TriviaEngine
 
 
 class Scheduler:
@@ -34,6 +38,10 @@ class Scheduler:
         logger: logging.Logger | None = None,
         gambling_engine: GamblingEngine | None = None,
         multiplier_engine: MultiplierEngine | None = None,
+        race_engine: RaceEngine | None = None,
+        trivia_engine: TriviaEngine | None = None,
+        blackjack_engine: BlackjackEngine | None = None,
+        spectacle_manager: SpectacleManager | None = None,
     ) -> None:
         self._config = config
         self._db = database
@@ -41,6 +49,10 @@ class Scheduler:
         self._client = client
         self._gambling_engine = gambling_engine
         self._multiplier_engine = multiplier_engine
+        self._race_engine = race_engine
+        self._trivia_engine = trivia_engine
+        self._blackjack_engine = blackjack_engine
+        self._spectacle_manager = spectacle_manager
         self._logger = logger or logging.getLogger("economy.scheduler")
         self._metrics = None  # Wired by EconomyApp after construction
         self._tasks: list[asyncio.Task] = []
@@ -62,6 +74,21 @@ class Scheduler:
             if self._config.gambling.heist.enabled:
                 self._tasks.append(asyncio.create_task(self._heist_check_loop()))
                 self._logger.info("Heist check task started")
+
+        # Race tick loop
+        if self._race_engine and self._config.gambling.race.enabled:
+            self._tasks.append(asyncio.create_task(self._race_tick_loop()))
+            self._logger.info("Race tick task started")
+
+        # Trivia deadline loop
+        if self._trivia_engine and self._config.gambling.trivia.enabled:
+            self._tasks.append(asyncio.create_task(self._trivia_check_loop()))
+            self._logger.info("Trivia check task started")
+
+        # Blackjack timeout loop
+        if self._blackjack_engine and self._config.gambling.blackjack.enabled:
+            self._tasks.append(asyncio.create_task(self._blackjack_timeout_loop()))
+            self._logger.info("Blackjack timeout task started")
 
     async def stop(self) -> None:
         """Cancel all tasks."""
@@ -239,6 +266,121 @@ class Scheduler:
                                     await self._send_pm(channel, user, pm_text)
             except Exception:
                 self._logger.exception("Heist check failed")
+
+    # ══════════════════════════════════════════════════════════
+    #  Race Tick
+    # ══════════════════════════════════════════════════════════
+
+    async def _race_tick_loop(self) -> None:
+        """Advance active races and handle betting windows."""
+        while True:
+            tick_interval = self._config.gambling.race.tick_interval_seconds
+            await asyncio.sleep(tick_interval)
+            try:
+                now = datetime.now(timezone.utc)
+                for ch_config in self._config.channels:
+                    channel = ch_config.channel
+                    race = self._race_engine.get_active_race(channel)
+                    if not race:
+                        continue
+
+                    from .race_engine import RacePhase
+
+                    # Betting window expired → transition to racing
+                    if race.phase == RacePhase.BETTING and now > race.betting_closes_at:
+                        started = self._race_engine.close_betting(channel)
+                        if not started:
+                            # No bets — race cancelled
+                            if self._spectacle_manager:
+                                self._spectacle_manager.release(channel)
+                            await self._announce_chat(
+                                channel,
+                                "🏁 Race cancelled — no bets placed.",
+                            )
+                            continue
+                        await self._announce_chat(
+                            channel,
+                            "⏳ Betting is closed! The race is starting… 🏁",
+                        )
+                        await asyncio.sleep(2)
+
+                    # Racing phase — advance simulation
+                    if race.phase == RacePhase.RACING:
+                        progress_lines, events, finished = self._race_engine.tick(channel)
+
+                        # Announce events
+                        for event in events:
+                            if event.message:
+                                await self._announce_chat(channel, event.message)
+
+                        # Send progress display
+                        if progress_lines:
+                            await self._announce_chat(
+                                channel, "\n".join(progress_lines),
+                            )
+
+                        # Finished!
+                        if finished:
+                            await asyncio.sleep(1)  # Brief pause
+                            result = await self._race_engine.resolve_race(channel)
+                            if self._spectacle_manager:
+                                self._spectacle_manager.release(channel)
+                            if result:
+                                lines, bets, per_user_pm = result
+                                for line in lines:
+                                    await self._announce_chat(channel, line)
+                                    await asyncio.sleep(1.5)
+                                # PM each bettor
+                                for username, pm_text in per_user_pm.items():
+                                    await self._send_pm(channel, username, pm_text)
+            except Exception:
+                self._logger.exception("Race tick failed")
+
+    # ══════════════════════════════════════════════════════════
+    #  Trivia Check
+    # ══════════════════════════════════════════════════════════
+
+    async def _trivia_check_loop(self) -> None:
+        """Resolve trivia rounds when answer deadline expires."""
+        while True:
+            await asyncio.sleep(5)
+            try:
+                now = datetime.now(timezone.utc)
+                for ch_config in self._config.channels:
+                    channel = ch_config.channel
+                    trivia = self._trivia_engine.get_active_trivia(channel)
+                    if not trivia or trivia.resolved:
+                        continue
+                    if now > trivia.answer_deadline:
+                        result = await self._trivia_engine.resolve_trivia(channel)
+                        if self._spectacle_manager:
+                            self._spectacle_manager.release(channel)
+                        if result:
+                            lines, per_user_pm = result
+                            for line in lines:
+                                await self._announce_chat(channel, line)
+                                await asyncio.sleep(1)
+                            for username, pm_text in per_user_pm.items():
+                                await self._send_pm(channel, username, pm_text)
+            except Exception:
+                self._logger.exception("Trivia check failed")
+
+    # ══════════════════════════════════════════════════════════
+    #  Blackjack Timeout
+    # ══════════════════════════════════════════════════════════
+
+    async def _blackjack_timeout_loop(self) -> None:
+        """Check for timed-out blackjack sessions."""
+        while True:
+            await asyncio.sleep(15)
+            try:
+                for ch_config in self._config.channels:
+                    channel = ch_config.channel
+                    results = await self._blackjack_engine.check_timeouts(channel)
+                    for username, msg in results:
+                        await self._send_pm(channel, username, msg)
+            except Exception:
+                self._logger.exception("Blackjack timeout check failed")
 
     # ══════════════════════════════════════════════════════════
     #  PM Sending

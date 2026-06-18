@@ -16,6 +16,10 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from .database import EconomyDatabase
+from .gambling_common import (
+    get_daily_game_count,
+    increment_daily_game_count,
+)
 from .heist_narrator import HeistNarrator
 from .utils import parse_timestamp
 
@@ -223,29 +227,12 @@ class GamblingEngine:
     async def _get_daily_game_count(
         self, username: str, channel: str, game_type: str,
     ) -> int:
-        trigger_id = f"gambling.{game_type}.daily"
-        row = await self._db.get_trigger_cooldown(username, channel, trigger_id)
-        if row is None:
-            return 0
-        window_start = parse_timestamp(row["window_start"])
-        if window_start and window_start.date() == datetime.now(timezone.utc).date():
-            return row["count"]
-        return 0
+        return await get_daily_game_count(self._db, username, channel, game_type)
 
     async def _increment_daily_game_count(
         self, username: str, channel: str, game_type: str,
     ) -> None:
-        trigger_id = f"gambling.{game_type}.daily"
-        now = datetime.now(timezone.utc)
-        row = await self._db.get_trigger_cooldown(username, channel, trigger_id)
-        if row is None:
-            await self._db.set_trigger_cooldown(username, channel, trigger_id, 1, now)
-        else:
-            ws = parse_timestamp(row["window_start"])
-            if ws is None or ws.date() != now.date():
-                await self._db.set_trigger_cooldown(username, channel, trigger_id, 1, now)
-            else:
-                await self._db.increment_trigger_cooldown(username, channel, trigger_id)
+        await increment_daily_game_count(self._db, username, channel, game_type)
 
     # ══════════════════════════════════════════════════════════
     #  Slot Machine

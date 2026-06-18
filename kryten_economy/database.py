@@ -194,6 +194,9 @@ class EconomyDatabase:
                     total_flips INTEGER DEFAULT 0,
                     total_challenges INTEGER DEFAULT 0,
                     total_heists INTEGER DEFAULT 0,
+                    total_races INTEGER DEFAULT 0,
+                    total_trivia INTEGER DEFAULT 0,
+                    total_blackjack INTEGER DEFAULT 0,
                     biggest_win INTEGER DEFAULT 0,
                     biggest_loss INTEGER DEFAULT 0,
                     net_gambling INTEGER DEFAULT 0,
@@ -211,6 +214,63 @@ class EconomyDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP NOT NULL,
                     status TEXT DEFAULT 'pending'
+                )
+            """)
+
+            # Race results & bets
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS race_results (
+                    race_id TEXT PRIMARY KEY,
+                    channel TEXT NOT NULL,
+                    winner_color TEXT NOT NULL,
+                    total_pool INTEGER DEFAULT 0,
+                    participants INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS race_bets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    race_id TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    payout INTEGER DEFAULT 0,
+                    phase TEXT DEFAULT 'pre',
+                    placed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (race_id) REFERENCES race_results(race_id)
+                )
+            """)
+
+            # Trivia stats
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS trivia_stats (
+                    username TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    correct INTEGER DEFAULT 0,
+                    incorrect INTEGER DEFAULT 0,
+                    streak INTEGER DEFAULT 0,
+                    best_streak INTEGER DEFAULT 0,
+                    total_wagered INTEGER DEFAULT 0,
+                    total_won INTEGER DEFAULT 0,
+                    UNIQUE(username, channel)
+                )
+            """)
+
+            # Blackjack stats
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS blackjack_stats (
+                    username TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    games_played INTEGER DEFAULT 0,
+                    wins INTEGER DEFAULT 0,
+                    losses INTEGER DEFAULT 0,
+                    pushes INTEGER DEFAULT 0,
+                    blackjacks INTEGER DEFAULT 0,
+                    total_wagered INTEGER DEFAULT 0,
+                    total_won INTEGER DEFAULT 0,
+                    UNIQUE(username, channel)
                 )
             """)
 
@@ -1316,7 +1376,11 @@ class EconomyDatabase:
         def _sync() -> None:
             conn = self._get_connection()
             try:
-                valid_cols = {"total_spins", "total_flips", "total_challenges", "total_heists"}
+                valid_cols = {
+                    "total_spins", "total_flips", "total_challenges",
+                    "total_heists", "total_races", "total_trivia",
+                    "total_blackjack",
+                }
                 if game_col not in valid_cols:
                     self._logger.warning("Invalid gambling stat column: %s", game_col)
                     return
@@ -1398,6 +1462,176 @@ class EconomyDatabase:
 
     # ══════════════════════════════════════════════════════════
     #  Sprint 4: Challenges
+    # ══════════════════════════════════════════════════════════
+
+    # ── Race DB helpers ───────────────────────────────────────
+
+    async def save_race_result(
+        self, race_id: str, channel: str, winner_color: str,
+        total_pool: int, participants: int,
+    ) -> None:
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    "INSERT INTO race_results (race_id, channel, winner_color, total_pool, participants) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (race_id, channel, winner_color, total_pool, participants),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def save_race_bet(
+        self, race_id: str, username: str, channel: str,
+        color: str, amount: int, payout: int, phase: str,
+    ) -> None:
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    "INSERT INTO race_bets (race_id, username, channel, color, amount, payout, phase) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (race_id, username, channel, color, amount, payout, phase),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def get_race_stats(self, username: str, channel: str) -> dict:
+        """Aggregate race betting stats for a user."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> dict:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS races_bet, "
+                    "SUM(amount) AS total_wagered, "
+                    "SUM(payout) AS total_won, "
+                    "MAX(payout) AS biggest_win "
+                    "FROM race_bets WHERE username = ? AND channel = ?",
+                    (username, channel),
+                ).fetchone()
+                return dict(row) if row else {"races_bet": 0, "total_wagered": 0, "total_won": 0, "biggest_win": 0}
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
+    # ── Trivia DB helpers ─────────────────────────────────────
+
+    async def update_trivia_stats(
+        self, username: str, channel: str, *, correct: bool,
+        wagered: int, won: int,
+    ) -> None:
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                if correct:
+                    conn.execute(
+                        "INSERT INTO trivia_stats (username, channel, correct, streak, best_streak, total_wagered, total_won) "
+                        "VALUES (?, ?, 1, 1, 1, ?, ?) "
+                        "ON CONFLICT(username, channel) DO UPDATE SET "
+                        "correct = correct + 1, "
+                        "streak = streak + 1, "
+                        "best_streak = MAX(best_streak, streak + 1), "
+                        "total_wagered = total_wagered + ?, "
+                        "total_won = total_won + ?",
+                        (username, channel, wagered, won, wagered, won),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO trivia_stats (username, channel, incorrect, total_wagered) "
+                        "VALUES (?, ?, 1, ?) "
+                        "ON CONFLICT(username, channel) DO UPDATE SET "
+                        "incorrect = incorrect + 1, "
+                        "streak = 0, "
+                        "total_wagered = total_wagered + ?",
+                        (username, channel, wagered, wagered),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def get_trivia_stats(self, username: str, channel: str) -> dict | None:
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> dict | None:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM trivia_stats WHERE username = ? AND channel = ?",
+                    (username, channel),
+                ).fetchone()
+                return dict(row) if row else None
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
+    # ── Blackjack DB helpers ──────────────────────────────────
+
+    async def update_blackjack_stats(
+        self, username: str, channel: str, *,
+        outcome: str, wagered: int, won: int,
+    ) -> None:
+        """outcome: 'win', 'loss', 'push', 'blackjack'"""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                win_inc = 1 if outcome in ("win", "blackjack") else 0
+                loss_inc = 1 if outcome == "loss" else 0
+                push_inc = 1 if outcome == "push" else 0
+                bj_inc = 1 if outcome == "blackjack" else 0
+                conn.execute(
+                    "INSERT INTO blackjack_stats "
+                    "(username, channel, games_played, wins, losses, pushes, blackjacks, total_wagered, total_won) "
+                    "VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(username, channel) DO UPDATE SET "
+                    "games_played = games_played + 1, "
+                    "wins = wins + ?, losses = losses + ?, "
+                    "pushes = pushes + ?, blackjacks = blackjacks + ?, "
+                    "total_wagered = total_wagered + ?, total_won = total_won + ?",
+                    (username, channel, win_inc, loss_inc, push_inc, bj_inc, wagered, won,
+                     win_inc, loss_inc, push_inc, bj_inc, wagered, won),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def get_blackjack_stats(self, username: str, channel: str) -> dict | None:
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> dict | None:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM blackjack_stats WHERE username = ? AND channel = ?",
+                    (username, channel),
+                ).fetchone()
+                return dict(row) if row else None
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
     # ══════════════════════════════════════════════════════════
 
     async def create_challenge(
