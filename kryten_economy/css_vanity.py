@@ -179,9 +179,15 @@ def merge_vanity_css(
     in the database are preserved rather than dropped. Values in ``colors``
     override harvested ones.
 
-    ``protected`` is a set of usernames (matched case-insensitively) that must
-    never appear in the managed block — bot accounts and manually-handled
-    colors. They are excluded from both harvested and supplied colors.
+    ``protected`` is a set of usernames (matched case-insensitively) that the
+    automation must never write, modify, or remove — bot accounts and
+    manually-handled colors. A protected user is never given a database value
+    and never appears in the auto-managed block. If a protected user already has
+    a color in the managed block or a legacy rule, that color is preserved as a
+    plain hand-maintained rule (outside the managed block) so an apply can never
+    strip it. Protected colors kept in a separate hand-maintained section (not
+    under ``legacy_marker``) are never harvested or stripped, so they stay
+    exactly where they are.
 
     Entries are emitted sorted by lowercased username for a stable,
     diff-friendly result. Existing managed and legacy rules are removed first so
@@ -191,20 +197,35 @@ def merge_vanity_css(
     protected_lower = {p.lower() for p in (protected or set())}
     casing = harvest_username_casing(existing_css)
 
-    # Build the effective color set: harvested CSS colors first (preservation),
-    # then database colors override.
+    # Colors already present in the managed block or legacy rules. Used both to
+    # preserve CSS-only colors through the rebuild and to protect protected
+    # users' existing rules from being stripped.
+    harvested = harvest_managed_colors(
+        existing_css,
+        begin_marker=begin_marker,
+        end_marker=end_marker,
+        legacy_marker=legacy_marker,
+    )
+
+    # Protected users' existing colors are preserved verbatim *outside* the
+    # auto-managed block, so the automation neither removes them nor adopts them
+    # into managed output.
+    protected_preserved: dict[str, tuple[str, str]] = {
+        lower: meta for lower, meta in harvested.items() if lower in protected_lower
+    }
+
+    # Build the effective managed color set: harvested CSS colors first
+    # (preservation), then database colors override — both excluding protected.
     effective: dict[str, str] = {}
     if preserve_existing:
-        harvested = harvest_managed_colors(
-            existing_css,
-            begin_marker=begin_marker,
-            end_marker=end_marker,
-            legacy_marker=legacy_marker,
-        )
         for lower_user, (display, value) in harvested.items():
+            if lower_user in protected_lower:
+                continue
             effective[lower_user] = value
             casing.setdefault(lower_user, display)
     for user, hex_value in colors.items():
+        if user.lower() in protected_lower:
+            continue
         effective[user.lower()] = hex_value
 
     if display_overrides:
@@ -218,10 +239,24 @@ def merge_vanity_css(
         legacy_marker=legacy_marker,
     ).rstrip()
 
+    # Re-attach preserved protected rules as plain rules. They carry no marker,
+    # so subsequent applies neither harvest nor strip them (they converge to
+    # hand-maintained styling and are never touched again).
+    preserved_lines: list[str] = []
+    for lower_user in sorted(protected_preserved):
+        display, value = protected_preserved[lower_user]
+        if not is_safe_username(display):
+            continue
+        preserved_lines.append(
+            f"{selector_template.format(username=display)} {{ color: {value}; }}"
+        )
+    if preserved_lines:
+        comment = "/* chat colors preserved for protected users — managed manually */"
+        preserved_block = comment + "\n" + "\n".join(preserved_lines)
+        base = f"{base}\n\n{preserved_block}".strip() if base else preserved_block
+
     selectors_and_colors: list[tuple[str, str]] = []
     for lower_user, value in sorted(effective.items(), key=lambda kv: kv[0]):
-        if lower_user in protected_lower:
-            continue
         display = casing.get(lower_user, lower_user)
         if not is_safe_username(display):
             continue

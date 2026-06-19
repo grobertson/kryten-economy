@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 import logging
+import math
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any
@@ -1139,7 +1140,7 @@ class CommandHandler:
             elapsed = (now - last).total_seconds()
             cooldown = cfg.cooldown_minutes * 60
             if elapsed < cooldown:
-                remaining = int((cooldown - elapsed) / 60) + 1
+                remaining = max(1, math.ceil((cooldown - elapsed) / 60))
                 raise ValueError(f"Shoutout cooldown: {remaining} minute(s) remaining.")
 
         spending = self._app.spending_engine

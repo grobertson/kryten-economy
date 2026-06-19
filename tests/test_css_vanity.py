@@ -184,9 +184,49 @@ class TestUpgradePreservation:
             protected={"zcoinbank"},
             begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
         )
+        # The protected user never appears in the auto-managed block…
         managed = out.split(BEGIN, 1)[1]
         assert "ZcoinBank" not in managed
+        # …but their color is preserved (never removed) as a plain rule.
+        assert ".chat-msg-ZcoinBank { color: #1cfcfc; }" in out
         assert ".chat-msg-Alice { color: #112233; }" in out
+
+    def test_protected_user_in_separate_section_is_untouched(self):
+        """A bot color in a hand-maintained section (no legacy marker) is left as-is."""
+        existing = (
+            "body{}\n"
+            "/* minor coloring to bot messages only */\n"
+            ".chat-msg-FaxyBrown { color: #ff8a24; }\n"
+        )
+        out = merge_vanity_css(
+            existing,
+            {"alice": "#112233"},
+            display_overrides={"alice": "Alice"},
+            protected={"faxybrown"},
+            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        # Untouched: still present exactly once, not duplicated into the block.
+        assert out.count(".chat-msg-FaxyBrown") == 1
+        assert "/* minor coloring to bot messages only */" in out
+        assert "FaxyBrown" not in out.split(BEGIN, 1)[1]
+
+    def test_protected_preservation_converges(self):
+        """Re-applying does not duplicate a preserved protected rule."""
+        existing = (
+            "body{}\n"
+            f"{LEGACY}\n.chat-msg-ZcoinBank {{ color: #1cfcfc; }}\n"
+        )
+        first = merge_vanity_css(
+            existing, {"alice": "#112233"},
+            display_overrides={"alice": "Alice"}, protected={"zcoinbank"},
+            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        second = merge_vanity_css(
+            first, {"alice": "#112233"},
+            display_overrides={"alice": "Alice"}, protected={"zcoinbank"},
+            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        assert second.count(".chat-msg-ZcoinBank") == 1
 
     def test_preserve_disabled_drops_css_only_color(self):
         existing = (
