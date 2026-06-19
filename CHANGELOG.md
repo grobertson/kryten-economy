@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.0] - 2026-06-19
 
 ### Added
 
@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **"Don't touch" protection list.** `vanity_shop.chat_color.protected_users` lists usernames the automation must never write, modify, or remove (bot accounts and manually-handled colors); the economy bot account is always protected. As a safety guard, an empty/unavailable CSS read is never written back, so the channel's hand-maintained CSS can't be clobbered.
 - **`vanity.shoutout` command** — New NATS request-reply command so the API gateway and web dashboard can purchase a shoutout (debits with rank discount, enforces the per-user cooldown and max length, and delivers `📢 <user>: <message>` to public chat). Mirrors the existing `buy shoutout` PM command.
 
-[Unreleased]: https://github.com/grobertson/kryten-economy/compare/v0.9.2...HEAD
+[0.10.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.10.0
 
 ## [0.9.2] - 2026-06-18
 
