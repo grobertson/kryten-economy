@@ -1980,6 +1980,28 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
+    async def get_users_with_chat_colors(self, channel: str) -> dict[str, str]:
+        """Return {username: hex_color} for all users with an active chat color.
+
+        Usernames are stored lowercased; callers that render case-sensitive
+        output (e.g. CyTube CSS selectors) must restore the original casing.
+        """
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> dict[str, str]:
+            conn = self._get_connection()
+            try:
+                rows = conn.execute(
+                    "SELECT username, value FROM vanity_items "
+                    "WHERE channel = ? AND item_type = 'chat_color' AND active = 1",
+                    (channel,),
+                ).fetchall()
+                return {r["username"]: r["value"] for r in rows}
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
     # ══════════════════════════════════════════════════════════
     #  Sprint 5: Approvals
     # ══════════════════════════════════════════════════════════

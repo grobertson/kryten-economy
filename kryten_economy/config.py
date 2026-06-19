@@ -671,6 +671,26 @@ class ChatColorConfig(BaseModel):
         ChatColorPaletteEntry(name="Silver Screen", hex="#C0C0C0"),
     ])
 
+    # ── CSS application ──────────────────────────────────────
+    # When enabled, a purchased chat color is written into the channel's
+    # custom CSS as a per-user rule. The economy reads the current CSS, rebuilds
+    # an auto-managed block (delimited by the markers below), and pushes it back.
+    apply_css: bool = True
+    css_selector_template: str = ".chat-msg-{username}"
+    css_block_begin: str = "/* BEGIN kryten-economy vanity colors — auto-managed, do not edit */"
+    css_block_end: str = "/* END kryten-economy vanity colors */"
+    # Existing hand-maintained per-user rules use this comment; matching rules
+    # are absorbed into the managed block on first apply (no duplicates).
+    css_legacy_marker: str = "/* ZCoin purchased vanity colors */"
+    # On apply, import per-user colors that exist only in the channel CSS (never
+    # recorded in the database) into the owning account, so a pre-existing color
+    # is preserved and becomes editable in the portal. Idempotent and additive.
+    import_existing_colors: bool = True
+    # Usernames the automation must NEVER write, modify, or remove (bots and
+    # manually-handled colors). The economy bot account is always protected.
+    # Matched case-insensitively.
+    protected_users: list[str] = Field(default_factory=list)
+
 
 class ChannelGifConfig(BaseModel):
     enabled: bool = True

@@ -431,6 +431,25 @@ vanity_shop:
       - { name: "Coral", hex: "#FF7F50" }
       - { name: "Teal", hex: "#008080" }
       - { name: "Silver Screen", hex: "#C0C0C0" }
+    # When apply_css is true, a purchased color is written into the channel's
+    # CyTube CSS as a per-user rule. The economy reads the current CSS, rebuilds
+    # an auto-managed block (between the markers below), and pushes it back —
+    # so hand-maintained CSS (bot colors, layout) is preserved untouched.
+    apply_css: true
+    css_selector_template: ".chat-msg-{username}"
+    css_block_begin: "/* BEGIN kryten-economy vanity colors — auto-managed, do not edit */"
+    css_block_end: "/* END kryten-economy vanity colors */"
+    # Existing hand-maintained rules using this comment are absorbed into the
+    # managed block on first apply (no duplicates).
+    css_legacy_marker: "/* ZCoin purchased vanity colors */"
+    # On apply, import per-user colors that exist only in the channel CSS (never
+    # recorded in the DB) into the owning account, so pre-existing colors survive
+    # the upgrade and become editable in the portal. Idempotent and additive.
+    import_existing_colors: true
+    # "Don't touch" list: usernames the automation must never write, modify, or
+    # remove (bots and manually-handled colors). The economy bot account is
+    # always protected. Matched case-insensitively.
+    protected_users: []
 
   channel_gif:
     enabled: true
