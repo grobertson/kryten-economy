@@ -115,6 +115,7 @@ Environment variable substitution is supported: `${NATS_URL}`, `${VAR:-default}`
 
 - [User Guide](docs/user-guide.md) - PM commands, queue flow, event window behavior, and troubleshooting
 - [Admin Guide](docs/admin-guide.md) - operator setup, admin commands, and full configuration reference
+- [Configuration Migration Guide](docs/config-migration.md) - config changes from v0.8.10 to v0.9.2 and how to upgrade `config.yaml`
 
 ## PM Commands
 
