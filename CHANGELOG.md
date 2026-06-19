@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Purchased chat colors are now applied to the channel CSS automatically.** When a user buys/updates a `chat_color` vanity item (via PM or the web dashboard), the economy reads the channel's current CyTube CSS, rebuilds an auto-managed block of `.chat-msg-<user> { color: … }` rules from the database, and pushes it back through Kryten-Robot. The managed block is delimited by sentinel markers so hand-maintained CSS (layout, bot colors) is preserved, and existing `/* ZCoin purchased vanity colors */` rules are absorbed into the block on first apply (no duplicates). Original username casing is harvested from the current CSS so case-sensitive CyTube classes keep matching. Configurable under `vanity_shop.chat_color` (`apply_css`, `css_selector_template`, `css_block_begin`/`css_block_end`, `css_legacy_marker`, `protected_users`).
+- **"Don't touch" protection list.** `vanity_shop.chat_color.protected_users` lists usernames the automation must never write, modify, or remove (bot accounts and manually-handled colors); the economy bot account is always protected. As a safety guard, an empty/unavailable CSS read is never written back, so the channel's hand-maintained CSS can't be clobbered.
+- **`vanity.shoutout` command** — New NATS request-reply command so the API gateway and web dashboard can purchase a shoutout (debits with rank discount, enforces the per-user cooldown and max length, and delivers `📢 <user>: <message>` to public chat). Mirrors the existing `buy shoutout` PM command.
+
+[Unreleased]: https://github.com/grobertson/kryten-economy/compare/v0.9.2...HEAD
+
 ## [0.9.2] - 2026-06-18
 
 ### Fixed
