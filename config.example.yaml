@@ -442,6 +442,10 @@ vanity_shop:
     # Existing hand-maintained rules using this comment are absorbed into the
     # managed block on first apply (no duplicates).
     css_legacy_marker: "/* ZCoin purchased vanity colors */"
+    # On apply, import per-user colors that exist only in the channel CSS (never
+    # recorded in the DB) into the owning account, so pre-existing colors survive
+    # the upgrade and become editable in the portal. Idempotent and additive.
+    import_existing_colors: true
     # "Don't touch" list: usernames the automation must never write, modify, or
     # remove (bots and manually-handled colors). The economy bot account is
     # always protected. Matched case-insensitively.

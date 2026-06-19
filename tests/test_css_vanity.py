@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from kryten_economy.css_vanity import (
+    harvest_managed_colors,
     harvest_username_casing,
     is_safe_username,
     merge_vanity_css,
@@ -122,3 +123,82 @@ class TestStrip:
         assert "tail{}" in out
         assert BEGIN not in out
         assert ".chat-msg-X" not in out
+
+
+class TestHarvestManagedColors:
+    def test_harvests_legacy_and_managed_only(self):
+        css = (
+            "body{}\n"
+            ".chat-msg-BotAccount { color: #111111; }\n"  # hand CSS, no marker
+            f"{LEGACY}\n.chat-msg-OldTimer {{ color: #abcdef; }}\n"
+            f"{BEGIN}\n.chat-msg-Alice {{ color: #222222; }}\n{END}\n"
+        )
+        harvested = harvest_managed_colors(
+            css, begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        # Legacy + managed are captured (with original casing)…
+        assert harvested["oldtimer"] == ("OldTimer", "#abcdef")
+        assert harvested["alice"] == ("Alice", "#222222")
+        # …but an unmarked hand-maintained rule (e.g. a bot) is NOT.
+        assert "botaccount" not in harvested
+
+
+class TestUpgradePreservation:
+    def test_preserves_css_only_color_absent_from_db(self):
+        """A user whose color is only in a legacy CSS rule survives a rebuild."""
+        existing = (
+            "body{}\n"
+            f"{LEGACY}\n.chat-msg-OldTimer {{ color: #abcdef; }}\n"
+        )
+        # DB only knows about the active buyer.
+        out = merge_vanity_css(
+            existing,
+            {"alice": "#112233"},
+            display_overrides={"alice": "Alice"},
+            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        assert ".chat-msg-OldTimer { color: #abcdef; }" in out
+        assert ".chat-msg-Alice { color: #112233; }" in out
+        assert LEGACY not in out  # legacy rule folded into the managed block
+
+    def test_db_value_overrides_harvested_value(self):
+        existing = f"{BEGIN}\n.chat-msg-Alice {{ color: #111111; }}\n{END}\n"
+        out = merge_vanity_css(
+            existing,
+            {"alice": "#222222"},
+            display_overrides={"alice": "Alice"},
+            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        assert ".chat-msg-Alice { color: #222222; }" in out
+        assert "#111111" not in out
+
+    def test_protected_user_excluded_even_if_in_css(self):
+        existing = (
+            "body{}\n"
+            f"{LEGACY}\n.chat-msg-ZcoinBank {{ color: #1cfcfc; }}\n"
+        )
+        out = merge_vanity_css(
+            existing,
+            {"alice": "#112233"},
+            display_overrides={"alice": "Alice"},
+            protected={"zcoinbank"},
+            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        managed = out.split(BEGIN, 1)[1]
+        assert "ZcoinBank" not in managed
+        assert ".chat-msg-Alice { color: #112233; }" in out
+
+    def test_preserve_disabled_drops_css_only_color(self):
+        existing = (
+            "body{}\n"
+            f"{LEGACY}\n.chat-msg-OldTimer {{ color: #abcdef; }}\n"
+        )
+        out = merge_vanity_css(
+            existing,
+            {"alice": "#112233"},
+            display_overrides={"alice": "Alice"},
+            preserve_existing=False,
+            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+        )
+        assert "OldTimer" not in out
+        assert ".chat-msg-Alice { color: #112233; }" in out

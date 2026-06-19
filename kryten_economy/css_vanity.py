@@ -30,6 +30,15 @@ _SAFE_USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,30}$")
 # Harvests the username token from a ``.chat-msg-<user>`` selector.
 _CHAT_MSG_RE = re.compile(r"\.chat-msg-([A-Za-z0-9_-]+)")
 
+# Extracts ``(username, color_value)`` from a ``.chat-msg-<user> { … color: … }``
+# rule. The color value is captured verbatim (hex, named, etc.) so existing
+# rules can be preserved exactly. The lookbehind avoids matching ``-color``
+# properties such as ``background-color``.
+_CHAT_MSG_COLOR_RE = re.compile(
+    r"\.chat-msg-([A-Za-z0-9_-]+)\s*\{[^}]*?(?<![\w-])color\s*:\s*([^;}]+)",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def is_safe_username(username: str) -> bool:
     """Return True if ``username`` is safe to interpolate into a CSS selector."""
@@ -46,6 +55,48 @@ def harvest_username_casing(css: str) -> dict[str, str]:
     for token in _CHAT_MSG_RE.findall(css):
         casing.setdefault(token.lower(), token)
     return casing
+
+
+def harvest_managed_colors(
+    css: str,
+    *,
+    begin_marker: str,
+    end_marker: str,
+    legacy_marker: str,
+) -> dict[str, tuple[str, str]]:
+    """Extract per-user colors that this module is responsible for.
+
+    Returns ``{lowercased_username: (original_case_username, color_value)}`` for
+    rules found in **either** the auto-managed block **or** the channel's legacy
+    ``legacy_marker`` rules. Hand-maintained rules elsewhere in the CSS (e.g. bot
+    colors under a different comment) are intentionally **not** harvested, so
+    they stay untouched.
+
+    This lets an upgrade preserve and import colors that exist only in the CSS
+    (never recorded in the database) without clobbering unrelated styling.
+    """
+    regions: list[str] = []
+
+    managed = re.search(
+        re.escape(begin_marker) + r"(.*?)" + re.escape(end_marker),
+        css,
+        re.DOTALL,
+    )
+    if managed:
+        regions.append(managed.group(1))
+
+    for legacy in re.finditer(
+        re.escape(legacy_marker) + r"\s*(\.chat-msg-[A-Za-z0-9_-]+\s*\{[^}]*\})",
+        css,
+        re.DOTALL,
+    ):
+        regions.append(legacy.group(1))
+
+    found: dict[str, tuple[str, str]] = {}
+    for region in regions:
+        for username, value in _CHAT_MSG_COLOR_RE.findall(region):
+            found.setdefault(username.lower(), (username, value.strip()))
+    return found
 
 
 def build_managed_block(
@@ -107,6 +158,8 @@ def merge_vanity_css(
     colors: Mapping[str, str],
     *,
     display_overrides: Mapping[str, str] | None = None,
+    protected: set[str] | None = None,
+    preserve_existing: bool = True,
     selector_template: str = ".chat-msg-{username}",
     begin_marker: str = "/* BEGIN kryten-economy vanity colors — auto-managed, do not edit */",
     end_marker: str = "/* END kryten-economy vanity colors */",
@@ -114,16 +167,46 @@ def merge_vanity_css(
 ) -> str:
     """Return ``existing_css`` with a freshly-rebuilt managed vanity block.
 
-    ``colors`` maps (lowercased) username -> ``#RRGGBB``. ``display_overrides``
-    maps lowercased username -> authoritative original-case username for the
-    active purchase; it takes precedence over casing harvested from the CSS.
+    ``colors`` maps (lowercased) username -> ``#RRGGBB`` (typically the database
+    rows). ``display_overrides`` maps lowercased username -> authoritative
+    original-case username for the active purchase; it takes precedence over
+    casing harvested from the CSS.
+
+    When ``preserve_existing`` is true (the default), per-user colors already
+    present in the CSS — in the managed block or in legacy ``legacy_marker``
+    rules — are carried over even if they are absent from ``colors``. This makes
+    an upgrade non-destructive: hand-maintained colors that were never recorded
+    in the database are preserved rather than dropped. Values in ``colors``
+    override harvested ones.
+
+    ``protected`` is a set of usernames (matched case-insensitively) that must
+    never appear in the managed block — bot accounts and manually-handled
+    colors. They are excluded from both harvested and supplied colors.
 
     Entries are emitted sorted by lowercased username for a stable,
     diff-friendly result. Existing managed and legacy rules are removed first so
     the block stays the single source of truth without creating duplicates.
     Usernames that are not selector-safe are skipped.
     """
+    protected_lower = {p.lower() for p in (protected or set())}
     casing = harvest_username_casing(existing_css)
+
+    # Build the effective color set: harvested CSS colors first (preservation),
+    # then database colors override.
+    effective: dict[str, str] = {}
+    if preserve_existing:
+        harvested = harvest_managed_colors(
+            existing_css,
+            begin_marker=begin_marker,
+            end_marker=end_marker,
+            legacy_marker=legacy_marker,
+        )
+        for lower_user, (display, value) in harvested.items():
+            effective[lower_user] = value
+            casing.setdefault(lower_user, display)
+    for user, hex_value in colors.items():
+        effective[user.lower()] = hex_value
+
     if display_overrides:
         for lower, original in display_overrides.items():
             casing[lower.lower()] = original
@@ -136,12 +219,14 @@ def merge_vanity_css(
     ).rstrip()
 
     selectors_and_colors: list[tuple[str, str]] = []
-    for lower_user, hex_value in sorted(colors.items(), key=lambda kv: kv[0].lower()):
-        display = casing.get(lower_user.lower(), lower_user)
+    for lower_user, value in sorted(effective.items(), key=lambda kv: kv[0]):
+        if lower_user in protected_lower:
+            continue
+        display = casing.get(lower_user, lower_user)
         if not is_safe_username(display):
             continue
         selectors_and_colors.append(
-            (selector_template.format(username=display), hex_value)
+            (selector_template.format(username=display), value)
         )
 
     block = build_managed_block(

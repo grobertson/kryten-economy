@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import __version__
 from .config import load_config
-from .css_vanity import merge_vanity_css
+from .css_vanity import harvest_managed_colors, merge_vanity_css
 
 if TYPE_CHECKING:
     from kryten import KrytenClient
@@ -994,13 +994,51 @@ class CommandHandler:
             protected.add(bot_username.lower())
         return protected
 
+    async def _import_legacy_chat_colors(
+        self, channel: str, existing_css: str, protected: set[str],
+    ) -> int:
+        """Import per-user colors that live only in the CSS into the database.
+
+        Reads ``.chat-msg-*`` colors from the managed block and legacy rules and,
+        for any non-protected user that has no ``chat_color`` row yet, persists
+        one. Idempotent and additive: users already in the database, protected
+        users, and non-hex values are skipped. Returns the number imported.
+        """
+        harvested = harvest_managed_colors(
+            existing_css,
+            begin_marker=self._app.config.vanity_shop.chat_color.css_block_begin,
+            end_marker=self._app.config.vanity_shop.chat_color.css_block_end,
+            legacy_marker=self._app.config.vanity_shop.chat_color.css_legacy_marker,
+        )
+        imported = 0
+        for lower_user, (display, value) in harvested.items():
+            if lower_user in protected:
+                continue
+            existing_db = await self._app.db.get_vanity_item(
+                lower_user, channel, "chat_color",
+            )
+            if existing_db:
+                continue
+            hex_value = _normalize_hex_color(value)
+            if hex_value is None:
+                continue
+            await self._app.db.set_vanity_item(display, channel, "chat_color", hex_value)
+            imported += 1
+        if imported:
+            self._logger.info(
+                "Imported %d pre-existing chat color(s) from CSS for %s",
+                imported, channel,
+            )
+        return imported
+
     async def _apply_chat_color_css(self, channel: str, buyer: str) -> None:
         """Rebuild and push the channel's auto-managed vanity-color CSS block.
 
-        Reads the current channel CSS, rebuilds the managed block from the
-        database (skipping protected users), and writes it back. Failures are
-        logged but never raised: the purchase is already committed, so a CSS
-        hiccup must not fail the command.
+        Reads the current channel CSS, optionally imports any colors that exist
+        only in the CSS into the database, rebuilds the managed block (skipping
+        protected users, preserving any remaining CSS-only colors), and writes it
+        back. Failures are logged but never raised: the purchase is already
+        committed, so a CSS hiccup must not fail the command.
         """
         cfg = self._app.config.vanity_shop.chat_color
         if not cfg.apply_css:
@@ -1019,17 +1057,20 @@ class CommandHandler:
                 return
 
             protected = self._chat_color_protected_users()
-            all_colors = await self._app.db.get_users_with_chat_colors(channel)
-            colors = {
-                user: hex_value
-                for user, hex_value in all_colors.items()
-                if user.lower() not in protected
-            }
+
+            # Import pre-existing CSS-only colors so they survive the rewrite and
+            # become editable in the portal (idempotent; additive).
+            if cfg.import_existing_colors:
+                await self._import_legacy_chat_colors(channel, existing, protected)
+
+            colors = await self._app.db.get_users_with_chat_colors(channel)
 
             new_css = merge_vanity_css(
                 existing,
                 colors,
                 display_overrides={buyer.lower(): buyer},
+                protected=protected,
+                preserve_existing=cfg.import_existing_colors,
                 selector_template=cfg.css_selector_template,
                 begin_marker=cfg.css_block_begin,
                 end_marker=cfg.css_block_end,
@@ -1044,6 +1085,40 @@ class CommandHandler:
             )
         except Exception:
             self._logger.exception("Failed to apply chat-color CSS for %s", channel)
+
+    async def _handle_vanity_resync_colors(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Ops command: import pre-existing CSS colors into the DB and re-apply.
+
+        Lets an operator import the channel's hand-maintained chat colors into
+        the economy without waiting for someone to make a new purchase. Reads the
+        current CSS, imports any CSS-only colors (skipping protected users), and —
+        unless ``apply`` is false — rewrites the managed CSS block. Idempotent.
+        """
+        channel = self._channel(request)
+        cfg = self._app.config.vanity_shop.chat_color
+
+        domain = self._domain_for_channel(channel)
+        existing = await self._client.get_state_channel_css(channel, domain=domain)
+        if not existing.strip():
+            raise ValueError(
+                "Channel CSS is empty or unavailable; cannot resync colors."
+            )
+
+        protected = self._chat_color_protected_users()
+        imported = await self._import_legacy_chat_colors(channel, existing, protected)
+
+        applied = False
+        if bool(request.get("apply", True)) and cfg.apply_css:
+            await self._apply_chat_color_css(channel, self._app.config.bot.username)
+            applied = True
+
+        total = len(await self._app.db.get_users_with_chat_colors(channel))
+        return {
+            "channel": channel,
+            "imported": imported,
+            "total_managed": total,
+            "css_reapplied": applied,
+        }
 
     async def _handle_vanity_shoutout(self, request: dict[str, Any]) -> dict[str, Any]:
         username = self._username(request)
@@ -1282,6 +1357,7 @@ class CommandHandler:
         "vanity.set_greeting": _handle_vanity_set_greeting,
         "vanity.set_color": _handle_vanity_set_color,
         "vanity.shoutout": _handle_vanity_shoutout,
+        "vanity.resync_colors": _handle_vanity_resync_colors,
         "rank.set": _handle_rank_set,
         "rain": _handle_rain,
         "user.ban": _handle_user_ban,

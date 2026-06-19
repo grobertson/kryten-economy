@@ -682,6 +682,10 @@ class ChatColorConfig(BaseModel):
     # Existing hand-maintained per-user rules use this comment; matching rules
     # are absorbed into the managed block on first apply (no duplicates).
     css_legacy_marker: str = "/* ZCoin purchased vanity colors */"
+    # On apply, import per-user colors that exist only in the channel CSS (never
+    # recorded in the database) into the owning account, so a pre-existing color
+    # is preserved and becomes editable in the portal. Idempotent and additive.
+    import_existing_colors: bool = True
     # Usernames the automation must NEVER write, modify, or remove (bots and
     # manually-handled colors). The economy bot account is always protected.
     # Matched case-insensitively.

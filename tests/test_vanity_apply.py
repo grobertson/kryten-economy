@@ -126,6 +126,111 @@ class TestChatColorCssApply:
         css_client.set_channel_css.assert_not_awaited()
 
 
+class TestUpgradeImport:
+    async def test_legacy_css_color_is_preserved_and_imported(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        # OldTimer's color lives only in the CSS (legacy rule), not the DB.
+        css_client.get_state_channel_css.return_value = (
+            "body{}\n/* ZCoin purchased vanity colors */\n"
+            ".chat-msg-OldTimer { color: #abcdef; }\n"
+        )
+        await _fund(database, "Alice")
+        await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#112233",
+        })
+        pushed = css_client.set_channel_css.await_args.args[1]
+        # Preserved in the rewritten CSS (original casing kept)…
+        assert ".chat-msg-OldTimer { color: #ABCDEF; }" in pushed
+        assert ".chat-msg-Alice { color: #112233; }" in pushed
+        # …and imported into OldTimer's account so it's now editable.
+        assert await database.get_vanity_item("oldtimer", CH, "chat_color") == "#ABCDEF"
+
+    async def test_import_skips_protected_users(
+        self, handler: CommandHandler, database: EconomyDatabase,
+        css_client: MagicMock, sample_config: EconomyConfig,
+    ):
+        sample_config.vanity_shop.chat_color.protected_users = ["VHSOracle"]
+        css_client.get_state_channel_css.return_value = (
+            "body{}\n/* ZCoin purchased vanity colors */\n"
+            ".chat-msg-VHSOracle { color: #cccccc; }\n"
+        )
+        await _fund(database, "Alice")
+        await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#112233",
+        })
+        # Protected bot color is never imported into the DB…
+        assert await database.get_vanity_item("vhsoracle", CH, "chat_color") is None
+        # …nor written into the managed block.
+        pushed = css_client.set_channel_css.await_args.args[1]
+        begin = sample_config.vanity_shop.chat_color.css_block_begin
+        assert "VHSOracle" not in pushed.split(begin, 1)[1]
+
+    async def test_import_disabled_does_not_persist(
+        self, handler: CommandHandler, database: EconomyDatabase,
+        css_client: MagicMock, sample_config: EconomyConfig,
+    ):
+        sample_config.vanity_shop.chat_color.import_existing_colors = False
+        css_client.get_state_channel_css.return_value = (
+            "body{}\n/* ZCoin purchased vanity colors */\n"
+            ".chat-msg-OldTimer { color: #abcdef; }\n"
+        )
+        await _fund(database, "Alice")
+        await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#112233",
+        })
+        assert await database.get_vanity_item("oldtimer", CH, "chat_color") is None
+
+
+class TestResyncColorsCommand:
+    async def test_resync_imports_all_legacy_colors(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        css_client.get_state_channel_css.return_value = (
+            "body{}\n"
+            "/* ZCoin purchased vanity colors */\n.chat-msg-Rat-Bastard { color: #cf28fd; }\n"
+            "/* ZCoin purchased vanity colors */\n.chat-msg-TeenageDraculerX { color: #c5a1f7; }\n"
+        )
+        result = await handler._handle_command({
+            "command": "vanity.resync_colors",
+            "channel": CH,
+        })
+        assert result["success"] is True
+        assert result["data"]["imported"] == 2
+        assert result["data"]["css_reapplied"] is True
+        assert await database.get_vanity_item("rat-bastard", CH, "chat_color") == "#CF28FD"
+        assert await database.get_vanity_item("teenagedraculerx", CH, "chat_color") == "#C5A1F7"
+
+    async def test_resync_is_idempotent(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        css_client.get_state_channel_css.return_value = (
+            "body{}\n/* ZCoin purchased vanity colors */\n"
+            ".chat-msg-OldTimer { color: #abcdef; }\n"
+        )
+        first = await handler._handle_command({"command": "vanity.resync_colors", "channel": CH})
+        assert first["data"]["imported"] == 1
+        second = await handler._handle_command({"command": "vanity.resync_colors", "channel": CH})
+        assert second["data"]["imported"] == 0
+
+    async def test_resync_errors_on_empty_css(
+        self, handler: CommandHandler, css_client: MagicMock,
+    ):
+        css_client.get_state_channel_css.return_value = ""
+        result = await handler._handle_command({"command": "vanity.resync_colors", "channel": CH})
+        assert result["success"] is False
+        assert "unavailable" in result["error"].lower()
+
+
 class TestShoutoutCommand:
     async def test_shoutout_delivers_and_debits(
         self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
