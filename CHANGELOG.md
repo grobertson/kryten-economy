@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-06-18
+
+### Fixed
+
+- **Spectacle games crashed on databases created before v0.9.0.** `gambling_stats` gained `total_races` / `total_trivias` / `total_blackjacks` columns in v0.9.0, but `CREATE TABLE IF NOT EXISTS` cannot add columns to an existing table, so resolving any race, trivia, or blackjack on an upgraded database raised `sqlite3.OperationalError: table gambling_stats has no column named total_blackjacks`. A startup migration now adds the missing columns. This was especially visible in Blackjack: `stand`, `double`, a busting `hit`, a natural blackjack, and the inactivity auto-stand all run through the failing stats write, so a hand could never be completed and timed-out hands produced no output (the game also leaked because cleanup ran after the failing write). The migration restores the full hit/stand/double/resolve/timeout flow.
+
+[0.9.2]: https://github.com/grobertson/kryten-economy/releases/tag/v0.9.2
+
 ## [0.9.1] - 2026-06-18
 
 ### Fixed

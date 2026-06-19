@@ -439,6 +439,17 @@ class EconomyDatabase:
             except sqlite3.OperationalError:
                 pass  # column already exists
 
+            # Spectacle games (v0.9.0): gambling_stats gained per-game counters.
+            # Existing databases predate these columns, so add them if missing
+            # (CREATE TABLE IF NOT EXISTS won't alter an existing table).
+            for _col in ("total_races", "total_trivias", "total_blackjacks"):
+                try:
+                    conn.execute(
+                        f"ALTER TABLE gambling_stats ADD COLUMN {_col} INTEGER DEFAULT 0"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # column already exists
+
             conn.commit()
             self._logger.info("Database tables created/verified")
         finally:

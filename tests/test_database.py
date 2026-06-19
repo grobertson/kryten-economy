@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import sqlite3
+
 import pytest
 
 from kryten_economy.database import EconomyDatabase
@@ -195,3 +198,92 @@ class TestWelcomeWallet:
         assert result is False
         # Balance should not double
         assert await database.get_balance("alice", "ch1") == 100
+
+
+# Columns added to the pre-existing gambling_stats table in v0.9.0 (spectacle
+# games). Databases created before that release lack them.
+_LEGACY_GAMBLING_STATS_DDL = """
+    CREATE TABLE gambling_stats (
+        username TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        total_spins INTEGER DEFAULT 0,
+        total_flips INTEGER DEFAULT 0,
+        total_challenges INTEGER DEFAULT 0,
+        total_heists INTEGER DEFAULT 0,
+        biggest_win INTEGER DEFAULT 0,
+        biggest_loss INTEGER DEFAULT 0,
+        net_gambling INTEGER DEFAULT 0,
+        UNIQUE(username, channel)
+    )
+"""
+
+
+class TestGamblingStatsMigration:
+    """Migration of the gambling_stats table for the v0.9.0 spectacle games."""
+
+    def _legacy_columns(self, db_path: str) -> set[str]:
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute("PRAGMA table_info(gambling_stats)").fetchall()
+            return {r[1] for r in rows}
+        finally:
+            conn.close()
+
+    async def test_initialize_adds_missing_game_columns(self, tmp_db_path: str):
+        """initialize() adds total_races/trivias/blackjacks to a legacy table."""
+        # Build a pre-0.9.0 database: gambling_stats without the new columns.
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            conn.execute(_LEGACY_GAMBLING_STATS_DDL)
+            conn.commit()
+        finally:
+            conn.close()
+
+        before = self._legacy_columns(tmp_db_path)
+        assert "total_blackjacks" not in before
+
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+
+        after = self._legacy_columns(tmp_db_path)
+        assert {"total_races", "total_trivias", "total_blackjacks"} <= after
+
+    async def test_update_gambling_stats_works_after_migration(self, tmp_db_path: str):
+        """The blackjack/race/trivia resolve path no longer crashes on a legacy DB.
+
+        Regression for ``sqlite3.OperationalError: table gambling_stats has no
+        column named total_blackjacks`` which broke every blackjack resolution
+        (stand/double/bust/timeout) and race/trivia resolution.
+        """
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            conn.execute(_LEGACY_GAMBLING_STATS_DDL)
+            conn.commit()
+        finally:
+            conn.close()
+
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+
+        # These all previously raised OperationalError on a legacy DB.
+        for game in ("blackjack", "race", "trivia"):
+            await db.update_gambling_stats(
+                "alice", "ch1", game, net=50, biggest_win=50,
+            )
+
+        stats = await db.get_gambling_stats("alice", "ch1")
+        assert stats is not None
+        assert stats["total_blackjacks"] == 1
+        assert stats["total_races"] == 1
+        assert stats["total_trivias"] == 1
+        assert stats["net_gambling"] == 150
+
+    async def test_migration_is_idempotent(self, tmp_db_path: str):
+        """Running initialize() repeatedly on an already-migrated DB is a no-op."""
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+        await db.initialize()  # would raise if ALTER weren't guarded
+        await db.update_gambling_stats("bob", "ch1", "blackjack", net=10)
+        stats = await db.get_gambling_stats("bob", "ch1")
+        assert stats is not None
+        assert stats["total_blackjacks"] == 1
