@@ -96,9 +96,11 @@ class TestChatColorCssApply:
         # …but Alice should be there (hex is normalized to upper-case).
         assert ".chat-msg-Alice { color: #ABCDEF; }" in pushed
 
-    async def test_empty_css_read_is_not_written_back(
+    async def test_empty_css_writes_fresh_managed_block(
         self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
     ):
+        # A channel with no pre-existing custom CSS must still get colors applied:
+        # a fresh managed block clobbers nothing, so the purchase takes effect.
         css_client.get_state_channel_css.return_value = ""
         await _fund(database, "Alice")
         result = await handler._handle_command({
@@ -107,9 +109,57 @@ class TestChatColorCssApply:
             "channel": CH,
             "value": "#112233",
         })
-        # Purchase still succeeds, but CSS is never clobbered.
         assert result["success"] is True
-        css_client.set_channel_css.assert_not_awaited()
+        css_client.set_channel_css.assert_awaited_once()
+        pushed = css_client.set_channel_css.await_args.args[1]
+        assert ".chat-msg-Alice { color: #112233; }" in pushed
+
+    async def test_css_write_failure_refunds_and_rolls_back(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+        sample_config: EconomyConfig,
+    ):
+        # Non-empty CSS so we proceed to the write, which then fails (robot/NATS
+        # outage). The charge must be refunded and the colour rolled back.
+        css_client.get_state_channel_css.return_value = "body { color: #fff; }\n"
+        css_client.set_channel_css.side_effect = RuntimeError("nats down")
+        await _fund(database, "Alice", 100_000)
+        before = await database.get_balance("Alice", CH)
+
+        result = await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#112233",
+        })
+
+        assert result["success"] is False
+        assert "refund" in result["error"].lower()
+        # Fully refunded (no net change) …
+        assert await database.get_balance("Alice", CH) == before
+        # … and the colour was rolled back so it isn't applied on a later rebuild.
+        assert await database.get_vanity_item("alice", CH, "chat_color") is None
+
+    async def test_css_write_failure_restores_previous_color(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        # Alice already had a colour; a failed re-colour must restore the old one
+        # (not leave the new, unpaid-for value active).
+        await database.set_vanity_item("Alice", CH, "chat_color", "#AAAAAA")
+        css_client.get_state_channel_css.return_value = "body{}\n"
+        css_client.set_channel_css.side_effect = RuntimeError("nats down")
+        await _fund(database, "Alice", 100_000)
+        before = await database.get_balance("Alice", CH)
+
+        result = await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#112233",
+        })
+
+        assert result["success"] is False
+        assert await database.get_balance("Alice", CH) == before
+        assert await database.get_vanity_item("alice", CH, "chat_color") == "#AAAAAA"
 
     async def test_apply_disabled_skips_css(
         self, handler: CommandHandler, database: EconomyDatabase,

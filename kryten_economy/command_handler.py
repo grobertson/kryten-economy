@@ -970,11 +970,28 @@ class CommandHandler:
         if hex_value is None:
             raise ValueError("Invalid color. Provide a 6-digit hex like #1A2B3C.")
 
+        # Capture the prior color so a failed CSS apply can be fully rolled back.
+        prev_value = await self._app.db.get_vanity_item(username, channel, "chat_color")
+
         result = await self._purchase_vanity(
             username, channel, cfg.cost, "chat_color", hex_value,
             "spend.vanity.chat_color",
         )
-        await self._apply_chat_color_css(channel, username)
+
+        outcome = await self._apply_chat_color_css(channel, username)
+        if outcome == "error":
+            # The color was charged + stored but could not be pushed to the
+            # channel (robot/NATS outage). Refund and roll the item back so the
+            # user isn't billed for a change that didn't take effect — and so it
+            # isn't silently applied on a later rebuild.
+            await self._refund_failed_vanity(
+                username, channel, result["charged"], "chat_color",
+                prev_value, "spend.vanity.chat_color",
+            )
+            raise ValueError(
+                "Couldn't update your chat color right now — your Z has been "
+                "refunded. Please try again in a moment."
+            )
         return result
 
     # ── Chat-color CSS application ───────────────────────────
@@ -1032,36 +1049,43 @@ class CommandHandler:
             )
         return imported
 
-    async def _apply_chat_color_css(self, channel: str, buyer: str) -> None:
+    async def _apply_chat_color_css(self, channel: str, buyer: str) -> str:
         """Rebuild and push the channel's auto-managed vanity-color CSS block.
 
         Reads the current channel CSS, optionally imports any colors that exist
         only in the CSS into the database, rebuilds the managed block (skipping
         protected users, preserving any remaining CSS-only colors), and writes it
-        back. Failures are logged but never raised: the purchase is already
-        committed, so a CSS hiccup must not fail the command.
+        back.
+
+        Returns an outcome string:
+
+        * ``"applied"``  — the managed block was rebuilt and pushed.
+        * ``"noop"``     — the rebuilt CSS matched the current CSS; nothing sent.
+        * ``"disabled"`` — CSS application is turned off in config (DB-only mode).
+        * ``"error"``    — the channel CSS could not be read or written (robot/
+          NATS outage). The caller refunds and rolls back on this outcome.
+
+        An *empty* current CSS is treated as a writable channel rather than a
+        failure: ``merge_vanity_css`` on empty input emits only the managed
+        block, so it clobbers nothing, and colors apply even on channels with no
+        pre-existing custom CSS (previously the feature silently no-op'd there).
+        A genuine outage is detected when the *write* raises — not from an empty
+        read, since every read layer collapses errors and missing keys to ``""``.
         """
         cfg = self._app.config.vanity_shop.chat_color
         if not cfg.apply_css:
-            return
+            return "disabled"
         try:
             domain = self._domain_for_channel(channel)
             existing = await self._client.get_state_channel_css(channel, domain=domain)
-            # Safety: an empty read means the robot's CSS cache is unavailable.
-            # Writing now would clobber the channel's entire hand-maintained CSS.
-            if not existing.strip():
-                self._logger.warning(
-                    "Skipping chat-color CSS apply for %s: current channel CSS "
-                    "is empty/unavailable (refusing to overwrite).",
-                    channel,
-                )
-                return
+            existing = existing or ""
 
             protected = self._chat_color_protected_users()
 
             # Import pre-existing CSS-only colors so they survive the rewrite and
-            # become editable in the portal (idempotent; additive).
-            if cfg.import_existing_colors:
+            # become editable in the portal (idempotent; additive). Only relevant
+            # when there is existing CSS to harvest from.
+            if cfg.import_existing_colors and existing.strip():
                 await self._import_legacy_chat_colors(channel, existing, protected)
 
             colors = await self._app.db.get_users_with_chat_colors(channel)
@@ -1078,14 +1102,44 @@ class CommandHandler:
                 legacy_marker=cfg.css_legacy_marker,
             )
             if new_css.strip() == existing.strip():
-                return
+                return "noop"
             await self._client.set_channel_css(channel, new_css, domain=domain)
             self._logger.info(
                 "Applied chat-color CSS for %s (%d managed user(s))",
                 channel, len(colors),
             )
+            return "applied"
         except Exception:
             self._logger.exception("Failed to apply chat-color CSS for %s", channel)
+            return "error"
+
+    async def _refund_failed_vanity(
+        self,
+        username: str,
+        channel: str,
+        amount: int,
+        item_type: str,
+        prev_value: str | None,
+        trigger_id: str,
+    ) -> None:
+        """Reverse a vanity charge whose effect couldn't be applied.
+
+        Refunds ``amount`` and restores the previous value (or deactivates the
+        item when there was none), so a refunded purchase leaves no active trace.
+        """
+        await self._app.db.refund(
+            username, channel, amount,
+            trigger_id=f"{trigger_id}.refund",
+            reason=f"Refund: {item_type} could not be applied",
+        )
+        if prev_value is not None:
+            await self._app.db.set_vanity_item(username, channel, item_type, prev_value)
+        else:
+            await self._app.db.deactivate_vanity_item(username, channel, item_type)
+        self._logger.warning(
+            "Refunded %d Z to %s in %s: %s could not be applied (rolled back).",
+            amount, username, channel, item_type,
+        )
 
     async def _handle_vanity_resync_colors(self, request: dict[str, Any]) -> dict[str, Any]:
         """Ops command: import pre-existing CSS colors into the DB and re-apply.
@@ -1110,8 +1164,8 @@ class CommandHandler:
 
         applied = False
         if bool(request.get("apply", True)) and cfg.apply_css:
-            await self._apply_chat_color_css(channel, self._app.config.bot.username)
-            applied = True
+            outcome = await self._apply_chat_color_css(channel, self._app.config.bot.username)
+            applied = outcome in ("applied", "noop")
 
         total = len(await self._app.db.get_users_with_chat_colors(channel))
         return {

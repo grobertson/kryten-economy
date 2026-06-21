@@ -683,6 +683,52 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
+    async def refund(
+        self,
+        username: str,
+        channel: str,
+        amount: int,
+        reason: str | None = None,
+        trigger_id: str | None = None,
+        related_user: str | None = None,
+        metadata: str | None = None,
+    ) -> int:
+        """Atomically reverse a prior spend: credit the balance back and reduce
+        ``lifetime_spent`` (so a refunded purchase doesn't inflate lifetime
+        totals the way a plain :meth:`credit` would). Logs a ``refund``
+        transaction. Returns the new balance. Creates the account if absent."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> int:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO accounts (username, channel) VALUES (?, ?)",
+                    (username, channel),
+                )
+                # Clamp lifetime_spent at 0 so a refund can never drive it negative.
+                conn.execute(
+                    "UPDATE accounts SET balance = balance + ?, "
+                    "lifetime_spent = MAX(0, lifetime_spent - ?) "
+                    "WHERE username = ? AND channel = ?",
+                    (amount, amount, username, channel),
+                )
+                conn.execute(
+                    "INSERT INTO transactions (username, channel, amount, type, reason, trigger_id, "
+                    "related_user, metadata) VALUES (?, ?, ?, 'refund', ?, ?, ?, ?)",
+                    (username, channel, amount, reason, trigger_id, related_user, metadata),
+                )
+                conn.commit()
+                row = conn.execute(
+                    "SELECT balance FROM accounts WHERE username = ? AND channel = ?",
+                    (username, channel),
+                ).fetchone()
+                return row["balance"]
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
     # ══════════════════════════════════════════════════════════
     #  Daily Activity
     # ══════════════════════════════════════════════════════════
@@ -1873,6 +1919,32 @@ class EconomyDatabase:
                     "ON CONFLICT(username, channel, item_type) DO UPDATE "
                     "SET value = excluded.value, active = 1, purchased_at = CURRENT_TIMESTAMP",
                     (normalized_username, channel, item_type, value),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def deactivate_vanity_item(
+        self, username: str, channel: str, item_type: str,
+    ) -> None:
+        """Mark a vanity item inactive.
+
+        Used to roll back a purchase whose side effect (e.g. pushing chat-color
+        CSS) failed, so a refunded item is not later treated as active by
+        queries such as :meth:`get_users_with_chat_colors`.
+        """
+        normalized_username = username.lower()
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    "UPDATE vanity_items SET active = 0 "
+                    "WHERE username = ? AND channel = ? AND item_type = ?",
+                    (normalized_username, channel, item_type),
                 )
                 conn.commit()
             finally:

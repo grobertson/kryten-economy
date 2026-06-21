@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-06-21
+
+### Fixed
+
+- **Chat-color purchases silently failed on channels with no custom CSS, and the buyer was charged with no refund.** The CSS apply step refused to write whenever the channel's current CSS read back empty, logging `Skipping chat-color CSS apply … current channel CSS is empty/unavailable (refusing to overwrite)`. But an empty read is the *normal* state for a channel with no hand-maintained CSS (and every read layer collapses missing keys / NATS errors to `""`, so "empty" and "unavailable" were indistinguishable). The guard therefore made the feature permanently no-op on such channels while still debiting the buyer. Empty CSS is now treated as a writable channel — `merge_vanity_css` on empty input emits only the auto-managed block, so it clobbers nothing — and the colour applies. The hand-maintained-CSS safety is preserved differently: a genuine robot/NATS outage now surfaces when the CSS *write* fails (not from an empty read).
+- **Failed chat-color changes are now refunded.** If the colour is charged but can't be pushed to the channel (robot/NATS outage during the write), the spend is fully refunded (balance restored and `lifetime_spent` reversed) and the `chat_color` vanity item is rolled back to its previous value (or deactivated if there was none), so the buyer is never billed for a change that didn't take effect. The command returns a clear "your Z has been refunded — try again" message.
+
+### Added
+
+- **`EconomyDatabase.refund` and `EconomyDatabase.deactivate_vanity_item`** — internal helpers backing the refund/rollback path above. `refund` reverses a prior spend (credits the balance and decrements `lifetime_spent`, logging a `refund` transaction) rather than counting as new earnings.
+
+[0.10.1]: https://github.com/grobertson/kryten-economy/releases/tag/v0.10.1
+
 ## [0.10.0] - 2026-06-19
 
 ### Added
