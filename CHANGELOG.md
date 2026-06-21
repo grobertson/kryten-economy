@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-06-21
+
+### Fixed
+
+- **Chat-color apply wiped the channel's hand-maintained CSS (showstopper, regression from 0.10.1).** 0.10.1 removed the "empty CSS read" guard on the theory that an empty read meant "channel has no CSS" and was therefore safe to overwrite. That was wrong: every read layer (`get_state_channel_css` → `kv_get` → low-level `kv_get`) collapses a missing key or NATS error to `""`, so an empty string means *the CSS could not be read*, not that it is empty. Worse, Kryten-Robot never seeds channel CSS into its state KV (see kryten-robot 0.x), so the read is **always** empty — and the rebuild wrote a managed-block-only document, destroying all hand-maintained styling. The guard is restored: an empty/unavailable read now **refuses to write**, returns an `unavailable` outcome, and the purchase is **refunded** (see below) instead of silently no-op'ing.
+- **Chat-color usernames now preserve canonical casing (showstopper).** `vanity_items` previously lowercased usernames on write, but CyTube chat-message CSS classes (`.chat-msg-<User>`) are case-sensitive, so the rebuilt block (`.chat-msg-teenagedraculerx`) failed to match for every user with capitals — only the active buyer (whose casing was passed through a display override) worked. `vanity_items` now **stores** usernames with their canonical CyTube casing (matching kryten-webqueue, which never lowercases usernames — its login OTP is PM'd case-sensitively, so authenticated names are always canonical), while username **lookups remain case-insensitive** (`COLLATE NOCASE`) so identity-based reads (greetings, the shop, on-join lookups) still match regardless of the casing a caller happens to have. `merge_vanity_css` now derives selector casing from the database key for **every** managed user, not just the buyer. A one-time, idempotent migration recases existing lowercased `vanity_items` rows from the case-preserving `accounts` table.
+- **Failed chat-color changes are refunded.** When the colour can't be applied — the CSS write fails *or* the current CSS is unavailable — the spend is fully refunded (balance restored, `lifetime_spent` reversed) and the `chat_color` item is rolled back to its previous value (or deactivated if there was none). The command returns a clear "your Z has been refunded — try again" message.
+
+### Added
+
+- **`EconomyDatabase.refund` and `EconomyDatabase.deactivate_vanity_item`** — internal helpers backing the refund/rollback path. `refund` reverses a prior spend (credits the balance and decrements `lifetime_spent`, clamped at 0, logging a `refund` transaction) rather than counting as new earnings.
+
+[0.10.2]: https://github.com/grobertson/kryten-economy/releases/tag/v0.10.2
+
 ## [0.10.1] - 2026-06-21
 
 ### Fixed

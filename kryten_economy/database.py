@@ -450,6 +450,35 @@ class EconomyDatabase:
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
+            # v0.10.2: vanity_items usernames are now stored case-sensitively
+            # (canonical CyTube casing) so chat-color CSS selectors match. Earlier
+            # versions lowercased them, which broke `.chat-msg-<User>` for any user
+            # with capitals. Recover the canonical casing from the accounts table
+            # (which has always preserved case) for existing rows. Idempotent:
+            # once a row already matches its account's casing the WHERE clause no
+            # longer selects it. OR IGNORE guards the UNIQUE(username,...) index in
+            # the unlikely event a canonical-case row already exists.
+            try:
+                conn.execute(
+                    """
+                    UPDATE OR IGNORE vanity_items
+                    SET username = (
+                        SELECT a.username FROM accounts a
+                        WHERE a.channel = vanity_items.channel
+                          AND LOWER(a.username) = vanity_items.username
+                        LIMIT 1
+                    )
+                    WHERE EXISTS (
+                        SELECT 1 FROM accounts a
+                        WHERE a.channel = vanity_items.channel
+                          AND LOWER(a.username) = vanity_items.username
+                          AND a.username <> vanity_items.username
+                    )
+                    """
+                )
+            except sqlite3.OperationalError:
+                pass  # tables not ready / nothing to migrate
+
             conn.commit()
             self._logger.info("Database tables created/verified")
         finally:
@@ -1906,8 +1935,12 @@ class EconomyDatabase:
     async def set_vanity_item(
         self, username: str, channel: str, item_type: str, value: str,
     ) -> None:
-        """Upsert a vanity item."""
-        normalized_username = username.lower()
+        """Upsert a vanity item.
+
+        Usernames are stored case-sensitively (canonical CyTube casing), matching
+        kryten-webqueue and CyTube. Chat-color CSS selectors (``.chat-msg-<user>``)
+        are case-sensitive, so the exact casing must be preserved here.
+        """
         loop = asyncio.get_running_loop()
 
         def _sync() -> None:
@@ -1918,7 +1951,7 @@ class EconomyDatabase:
                     "VALUES (?, ?, ?, ?) "
                     "ON CONFLICT(username, channel, item_type) DO UPDATE "
                     "SET value = excluded.value, active = 1, purchased_at = CURRENT_TIMESTAMP",
-                    (normalized_username, channel, item_type, value),
+                    (username, channel, item_type, value),
                 )
                 conn.commit()
             finally:
@@ -1935,7 +1968,6 @@ class EconomyDatabase:
         CSS) failed, so a refunded item is not later treated as active by
         queries such as :meth:`get_users_with_chat_colors`.
         """
-        normalized_username = username.lower()
         loop = asyncio.get_running_loop()
 
         def _sync() -> None:
@@ -1943,8 +1975,8 @@ class EconomyDatabase:
             try:
                 conn.execute(
                     "UPDATE vanity_items SET active = 0 "
-                    "WHERE username = ? AND channel = ? AND item_type = ?",
-                    (normalized_username, channel, item_type),
+                    "WHERE username = ? COLLATE NOCASE AND channel = ? AND item_type = ?",
+                    (username, channel, item_type),
                 )
                 conn.commit()
             finally:
@@ -1955,16 +1987,24 @@ class EconomyDatabase:
     async def get_vanity_item(
         self, username: str, channel: str, item_type: str,
     ) -> str | None:
-        """Get active vanity value, or None."""
+        """Get active vanity value, or None.
+
+        Storage preserves canonical CyTube casing (see :meth:`set_vanity_item`)
+        so case-sensitive chat-color CSS selectors render correctly, but the
+        *lookup* is case-insensitive (``COLLATE NOCASE``): a username identifies
+        the same person regardless of case (as CyTube treats identity), so a
+        greeting/shop lookup must match whatever casing the caller has.
+        """
         loop = asyncio.get_running_loop()
 
         def _sync() -> str | None:
             conn = self._get_connection()
             try:
                 row = conn.execute(
-                    "SELECT value FROM vanity_items WHERE username = ? AND channel = ? "
+                    "SELECT value FROM vanity_items "
+                    "WHERE username = ? COLLATE NOCASE AND channel = ? "
                     "AND item_type = ? AND active = 1",
-                    (username.lower(), channel, item_type),
+                    (username, channel, item_type),
                 ).fetchone()
                 return row["value"] if row else None
             finally:
@@ -2017,7 +2057,10 @@ class EconomyDatabase:
     async def get_all_vanity_items(
         self, username: str, channel: str,
     ) -> dict[str, str]:
-        """Return all active vanity items as {item_type: value}."""
+        """Return all active vanity items as {item_type: value}.
+
+        Case-insensitive username match (identity), matching :meth:`get_vanity_item`.
+        """
         loop = asyncio.get_running_loop()
 
         def _sync() -> dict[str, str]:
@@ -2025,8 +2068,8 @@ class EconomyDatabase:
             try:
                 rows = conn.execute(
                     "SELECT item_type, value FROM vanity_items "
-                    "WHERE username = ? AND channel = ? AND active = 1",
-                    (username.lower(), channel),
+                    "WHERE username = ? COLLATE NOCASE AND channel = ? AND active = 1",
+                    (username, channel),
                 ).fetchall()
                 return {r["item_type"]: r["value"] for r in rows}
             finally:

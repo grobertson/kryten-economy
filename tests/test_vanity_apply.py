@@ -96,23 +96,33 @@ class TestChatColorCssApply:
         # …but Alice should be there (hex is normalized to upper-case).
         assert ".chat-msg-Alice { color: #ABCDEF; }" in pushed
 
-    async def test_empty_css_writes_fresh_managed_block(
+    async def test_empty_css_is_not_written_and_refunds(
         self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
     ):
-        # A channel with no pre-existing custom CSS must still get colors applied:
-        # a fresh managed block clobbers nothing, so the purchase takes effect.
+        # REGRESSION (0.10.2): an empty CSS read means the channel's real CSS is
+        # unavailable (the robot hasn't seeded it). Writing a managed-block-only
+        # document would WIPE the channel's hand-maintained CSS. So we must NOT
+        # write, and — since the purchase couldn't take effect — must refund.
         css_client.get_state_channel_css.return_value = ""
-        await _fund(database, "Alice")
+        await _fund(database, "Alice", 100_000)
+        before = await database.get_balance("Alice", CH)
+
         result = await handler._handle_command({
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
             "value": "#112233",
         })
-        assert result["success"] is True
-        css_client.set_channel_css.assert_awaited_once()
-        pushed = css_client.set_channel_css.await_args.args[1]
-        assert ".chat-msg-Alice { color: #112233; }" in pushed
+
+        # The channel CSS is never touched …
+        css_client.set_channel_css.assert_not_awaited()
+        # … the command reports failure with a refund message …
+        assert result["success"] is False
+        assert "refund" in result["error"].lower()
+        # … the buyer is made whole …
+        assert await database.get_balance("Alice", CH) == before
+        # … and the colour is rolled back (not left active for a later rebuild).
+        assert await database.get_vanity_item("Alice", CH, "chat_color") is None
 
     async def test_css_write_failure_refunds_and_rolls_back(
         self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
@@ -137,7 +147,7 @@ class TestChatColorCssApply:
         # Fully refunded (no net change) …
         assert await database.get_balance("Alice", CH) == before
         # … and the colour was rolled back so it isn't applied on a later rebuild.
-        assert await database.get_vanity_item("alice", CH, "chat_color") is None
+        assert await database.get_vanity_item("Alice", CH, "chat_color") is None
 
     async def test_css_write_failure_restores_previous_color(
         self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
@@ -159,7 +169,7 @@ class TestChatColorCssApply:
 
         assert result["success"] is False
         assert await database.get_balance("Alice", CH) == before
-        assert await database.get_vanity_item("alice", CH, "chat_color") == "#AAAAAA"
+        assert await database.get_vanity_item("Alice", CH, "chat_color") == "#AAAAAA"
 
     async def test_apply_disabled_skips_css(
         self, handler: CommandHandler, database: EconomyDatabase,
@@ -196,8 +206,8 @@ class TestUpgradeImport:
         # Preserved in the rewritten CSS (original casing kept)…
         assert ".chat-msg-OldTimer { color: #ABCDEF; }" in pushed
         assert ".chat-msg-Alice { color: #112233; }" in pushed
-        # …and imported into OldTimer's account so it's now editable.
-        assert await database.get_vanity_item("oldtimer", CH, "chat_color") == "#ABCDEF"
+        # …and imported into OldTimer's account (canonical casing) so it's editable.
+        assert await database.get_vanity_item("OldTimer", CH, "chat_color") == "#ABCDEF"
 
     async def test_import_skips_protected_users(
         self, handler: CommandHandler, database: EconomyDatabase,
@@ -257,8 +267,8 @@ class TestResyncColorsCommand:
         assert result["success"] is True
         assert result["data"]["imported"] == 2
         assert result["data"]["css_reapplied"] is True
-        assert await database.get_vanity_item("rat-bastard", CH, "chat_color") == "#CF28FD"
-        assert await database.get_vanity_item("teenagedraculerx", CH, "chat_color") == "#C5A1F7"
+        assert await database.get_vanity_item("Rat-Bastard", CH, "chat_color") == "#CF28FD"
+        assert await database.get_vanity_item("TeenageDraculerX", CH, "chat_color") == "#C5A1F7"
 
     async def test_resync_is_idempotent(
         self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,

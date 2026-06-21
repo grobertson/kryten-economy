@@ -979,11 +979,12 @@ class CommandHandler:
         )
 
         outcome = await self._apply_chat_color_css(channel, username)
-        if outcome == "error":
+        if outcome in ("error", "unavailable"):
             # The color was charged + stored but could not be pushed to the
-            # channel (robot/NATS outage). Refund and roll the item back so the
-            # user isn't billed for a change that didn't take effect — and so it
-            # isn't silently applied on a later rebuild.
+            # channel — either the CSS write failed (robot/NATS outage) or the
+            # channel's current CSS was unavailable so we refused to overwrite it.
+            # Refund and roll the item back so the user isn't billed for a change
+            # that didn't take effect, and so it isn't silently applied later.
             await self._refund_failed_vanity(
                 username, channel, result["charged"], "chat_color",
                 prev_value, "spend.vanity.chat_color",
@@ -1032,8 +1033,11 @@ class CommandHandler:
         for lower_user, (display, value) in harvested.items():
             if lower_user in protected:
                 continue
+            # Existence check must use the canonical (display) casing, since
+            # vanity_items is stored case-sensitively. Checking the lowercased
+            # name would miss an existing canonical-case row and re-import it.
             existing_db = await self._app.db.get_vanity_item(
-                lower_user, channel, "chat_color",
+                display, channel, "chat_color",
             )
             if existing_db:
                 continue
@@ -1059,18 +1063,22 @@ class CommandHandler:
 
         Returns an outcome string:
 
-        * ``"applied"``  — the managed block was rebuilt and pushed.
-        * ``"noop"``     — the rebuilt CSS matched the current CSS; nothing sent.
-        * ``"disabled"`` — CSS application is turned off in config (DB-only mode).
-        * ``"error"``    — the channel CSS could not be read or written (robot/
-          NATS outage). The caller refunds and rolls back on this outcome.
+        * ``"applied"``     — the managed block was rebuilt and pushed.
+        * ``"noop"``        — the rebuilt CSS matched the current CSS; nothing sent.
+        * ``"disabled"``    — CSS application is off in config (DB-only mode).
+        * ``"unavailable"`` — the channel's current CSS read back empty, so the
+          real CSS is unavailable (Kryten-Robot has not seeded it into its state
+          KV, or a transient outage). Writing would replace the channel's entire
+          hand-maintained CSS with just our managed block, so we refuse. The
+          caller refunds and rolls back on this outcome.
+        * ``"error"``       — the CSS read or write raised. Caller refunds/rolls back.
 
-        An *empty* current CSS is treated as a writable channel rather than a
-        failure: ``merge_vanity_css`` on empty input emits only the managed
-        block, so it clobbers nothing, and colors apply even on channels with no
-        pre-existing custom CSS (previously the feature silently no-op'd there).
-        A genuine outage is detected when the *write* raises — not from an empty
-        read, since every read layer collapses errors and missing keys to ``""``.
+        CRITICAL: an empty read is **never** written back. Every read layer
+        (``get_state_channel_css`` → ``kv_get`` → low-level ``kv_get``) collapses
+        a missing key or NATS error to ``""``, so an empty string does **not**
+        mean "the channel has no CSS" — it means we could not read it. Treating
+        empty as writable previously clobbered a channel's entire hand-maintained
+        CSS (regression fixed in 0.10.2).
         """
         cfg = self._app.config.vanity_shop.chat_color
         if not cfg.apply_css:
@@ -1080,12 +1088,23 @@ class CommandHandler:
             existing = await self._client.get_state_channel_css(channel, domain=domain)
             existing = existing or ""
 
+            # Safety guard: refuse to write when the current CSS is empty/
+            # unavailable. See the docstring — an empty read is indistinguishable
+            # from "robot CSS not seeded" or a transient outage, and writing a
+            # managed-block-only document would wipe all hand-maintained CSS.
+            if not existing.strip():
+                self._logger.warning(
+                    "Chat-color CSS apply for %s skipped: current channel CSS is "
+                    "empty/unavailable (refusing to overwrite hand-maintained CSS).",
+                    channel,
+                )
+                return "unavailable"
+
             protected = self._chat_color_protected_users()
 
             # Import pre-existing CSS-only colors so they survive the rewrite and
-            # become editable in the portal (idempotent; additive). Only relevant
-            # when there is existing CSS to harvest from.
-            if cfg.import_existing_colors and existing.strip():
+            # become editable in the portal (idempotent; additive).
+            if cfg.import_existing_colors:
                 await self._import_legacy_chat_colors(channel, existing, protected)
 
             colors = await self._app.db.get_users_with_chat_colors(channel)

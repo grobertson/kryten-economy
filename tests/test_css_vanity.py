@@ -55,6 +55,44 @@ class TestMergeVanityCss:
         assert BEGIN in out and END in out
         assert ".chat-msg-Alice { color: #112233; }" in out
 
+    def test_uses_db_key_casing_for_all_users(self):
+        # REGRESSION (0.10.2): selector casing must come from the database keys
+        # (canonical CyTube casing) for EVERY managed user — not only the buyer
+        # supplied via display_overrides. Previously non-buyer users with no CSS
+        # to harvest casing from were emitted lowercased, so `.chat-msg-<User>`
+        # never matched and their colour silently failed.
+        colors = {
+            "DoodooButtchump": "#C5B358",
+            "TeenageDraculerX": "#C5A1F7",
+            "TacoBelmont": "#4AEAFF",
+        }
+        out = merge_vanity_css(
+            "",  # no existing CSS to harvest casing from
+            colors,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
+        )
+        assert ".chat-msg-DoodooButtchump { color: #C5B358; }" in out
+        assert ".chat-msg-TeenageDraculerX { color: #C5A1F7; }" in out
+        assert ".chat-msg-TacoBelmont { color: #4AEAFF; }" in out
+        # No lowercased selectors leaked through.
+        assert ".chat-msg-doodoobuttchump" not in out
+        assert ".chat-msg-tacobelmont" not in out
+
+    def test_db_casing_overrides_stale_css_casing(self):
+        # If the harvested CSS has stale casing but the DB key carries canonical
+        # casing, the DB wins (CSS may predate a rename).
+        existing = "body{}\n.chat-msg-oldname { color: #111111; }\n"
+        out = merge_vanity_css(
+            existing,
+            {"OldName": "#222222"},
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
+        )
+        assert ".chat-msg-OldName { color: #222222; }" in out
+
     def test_absorbs_legacy_rules_without_duplicates(self):
         existing = (
             "body{}\n"

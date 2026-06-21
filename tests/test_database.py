@@ -278,6 +278,138 @@ class TestGamblingStatsMigration:
         assert stats["total_trivias"] == 1
         assert stats["net_gambling"] == 150
 
+
+class TestVanityItemCaseSensitivity:
+    """vanity_items preserves canonical CyTube username casing for storage/display
+    (so case-sensitive chat-color CSS selectors render), while identity lookups
+    are case-insensitive (a username is the same person regardless of case).
+
+    Earlier versions lowercased on write, which destroyed the casing the CSS
+    selectors (``.chat-msg-<User>``) need.
+    """
+
+    async def test_storage_preserves_canonical_case(self, database: EconomyDatabase):
+        await database.set_vanity_item("TeenageDraculerX", "ch", "chat_color", "#C5A1F7")
+        # The stored row keeps the exact canonical casing (what CSS rendering reads).
+        colors = await database.get_users_with_chat_colors("ch")
+        assert colors == {"TeenageDraculerX": "#C5A1F7"}
+
+    async def test_lookup_is_case_insensitive(self, database: EconomyDatabase):
+        # Identity lookups match regardless of case (greetings/shop rely on this).
+        await database.set_vanity_item("TeenageDraculerX", "ch", "chat_color", "#C5A1F7")
+        assert await database.get_vanity_item("TeenageDraculerX", "ch", "chat_color") == "#C5A1F7"
+        assert await database.get_vanity_item("teenagedraculerx", "ch", "chat_color") == "#C5A1F7"
+        assert await database.get_vanity_item("TEENAGEDRACULERX", "ch", "chat_color") == "#C5A1F7"
+
+    async def test_managed_colors_keep_canonical_case(self, database: EconomyDatabase):
+        await database.set_vanity_item("TacoBelmont", "ch", "chat_color", "#4AEAFF")
+        await database.set_vanity_item("DoodooButtchump", "ch", "chat_color", "#C5B358")
+        colors = await database.get_users_with_chat_colors("ch")
+        assert colors == {"TacoBelmont": "#4AEAFF", "DoodooButtchump": "#C5B358"}
+
+
+class TestRefund:
+    """EconomyDatabase.refund reverses a prior spend."""
+
+    async def test_refund_restores_balance_and_reverses_lifetime_spent(
+        self, database: EconomyDatabase,
+    ):
+        await database.credit("Alice", "ch", 1000, tx_type="seed")
+        await database.debit("Alice", "ch", 300, tx_type="spend")
+        acct = await database.get_account("Alice", "ch")
+        assert acct["balance"] == 700
+        assert acct["lifetime_spent"] == 300
+
+        new_balance = await database.refund("Alice", "ch", 300, reason="undo")
+        assert new_balance == 1000
+        acct = await database.get_account("Alice", "ch")
+        assert acct["balance"] == 1000
+        # Refund reverses lifetime_spent rather than inflating lifetime_earned.
+        assert acct["lifetime_spent"] == 0
+        assert acct["lifetime_earned"] == 1000
+
+    async def test_refund_logs_refund_transaction(self, database: EconomyDatabase):
+        await database.credit("Bob", "ch", 500, tx_type="seed")
+        await database.debit("Bob", "ch", 200, tx_type="spend")
+        await database.refund("Bob", "ch", 200, reason="undo")
+        txns = await database.get_recent_transactions("Bob", "ch", limit=10)
+        assert any(t["type"] == "refund" and t["amount"] == 200 for t in txns)
+
+    async def test_refund_clamps_lifetime_spent_at_zero(self, database: EconomyDatabase):
+        # A refund larger than recorded spend must not drive lifetime_spent < 0.
+        await database.credit("Cara", "ch", 100, tx_type="seed")
+        await database.refund("Cara", "ch", 100, reason="overshoot")
+        acct = await database.get_account("Cara", "ch")
+        assert acct["lifetime_spent"] == 0
+        assert acct["balance"] == 200
+
+
+class TestVanityCaseMigration:
+    """Existing lowercased vanity_items rows recover canonical case on init."""
+
+    async def test_lowercased_rows_recased_from_accounts(self, tmp_db_path: str):
+        # Build a DB the modern way, then simulate legacy lowercased vanity rows.
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+        # Accounts carry canonical case (this path never lowercased).
+        await db.get_or_create_account("TeenageDraculerX", "ch")
+        await db.get_or_create_account("TacoBelmont", "ch")
+
+        # Insert legacy-style lowercased vanity rows directly.
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value) "
+                "VALUES ('teenagedraculerx', 'ch', 'chat_color', '#C5A1F7')"
+            )
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value) "
+                "VALUES ('tacobelmont', 'ch', 'chat_color', '#4AEAFF')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Re-initialize: the migration recases the rows from accounts.
+        db2 = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db2.initialize()
+
+        colors = await db2.get_users_with_chat_colors("ch")
+        assert colors == {
+            "TeenageDraculerX": "#C5A1F7",
+            "TacoBelmont": "#4AEAFF",
+        }
+
+    async def test_migration_is_idempotent_and_skips_unknown(self, tmp_db_path: str):
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+        await db.get_or_create_account("KnownUser", "ch")
+
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            # One row with a matching account, one with no account at all.
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value) "
+                "VALUES ('knownuser', 'ch', 'chat_color', '#ABCDEF')"
+            )
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value) "
+                "VALUES ('ghostuser', 'ch', 'chat_color', '#123456')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Two re-inits must converge (idempotent) and not crash.
+        for _ in range(2):
+            db_n = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+            await db_n.initialize()
+
+        assert await db_n.get_vanity_item("KnownUser", "ch", "chat_color") == "#ABCDEF"
+        # Unknown user (no account) is left as-is, never dropped.
+        assert await db_n.get_vanity_item("ghostuser", "ch", "chat_color") == "#123456"
+
+
     async def test_migration_is_idempotent(self, tmp_db_path: str):
         """Running initialize() repeatedly on an already-migrated DB is a no-op."""
         db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))

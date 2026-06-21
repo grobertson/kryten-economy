@@ -224,9 +224,20 @@ def merge_vanity_css(
             effective[lower_user] = value
             casing.setdefault(lower_user, display)
     for user, hex_value in colors.items():
-        if user.lower() in protected_lower:
+        lower_user = user.lower()
+        if lower_user in protected_lower:
             continue
-        effective[user.lower()] = hex_value
+        effective[lower_user] = hex_value
+        # The database stores canonical CyTube casing, so trust its casing for
+        # EVERY managed user (not just the active buyer). When the stored key
+        # actually carries case (differs from its lowercase form) it overrides
+        # casing harvested from possibly-stale CSS; an all-lowercase legacy key
+        # only fills in when nothing better was harvested. ``display_overrides``
+        # (the buyer) still takes final precedence below.
+        if user != lower_user:
+            casing[lower_user] = user
+        else:
+            casing.setdefault(lower_user, user)
 
     if display_overrides:
         for lower, original in display_overrides.items():
