@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-06-21
+
+### Fixed
+
+- **Chat-color changes silently reverted while still charging the user (showstopper).** Confirmed on live data: a user could end up with two active `vanity_items` rows for the same name differing only in case — a stale lowercased row (e.g. `teenagedraculerx` → old green) left behind by the 0.10.2 migration, plus the canonical-cased row (`TeenageDraculerX`) that new purchases update. The 0.10.2 recasing migration used `UPDATE OR IGNORE`, which silently *skipped* such collisions instead of merging them, and `set_vanity_item` upserted on the case-sensitive `UNIQUE(username, ...)` index, so a differently-cased purchase created/kept a second row. The CSS rebuild lowercases both selectors into one, the stale row wins the merge, the rebuilt CSS equals the current CSS → no `setChannelCSS` push (color never changes) and a no-op isn't refunded (user still charged). Two-part fix: (1) `set_vanity_item` now upserts **case-insensitively** — it updates the existing row in place (refreshing value *and* canonical casing) and only inserts when the user has no row yet, so a second case-variant row can never be created; (2) the migration now **dedupes** each `(lower(username), channel, item_type)` collision — keeping the most recently purchased row — *before* recasing survivors from the `accounts` table (portable correlated-subquery form; idempotent). Existing affected rows heal automatically on startup.
+
+[0.10.3]: https://github.com/grobertson/kryten-economy/releases/tag/v0.10.3
+
 ## [0.10.2] - 2026-06-21
 
 ### Fixed

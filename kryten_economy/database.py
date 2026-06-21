@@ -450,28 +450,57 @@ class EconomyDatabase:
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
-            # v0.10.2: vanity_items usernames are now stored case-sensitively
-            # (canonical CyTube casing) so chat-color CSS selectors match. Earlier
-            # versions lowercased them, which broke `.chat-msg-<User>` for any user
-            # with capitals. Recover the canonical casing from the accounts table
-            # (which has always preserved case) for existing rows. Idempotent:
-            # once a row already matches its account's casing the WHERE clause no
-            # longer selects it. OR IGNORE guards the UNIQUE(username,...) index in
-            # the unlikely event a canonical-case row already exists.
+            # v0.10.2: vanity_items usernames are now stored with canonical CyTube
+            # casing (so chat-color CSS selectors `.chat-msg-<User>` match), keyed
+            # case-insensitively. Earlier versions lowercased usernames, which both
+            # broke the selectors AND — once 0.10.2's case-preserving writes landed
+            # — could leave a user with TWO active rows (a legacy lowercased one and
+            # a new canonical-cased one). A case-collision makes chat-color changes
+            # silently no-op (the stale row wins the CSS merge) while still charging
+            # the user. Heal both problems here, idempotently:
+            #
+            #   (a) DEDUPE: for any (lower(username), channel, item_type) with more
+            #       than one row, keep the most recently purchased and delete the
+            #       rest. (The earlier v0.10.2 migration used UPDATE OR IGNORE, which
+            #       silently SKIPPED these collisions and left the duplicate behind.)
+            #   (b) RECASE: rewrite each surviving row's username to the canonical
+            #       casing from the accounts table (which never lowercased).
             try:
+                # (a) Delete all but the newest row in each case-collision group.
+                #     Uses a correlated subquery (not a window function) so it works
+                #     on older system SQLite builds too: a row is deleted when another
+                #     row exists for the same (lower-user, channel, item_type) that is
+                #     newer — by purchased_at, breaking ties on the higher id.
                 conn.execute(
                     """
-                    UPDATE OR IGNORE vanity_items
+                    DELETE FROM vanity_items
+                    WHERE EXISTS (
+                        SELECT 1 FROM vanity_items AS v2
+                        WHERE LOWER(v2.username) = LOWER(vanity_items.username)
+                          AND v2.channel = vanity_items.channel
+                          AND v2.item_type = vanity_items.item_type
+                          AND (
+                                v2.purchased_at > vanity_items.purchased_at
+                                OR (v2.purchased_at = vanity_items.purchased_at
+                                    AND v2.id > vanity_items.id)
+                          )
+                    )
+                    """
+                )
+                # (b) Recase survivors from accounts (only when casing differs).
+                conn.execute(
+                    """
+                    UPDATE vanity_items
                     SET username = (
                         SELECT a.username FROM accounts a
                         WHERE a.channel = vanity_items.channel
-                          AND LOWER(a.username) = vanity_items.username
+                          AND LOWER(a.username) = LOWER(vanity_items.username)
                         LIMIT 1
                     )
                     WHERE EXISTS (
                         SELECT 1 FROM accounts a
                         WHERE a.channel = vanity_items.channel
-                          AND LOWER(a.username) = vanity_items.username
+                          AND LOWER(a.username) = LOWER(vanity_items.username)
                           AND a.username <> vanity_items.username
                     )
                     """
@@ -1935,24 +1964,44 @@ class EconomyDatabase:
     async def set_vanity_item(
         self, username: str, channel: str, item_type: str, value: str,
     ) -> None:
-        """Upsert a vanity item.
+        """Upsert a vanity item, keyed case-insensitively on the username.
 
-        Usernames are stored case-sensitively (canonical CyTube casing), matching
-        kryten-webqueue and CyTube. Chat-color CSS selectors (``.chat-msg-<user>``)
-        are case-sensitive, so the exact casing must be preserved here.
+        Usernames are STORED with their canonical CyTube casing (so case-sensitive
+        chat-color CSS selectors ``.chat-msg-<User>`` render correctly), but a user
+        is the SAME person regardless of case. The table's ``UNIQUE(username, ...)``
+        index is case-sensitive, so a plain ``ON CONFLICT`` upsert would create a
+        SECOND row when the stored casing differs from the caller's (e.g. a legacy
+        lowercased row + a new canonical-cased purchase). That dual row is what made
+        chat-color changes silently no-op (the stale row won the CSS merge) while
+        still charging the user. To prevent it, update any existing case-insensitive
+        match in place — refreshing the value AND the canonical casing — and only
+        insert when no row exists for this user yet.
         """
         loop = asyncio.get_running_loop()
 
         def _sync() -> None:
             conn = self._get_connection()
             try:
-                conn.execute(
-                    "INSERT INTO vanity_items (username, channel, item_type, value) "
-                    "VALUES (?, ?, ?, ?) "
-                    "ON CONFLICT(username, channel, item_type) DO UPDATE "
-                    "SET value = excluded.value, active = 1, purchased_at = CURRENT_TIMESTAMP",
-                    (username, channel, item_type, value),
-                )
+                existing = conn.execute(
+                    "SELECT id FROM vanity_items "
+                    "WHERE username = ? COLLATE NOCASE AND channel = ? AND item_type = ? "
+                    "ORDER BY purchased_at DESC, id DESC LIMIT 1",
+                    (username, channel, item_type),
+                ).fetchone()
+                if existing is not None:
+                    conn.execute(
+                        "UPDATE vanity_items "
+                        "SET username = ?, value = ?, active = 1, "
+                        "    purchased_at = CURRENT_TIMESTAMP "
+                        "WHERE id = ?",
+                        (username, value, existing["id"]),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO vanity_items (username, channel, item_type, value) "
+                        "VALUES (?, ?, ?, ?)",
+                        (username, channel, item_type, value),
+                    )
                 conn.commit()
             finally:
                 conn.close()

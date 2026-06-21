@@ -307,6 +307,125 @@ class TestVanityItemCaseSensitivity:
         colors = await database.get_users_with_chat_colors("ch")
         assert colors == {"TacoBelmont": "#4AEAFF", "DoodooButtchump": "#C5B358"}
 
+    async def test_upsert_is_case_insensitive_no_duplicate_row(
+        self, database: EconomyDatabase,
+    ):
+        # REGRESSION: a later purchase with different casing must UPDATE the same
+        # row, not create a second one. A case-collision (two active rows) made
+        # chat-color changes silently no-op (stale row won the CSS merge) while
+        # still charging the user.
+        await database.set_vanity_item("teenagedraculerx", "ch", "chat_color", "#50C878")
+        await database.set_vanity_item("TeenageDraculerX", "ch", "chat_color", "#A6FFAA")
+
+        colors = await database.get_users_with_chat_colors("ch")
+        # Exactly one managed row, canonical casing, newest value.
+        assert colors == {"TeenageDraculerX": "#A6FFAA"}
+        assert await database.get_vanity_item("TeenageDraculerX", "ch", "chat_color") == "#A6FFAA"
+
+    async def test_upsert_refreshes_casing_on_existing_row(
+        self, database: EconomyDatabase,
+    ):
+        # If the only row was lowercased, a canonical-cased write recases it.
+        await database.set_vanity_item("oldname", "ch", "chat_color", "#111111")
+        await database.set_vanity_item("OldName", "ch", "chat_color", "#222222")
+        colors = await database.get_users_with_chat_colors("ch")
+        assert colors == {"OldName": "#222222"}
+
+
+class TestVanityCaseCollisionMigration:
+    """initialize() dedupes case-collision vanity rows and recases survivors."""
+
+    async def test_dedupe_keeps_newest_and_recases(self, tmp_db_path: str):
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+        # Account carries canonical casing.
+        await db.get_or_create_account("TeenageDraculerX", "Channel-Z")
+
+        # Simulate the broken state: two active rows differing only by case,
+        # the stale (older) one lowercased.
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value, purchased_at) "
+                "VALUES ('teenagedraculerx', 'Channel-Z', 'chat_color', '#50C878', '2026-03-18 12:56:45')"
+            )
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value, purchased_at) "
+                "VALUES ('TeenageDraculerX', 'Channel-Z', 'chat_color', '#A6FFAA', '2026-06-21 12:18:10')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Re-initialize: migration dedupes + recases.
+        db2 = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db2.initialize()
+
+        colors = await db2.get_users_with_chat_colors("Channel-Z")
+        # One row, canonical case, newest value wins.
+        assert colors == {"TeenageDraculerX": "#A6FFAA"}
+
+        # And it's a single physical row (no lingering duplicate).
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM vanity_items "
+                "WHERE LOWER(username)='teenagedraculerx' AND item_type='chat_color'"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        assert n == 1
+
+    async def test_dedupe_is_idempotent(self, tmp_db_path: str):
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+        await db.get_or_create_account("Bob", "ch")
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value, purchased_at) "
+                "VALUES ('bob', 'ch', 'chat_color', '#000001', '2026-01-01 00:00:00')"
+            )
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value, purchased_at) "
+                "VALUES ('Bob', 'ch', 'chat_color', '#000002', '2026-02-01 00:00:00')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        for _ in range(2):
+            dbn = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+            await dbn.initialize()
+
+        colors = await dbn.get_users_with_chat_colors("ch")
+        assert colors == {"Bob": "#000002"}
+
+    async def test_dedupe_preserves_distinct_item_types(self, tmp_db_path: str):
+        # A user with a greeting AND a color must keep both (dedupe is per item_type).
+        db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db.initialize()
+        await db.get_or_create_account("Carol", "ch")
+        conn = sqlite3.connect(tmp_db_path)
+        try:
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value) "
+                "VALUES ('carol', 'ch', 'chat_color', '#abcdef')"
+            )
+            conn.execute(
+                "INSERT INTO vanity_items (username, channel, item_type, value) "
+                "VALUES ('Carol', 'ch', 'custom_greeting', 'hi there')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        db2 = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
+        await db2.initialize()
+        assert await db2.get_vanity_item("Carol", "ch", "chat_color") == "#abcdef"
+        assert await db2.get_vanity_item("Carol", "ch", "custom_greeting") == "hi there"
+
+
 
 class TestRefund:
     """EconomyDatabase.refund reverses a prior spend."""
