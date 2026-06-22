@@ -530,18 +530,22 @@ class RaceEngine:
         )
 
         # ── Build public announcement lines ──────────────────
+        # Brief: a headline finish line + one combined summary line, to keep the
+        # channel terse (the full play-by-play lives on the web race view).
         finish_line = self._narrator.get_finish_line(channel, winner.color, winner.emoji)
         lines = [finish_line]
 
+        summary_bits: list[str] = []
         if winner_payouts:
             top_winners = sorted(winner_payouts, key=lambda wp: wp[1], reverse=True)[:3]
             winner_strs = [f"@{bet.username} (+{net:,})" for bet, _payout, net in top_winners]
-            lines.append(f"Winners: {', '.join(winner_strs)}")
-
-        if total_on_winner == 0 and race.bets:
-            lines.append("💸 Nobody bet on the winner! The house takes all.")
-
-        lines.append(f"Pool: {total_pool:,} {self._symbol} | Bettors: {len(race.bets)}")
+            summary_bits.append(f"Winners: {', '.join(winner_strs)}")
+        elif race.bets:
+            summary_bits.append("💸 Nobody backed the winner — house takes all")
+        summary_bits.append(
+            f"Pool {total_pool:,} {self._symbol} · {len(race.bets)} bettor(s)"
+        )
+        lines.append(" | ".join(summary_bits))
 
         # Clear any cached LLM commentary for this channel.
         self._narrator.consume_story(channel)
@@ -551,7 +555,12 @@ class RaceEngine:
     # ── Display helpers ───────────────────────────────────────
 
     def get_betting_display(self, channel: str) -> list[str]:
-        """Generate the betting phase display for public chat."""
+        """Brief betting-phase announcement for public chat (one message).
+
+        Deliberately terse to save chat real-estate: a single headline listing
+        every racer with odds inline, plus the bet instruction. The full
+        animated play-by-play lives on the web race view, not in chat.
+        """
         race = self._active_races.get(channel)
         if not race:
             return []
@@ -561,17 +570,14 @@ class RaceEngine:
             (race.betting_closes_at - datetime.now(timezone.utc)).total_seconds()
         ))
 
-        lines = [self._narrator.get_start_line(channel)]
-        lines.append(f"\n🏁 A race is starting! Betting closes in {remaining}s!")
-        lines.append("")
-
-        for color, racer in race.racers.items():
-            odds = racer.odds_display
-            trait = racer.trait_label if cfg.traits.enabled else ""
-            lines.append(f"  {racer.emoji} {color} ({odds}) {trait}")
-
-        lines.append(f"\nPlace bets: !race <amount> <color> | Min: {cfg.min_bet} {self._symbol}")
-        return lines
+        racers = " · ".join(
+            f"{racer.emoji} {color} {racer.odds_display}"
+            for color, racer in race.racers.items()
+        )
+        return [
+            f"🏁 Race OPEN! Betting closes in {remaining}s — {racers}",
+            f"Bet in chat: !race <amount> <color> (min {cfg.min_bet} {self._symbol})",
+        ]
 
     def get_live_odds(self, channel: str) -> list[str]:
         """Show current odds based on race positions (for live betting)."""

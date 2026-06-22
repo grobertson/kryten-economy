@@ -109,9 +109,12 @@ async def test_event_start_bad_multiplier(database: EconomyDatabase, mock_client
     pm_msg = mock_client.send_pm.call_args[0][2]
     assert "1.0" in pm_msg or "between" in pm_msg.lower()
 
-    # No adhoc event started
+    # No adhoc event started for the rejected command. (Assert on the adhoc
+    # source rather than total active count, since ambient time-of-day
+    # multipliers like off_peak may legitimately be active depending on when
+    # the suite runs.)
     _, active = mult.get_combined_multiplier(CH)
-    assert len(active) == 0
+    assert not [m for m in active if "Bad" in m.source]
 
 
 @pytest.mark.asyncio

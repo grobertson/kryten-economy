@@ -279,6 +279,25 @@ class TestProgressDisplay:
             assert "█" in line or "░" in line
 
 
+class TestBettingDisplay:
+    """The betting beat is deliberately terse (saves chat real-estate)."""
+
+    def test_betting_display_is_brief(self, race_engine: RaceEngine) -> None:
+        race_engine.start_race(CH, "Alice")
+        lines = race_engine.get_betting_display(CH)
+        # Just a headline + a bet-instruction line.
+        assert len(lines) == 2
+        race = race_engine.get_active_race(CH)
+        # Every racer + its odds is listed inline on the headline.
+        for color, racer in race.racers.items():
+            assert color in lines[0]
+            assert racer.odds_display in lines[0]
+        assert "!race <amount> <color>" in lines[1]
+
+    def test_betting_display_no_active_race(self, race_engine: RaceEngine) -> None:
+        assert race_engine.get_betting_display("nope") == []
+
+
 class TestRaceConfigValidation:
     """Regression for review — finish_distance is a divisor; reject <= 0 at load."""
 

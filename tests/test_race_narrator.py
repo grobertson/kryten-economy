@@ -133,20 +133,39 @@ class TestPrepareStory:
         assert n.get_story_start("chan-a") == "A start"
         assert n.get_story_start("chan-b") is None
 
-    async def test_safe_format_tolerates_bad_placeholders(self) -> None:
+    async def test_safe_format_maps_aliases_and_drops_unknowns(self) -> None:
+        """The reported bug: an LLM-authored line using an undocumented synonym
+        ({name}/{color}/{winner}) for {racer} must render the racer value, and a
+        truly unknown placeholder must render empty — never leave literal braces
+        in chat."""
         n = _narrator("llm")
         n.reset_for_race(CH, "race-1")
         bad = RaceStory(
             start="ok",
-            lead_change="{winner} took it!",  # unknown placeholder → KeyError
+            lead_change="{name} took it!",   # alias for {racer}
             event="ev",
-            finish="done {oops}",  # unknown placeholder → KeyError
+            finish="{winner} wins {oops}!",  # {winner} alias, {oops} unknown
         )
         with patch.object(n, "_generate_llm_story", AsyncMock(return_value=bad)):
             await n.prepare_story(CH, "race-1")
-        # Should not raise; returns the raw template on KeyError
-        assert n.get_lead_change_line(CH, "Red", "🔴") == "{winner} took it!"
-        assert n.get_finish_line(CH, "Red", "🔴") == "done {oops}"
+        # {name} → racer value; never literal braces.
+        assert n.get_lead_change_line(CH, "Red", "🔴") == "Red took it!"
+        # {winner} → racer value, {oops} → empty.
+        assert n.get_finish_line(CH, "Red", "🔴") == "Red wins !"
+
+    async def test_safe_format_maps_color_and_emoji_aliases(self) -> None:
+        """{color} maps to the racer and {icon} maps to the emoji."""
+        n = _narrator("llm")
+        n.reset_for_race(CH, "race-1")
+        story = RaceStory(
+            start="ok",
+            lead_change="{icon} {color} surges!",
+            event="ev",
+            finish="{color} done",
+        )
+        with patch.object(n, "_generate_llm_story", AsyncMock(return_value=story)):
+            await n.prepare_story(CH, "race-1")
+        assert n.get_lead_change_line(CH, "Blue", "🔵") == "🔵 Blue surges!"
 
     async def test_safe_format_tolerates_malformed_template(self) -> None:
         """A malformed template (unmatched brace) raises ValueError → raw text."""

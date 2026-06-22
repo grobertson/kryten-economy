@@ -27,6 +27,21 @@ if TYPE_CHECKING:
     from .config import RaceCommentaryConfig
 
 
+# Placeholder aliases. Commentary templates document {racer} and {emoji}, but an
+# LLM in llm/hybrid mode occasionally emits an undocumented synonym ({name},
+# {color}, …). Map common aliases onto the two real fields so a stray alias
+# renders the value instead of leaving literal braces in chat.
+_RACER_ALIASES = ("racer", "name", "color", "colour", "racer_name", "runner", "horse", "winner", "leader")
+_EMOJI_ALIASES = ("emoji", "icon")
+
+
+class _ForgivingDict(dict):
+    """Backing map for ``str.format_map`` that renders unknown keys as ``''``."""
+
+    def __missing__(self, key: str) -> str:
+        return ""
+
+
 @dataclass
 class RaceStory:
     """A themed set of commentary lines from a single LLM call.
@@ -112,7 +127,9 @@ class RaceNarrator:
     def get_story_start(self, channel: str) -> str | None:
         """Return the LLM story's start line for a channel, if one exists."""
         story = self._stories.get(channel)
-        return story.start if (story and story.start) else None
+        if story and story.start:
+            return self._safe_format(story.start)
+        return None
 
     # ── LLM generation ────────────────────────────────────────
 
@@ -249,16 +266,25 @@ class RaceNarrator:
         self._counts[channel] = self._counts.get(channel, 0) + 1
 
     @staticmethod
-    def _safe_format(template: str, **kwargs: str) -> str:
-        """Format a (possibly LLM-authored) template, tolerating bad input.
+    def _safe_format(template: str, *, racer: str = "", emoji: str = "") -> str:
+        """Format a (possibly LLM-authored) commentary template, tolerantly.
 
-        Unknown placeholders raise ``KeyError``/``IndexError``; a malformed
-        template (e.g. an unmatched ``{``) raises ``ValueError``. All three are
-        caught so an LLM-authored line can always fall back to its raw text.
+        In llm/hybrid mode the templates are model-authored and sometimes use an
+        undocumented placeholder ({name}, {color}, …) in place of {racer}. Known
+        aliases (see ``_RACER_ALIASES``/``_EMOJI_ALIASES``) are mapped onto the
+        racer/emoji values; any *other* unknown placeholder renders as empty
+        rather than leaving literal braces in chat. A malformed template
+        (unmatched brace, positional ``{}``/``{0}`` field) falls back to its raw
+        text.
         """
+        values = _ForgivingDict()
+        for key in _RACER_ALIASES:
+            values[key] = racer
+        for key in _EMOJI_ALIASES:
+            values[key] = emoji
         try:
-            return template.format(**kwargs)
-        except (KeyError, IndexError, ValueError):
+            return template.format_map(values)
+        except (IndexError, ValueError):
             return template
 
     # ── Line getters ──────────────────────────────────────────
@@ -266,7 +292,7 @@ class RaceNarrator:
     def get_start_line(self, channel: str) -> str:
         story = self._stories.get(channel)
         if story and story.start:
-            return story.start
+            return self._safe_format(story.start)
         return random.choice(self._start_lines)
 
     def get_lead_change_line(self, channel: str, racer: str, emoji: str) -> str | None:
@@ -276,7 +302,9 @@ class RaceNarrator:
         story = self._stories.get(channel)
         if story and story.lead_change:
             return self._safe_format(story.lead_change, racer=racer, emoji=emoji)
-        return random.choice(self._lead_change_lines).format(racer=racer, emoji=emoji)
+        return self._safe_format(
+            random.choice(self._lead_change_lines), racer=racer, emoji=emoji,
+        )
 
     def get_event_line(self, channel: str, event_type: str, racer: str, emoji: str) -> str | None:
         if not self._can_emit(channel):
@@ -289,7 +317,7 @@ class RaceNarrator:
         if not pool:
             return None
         self._spend(channel)
-        return random.choice(pool).format(racer=racer, emoji=emoji)
+        return self._safe_format(random.choice(pool), racer=racer, emoji=emoji)
 
     def get_close_finish_line(self, channel: str) -> str | None:
         if not self._can_emit(channel):
@@ -301,7 +329,9 @@ class RaceNarrator:
         story = self._stories.get(channel)
         if story and story.finish:
             return self._safe_format(story.finish, racer=racer, emoji=emoji)
-        return random.choice(self._finish_lines).format(racer=racer, emoji=emoji)
+        return self._safe_format(
+            random.choice(self._finish_lines), racer=racer, emoji=emoji,
+        )
 
     def get_payout_line(self, user: str, payout: str, symbol: str) -> str:
         line = random.choice(self._payout_lines)

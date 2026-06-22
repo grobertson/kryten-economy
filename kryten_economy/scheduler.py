@@ -341,18 +341,14 @@ class Scheduler:
 
                     # Racing phase — advance simulation
                     if race.phase == RacePhase.RACING:
-                        progress_lines, events, finished = self._race_engine.tick(channel)
-
-                        # Announce events
-                        for event in events:
-                            if event.message:
-                                await self._announce_chat(channel, event.message)
-
-                        # Send progress display
-                        if progress_lines:
-                            await self._announce_chat(
-                                channel, "\n".join(progress_lines),
-                            )
+                        # Per-tick play-by-play is intentionally NOT posted to
+                        # public chat — it floods the channel (and tripped the
+                        # bot's antiflood, causing PM drops / reconnects). The
+                        # tick still runs to advance the simulation and detect
+                        # the finish; the live visual race lives on the web view.
+                        # Only the high-signal beats (start, finish + payouts)
+                        # reach chat, so the progress lines/events are discarded.
+                        _progress_lines, _events, finished = self._race_engine.tick(channel)
 
                         # Finished! Mark synchronously so subsequent ticks skip
                         # this race, then offload paced resolution/announcements.

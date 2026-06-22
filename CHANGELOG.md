@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-06-22
+
+### Fixed
+
+- **Race play-by-play no longer floods public chat.** Every simulation tick used to post a progress-bar block (and each random event) to the channel — for a ~20s race that's a burst of a dozen-plus messages, which buried other chatter and tripped the bot's antiflood (swallowed PMs, occasional disconnect/reconnect). The per-tick play-by-play is now **silent in chat**; the tick still advances the simulation and detects the finish. The channel sees only the high-signal beats.
+- **Race commentary placeholders like `{name}` are now resolved.** In `llm`/`hybrid` commentary mode the model occasionally emits an undocumented placeholder (`{name}`, `{color}`, `{winner}`, …) instead of the documented `{racer}`/`{emoji}`. The old formatter raised `KeyError` and fell back to the **raw** template, so literal `{name}` showed up in chat. Commentary formatting now maps common aliases onto the racer/emoji values and renders any genuinely unknown placeholder as empty — never leaving literal braces in chat. Static and custom commentary lines go through the same tolerant path.
+
+### Changed
+
+- **The four channel race beats are terser.** To save chat real-estate the betting announcement is now a two-line headline (all racers + odds inline, plus the bet instruction) instead of a multi-line block, and the finish announcement is a headline finish line plus a single combined summary (winners + pool + bettor count) rather than several separate lines. The remaining beats — race declared/betting open, bets placed, race start, race end & payouts — are unchanged in intent.
+
+[0.11.1]: https://github.com/grobertson/kryten-economy/releases/tag/v0.11.1
+
 ## [0.11.0] - 2026-06-21
 
 ### Added
