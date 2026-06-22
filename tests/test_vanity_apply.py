@@ -53,6 +53,124 @@ async def _fund(db: EconomyDatabase, user: str, amount: int = 100_000) -> None:
     await db.credit(user, CH, amount, tx_type="test", reason="seed")
 
 
+class TestChatColorContrastGuard:
+    async def test_low_contrast_red_is_rejected_without_charge(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        await _fund(database, "Alice", 100_000)
+        before = await database.get_balance("Alice", CH)
+        result = await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#FF0000",  # pure red: rejected by the combined metric
+        })
+        assert result["success"] is False
+        # Not charged, no color stored, no CSS pushed.
+        assert await database.get_balance("Alice", CH) == before
+        assert await database.get_vanity_item("Alice", CH, "chat_color") is None
+        css_client.set_channel_css.assert_not_awaited()
+
+    async def test_dark_color_is_rejected(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        await _fund(database, "Alice", 100_000)
+        result = await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#000080",  # navy: too dark
+        })
+        assert result["success"] is False
+        css_client.set_channel_css.assert_not_awaited()
+
+    async def test_good_color_passes_guard(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        await _fund(database, "Alice", 100_000)
+        result = await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#FF69B4",  # pink: passes
+        })
+        assert result["success"] is True
+        assert await database.get_vanity_item("Alice", CH, "chat_color") == "#FF69B4"
+
+    async def test_warn_color_is_allowed(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        await _fund(database, "Alice", 100_000)
+        result = await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#FF1493",  # deep pink: warn band, still allowed
+        })
+        assert result["success"] is True
+
+    async def test_guard_disabled_allows_low_contrast(
+        self, handler: CommandHandler, database: EconomyDatabase,
+        css_client: MagicMock, sample_config: EconomyConfig,
+    ):
+        sample_config.vanity_shop.chat_color.enforce_contrast = False
+        await _fund(database, "Alice", 100_000)
+        result = await handler._handle_command({
+            "command": "vanity.set_color",
+            "username": "Alice",
+            "channel": CH,
+            "value": "#FF0000",
+        })
+        assert result["success"] is True
+
+    async def test_check_color_reports_reject(self, handler: CommandHandler):
+        result = await handler._handle_command({
+            "command": "vanity.check_color",
+            "channel": CH,
+            "value": "#FF0000",
+        })
+        assert result["success"] is True
+        data = result["data"]
+        assert data["valid"] is True
+        assert data["level"] == "reject"
+        assert data["acceptable"] is False
+        assert data["message"]
+
+    async def test_check_color_reports_ok(self, handler: CommandHandler):
+        result = await handler._handle_command({
+            "command": "vanity.check_color",
+            "channel": CH,
+            "value": "#FF69B4",
+        })
+        data = result["data"]
+        assert data["level"] == "ok"
+        assert data["acceptable"] is True
+
+    async def test_check_color_invalid_hex(self, handler: CommandHandler):
+        result = await handler._handle_command({
+            "command": "vanity.check_color",
+            "channel": CH,
+            "value": "nope",
+        })
+        data = result["data"]
+        assert data["valid"] is False
+        assert data["acceptable"] is False
+
+    async def test_check_color_does_not_charge_or_store(
+        self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
+    ):
+        await _fund(database, "Alice", 100_000)
+        before = await database.get_balance("Alice", CH)
+        await handler._handle_command({
+            "command": "vanity.check_color",
+            "channel": CH,
+            "username": "Alice",
+            "value": "#FF69B4",
+        })
+        assert await database.get_balance("Alice", CH) == before
+        css_client.set_channel_css.assert_not_awaited()
+
+
 class TestChatColorCssApply:
     async def test_purchase_writes_managed_block_with_original_casing(
         self, handler: CommandHandler, database: EconomyDatabase, css_client: MagicMock,
@@ -62,12 +180,12 @@ class TestChatColorCssApply:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
         assert result["success"] is True
         css_client.set_channel_css.assert_awaited_once()
         pushed = css_client.set_channel_css.await_args.args[1]
-        assert ".chat-msg-Alice { color: #112233; }" in pushed
+        assert ".chat-msg-Alice { color: #66CCFF; }" in pushed
         # Hand-maintained CSS preserved
         assert "body { color: #fff; }" in pushed
 
@@ -111,7 +229,7 @@ class TestChatColorCssApply:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
 
         # The channel CSS is never touched …
@@ -139,7 +257,7 @@ class TestChatColorCssApply:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
 
         assert result["success"] is False
@@ -164,7 +282,7 @@ class TestChatColorCssApply:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
 
         assert result["success"] is False
@@ -181,7 +299,7 @@ class TestChatColorCssApply:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
         css_client.set_channel_css.assert_not_awaited()
 
@@ -200,12 +318,12 @@ class TestUpgradeImport:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
         pushed = css_client.set_channel_css.await_args.args[1]
         # Preserved in the rewritten CSS (original casing kept)…
         assert ".chat-msg-OldTimer { color: #ABCDEF; }" in pushed
-        assert ".chat-msg-Alice { color: #112233; }" in pushed
+        assert ".chat-msg-Alice { color: #66CCFF; }" in pushed
         # …and imported into OldTimer's account (canonical casing) so it's editable.
         assert await database.get_vanity_item("OldTimer", CH, "chat_color") == "#ABCDEF"
 
@@ -223,7 +341,7 @@ class TestUpgradeImport:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
         # Protected bot color is never imported into the DB…
         assert await database.get_vanity_item("vhsoracle", CH, "chat_color") is None
@@ -246,7 +364,7 @@ class TestUpgradeImport:
             "command": "vanity.set_color",
             "username": "Alice",
             "channel": CH,
-            "value": "#112233",
+            "value": "#66CCFF",
         })
         assert await database.get_vanity_item("oldtimer", CH, "chat_color") is None
 

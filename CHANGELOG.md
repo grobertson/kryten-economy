@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-06-21
+
+### Added
+
+- **Chat-color readability guard.** Chat colors render as light text on a near-black chat background, where two different things make a color hard to read: very dark colors (maroon, navy) and harsh near-monochromatic reds (pure red reads badly despite decent lightness). A new `kryten_economy.contrast` module scores a candidate color by **combining APCA perceptual lightness contrast with a chroma penalty** for red-dominant colors, against the configurable chat background. `vanity.set_color` now **refuses** colors below `min_contrast_lc` (no charge) and a new read-only **`vanity.check_color`** command returns the verdict (`lc`, combined `score`, `level` of ok/warn/reject, and a user-facing message) so the dashboard can preview/validate before purchase. Configurable under `vanity_shop.chat_color`: `enforce_contrast`, `contrast_bg` (default `#111111`), `min_contrast_lc` (default 30 — blocks all dark reds, pure red, red-orange, navy, pure blue), `warn_contrast_lc` (default 40 — flags borderline colors). WCAG ratio is intentionally not used (it passes pure red on black).
+
+### Removed
+
+- **Curated chat-color palette and the `buy color` PM command.** Chat color is now set only as an arbitrary 6-digit hex via the web dashboard / `vanity.set_color`, which is where the readability guard lives. The fixed `ChatColorConfig.palette` and `ChatColorPaletteEntry` are gone, and `buy color <name>` is no longer a PM command. (Pydantic ignores the now-unused `palette:` key, so existing config files load unchanged.)
+
+[0.11.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.11.0
+
 ## [0.10.3] - 2026-06-21
 
 ### Fixed

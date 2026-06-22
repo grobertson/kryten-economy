@@ -1683,7 +1683,6 @@ class PmHandler:
         shop_items: list[tuple[str, Any, str]] = [
             ("greeting", self._config.vanity_shop.custom_greeting, "buy greeting <text>"),
             ("title", self._config.vanity_shop.custom_title, "buy title <text>"),
-            ("color", self._config.vanity_shop.chat_color, "buy color <name>"),
             ("gif", self._config.vanity_shop.channel_gif, "buy gif <url>"),
             ("shoutout", self._config.vanity_shop.shoutout, "buy shoutout <message>"),
             ("fortune", self._config.vanity_shop.daily_fortune, "fortune"),
@@ -1726,7 +1725,6 @@ class PmHandler:
         handlers: dict[str, Callable[..., Awaitable[str]]] = {
             "greeting": self._buy_custom_greeting,
             "title": self._buy_custom_title,
-            "color": self._buy_chat_color,
             "gif": self._buy_channel_gif,
             "shoutout": self._buy_shoutout,
             "rename": self._buy_rename_currency,
@@ -1770,31 +1768,6 @@ class PmHandler:
             username, channel, cfg.cost, "custom_title", value,
             "spend.vanity.custom_title",
             f"✅ Custom title set to: \"{value}\"",
-        )
-
-    async def _buy_chat_color(self, username: str, channel: str, value: str) -> str:
-        """Purchase a chat colour from the approved palette."""
-        cfg = self._config.vanity_shop.chat_color
-        if not cfg.enabled:
-            return "Chat colors are not available."
-        if not value:
-            palette_list = ", ".join(c.name for c in cfg.palette)
-            return f"Usage: buy color <name>\nAvailable: {palette_list}"
-
-        # Find in palette (case-insensitive)
-        color_match = None
-        for option in cfg.palette:
-            if option.name.lower() == value.lower():
-                color_match = option
-                break
-        if not color_match:
-            palette_list = ", ".join(c.name for c in cfg.palette)
-            return f"Unknown color '{value}'. Available: {palette_list}"
-
-        return await self._complete_vanity_purchase(
-            username, channel, cfg.cost, "chat_color", color_match.hex,
-            "spend.vanity.chat_color",
-            f"🎨 Chat color set to {color_match.name} ({color_match.hex})!",
         )
 
     async def _buy_channel_gif(self, username: str, channel: str, value: str) -> str:

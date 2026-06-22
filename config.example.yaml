@@ -421,16 +421,18 @@ vanity_shop:
   chat_color:
     enabled: true
     cost: 750
-    description: "Choose a color for your chat messages from the approved palette"
-    palette:
-      - { name: "Crimson", hex: "#DC143C" }
-      - { name: "Gold", hex: "#FFD700" }
-      - { name: "Emerald", hex: "#50C878" }
-      - { name: "Royal Blue", hex: "#4169E1" }
-      - { name: "Orchid", hex: "#DA70D6" }
-      - { name: "Coral", hex: "#FF7F50" }
-      - { name: "Teal", hex: "#008080" }
-      - { name: "Silver Screen", hex: "#C0C0C0" }
+    description: "Choose a custom color for your chat messages"
+    # Readability guard: chat colors are light text on a near-black chat
+    # background, so very dark colors AND harsh near-mono reds (e.g. pure red)
+    # read poorly. A candidate color is scored by combining APCA perceptual
+    # lightness contrast with a chroma penalty for red-dominant colors. Below
+    # min_contrast_lc it is refused (no charge); below warn_contrast_lc it is
+    # allowed but the dashboard warns. Defaults block all dark reds, pure red,
+    # red-orange, navy and pure blue while passing pinks, coral and normal hues.
+    enforce_contrast: true
+    contrast_bg: "#111111"
+    min_contrast_lc: 30.0
+    warn_contrast_lc: 40.0
     # When apply_css is true, a purchased color is written into the channel's
     # CyTube CSS as a per-user rule. The economy reads the current CSS, rebuilds
     # an auto-managed block (between the markers below), and pushes it back —

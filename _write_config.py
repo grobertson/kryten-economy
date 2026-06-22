@@ -436,28 +436,19 @@ vanity_shop:
     cost: 100000
     description: "Custom title shown in bot announcements"
 
-  # Choose a color for your chat username from the approved palette.
+  # Choose a custom color for your chat messages (arbitrary 6-digit hex).
   chat_color:
     enabled: true
     cost: 75000
-    description: "Choose a color for your chat messages from the approved palette"
-    palette:
-      - name: "Crimson"
-        hex: "#DC143C"
-      - name: "Gold"
-        hex: "#FFD700"
-      - name: "Emerald"
-        hex: "#50C878"
-      - name: "Royal Blue"
-        hex: "#4169E1"
-      - name: "Orchid"
-        hex: "#DA70D6"
-      - name: "Coral"
-        hex: "#FF7F50"
-      - name: "Teal"
-        hex: "#008080"
-      - name: "Silver Screen"
-        hex: "#C0C0C0"
+    description: "Choose a custom color for your chat messages"
+    # Readability guard (light text on near-black chat bg). Combines APCA
+    # perceptual contrast with a chroma penalty for harsh near-mono reds. Below
+    # min_contrast_lc the color is refused (no charge); below warn_contrast_lc
+    # it is allowed but the dashboard warns.
+    enforce_contrast: true
+    contrast_bg: "#111111"
+    min_contrast_lc: 30.0
+    warn_contrast_lc: 40.0
 
   # Personalized channel GIF associated with your account.
   channel_gif:

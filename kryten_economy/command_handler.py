@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import __version__
 from .config import load_config
+from .contrast import evaluate_color, LEVEL_REJECT
 from .css_vanity import harvest_managed_colors, merge_vanity_css
 
 if TYPE_CHECKING:
@@ -970,6 +971,17 @@ class CommandHandler:
         if hex_value is None:
             raise ValueError("Invalid color. Provide a 6-digit hex like #1A2B3C.")
 
+        # Readability guard: refuse colors that are unreadable on the dark chat
+        # background (too dark, or harsh near-mono reds). Warn-level colors are
+        # allowed through — the dashboard surfaces the warning before purchase.
+        if cfg.enforce_contrast:
+            verdict = evaluate_color(
+                hex_value, cfg.contrast_bg,
+                min_lc=cfg.min_contrast_lc, warn_lc=cfg.warn_contrast_lc,
+            )
+            if verdict["level"] == LEVEL_REJECT:
+                raise ValueError(verdict["message"])
+
         # Capture the prior color so a failed CSS apply can be fully rolled back.
         prev_value = await self._app.db.get_vanity_item(username, channel, "chat_color")
 
@@ -994,6 +1006,43 @@ class CommandHandler:
                 "refunded. Please try again in a moment."
             )
         return result
+
+    async def _handle_vanity_check_color(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Read-only readability check for a candidate chat color.
+
+        Lets the dashboard preview/validate a color server-side (single source
+        of truth) before charging. No spend, no side effects. Returns the
+        normalized hex, the contrast background, APCA Lc, the combined score,
+        the level (ok/warn/reject), whether it's acceptable, and a user message.
+        """
+        raw = str(request.get("value", ""))
+        cfg = self._app.config.vanity_shop.chat_color
+        hex_value = _normalize_hex_color(raw)
+        if hex_value is None:
+            return {
+                "value": raw,
+                "valid": False,
+                "acceptable": False,
+                "level": "invalid",
+                "message": "Invalid color. Provide a 6-digit hex like #1A2B3C.",
+            }
+        verdict = evaluate_color(
+            hex_value, cfg.contrast_bg,
+            min_lc=cfg.min_contrast_lc, warn_lc=cfg.warn_contrast_lc,
+        )
+        # When the guard is disabled, never block — downgrade reject to warn.
+        acceptable = verdict["acceptable"] or not cfg.enforce_contrast
+        return {
+            "value": hex_value,
+            "valid": True,
+            "bg": cfg.contrast_bg,
+            "lc": verdict["lc"],
+            "score": verdict["score"],
+            "level": verdict["level"],
+            "acceptable": acceptable,
+            "enforced": cfg.enforce_contrast,
+            "message": verdict["message"],
+        }
 
     # ── Chat-color CSS application ───────────────────────────
 
@@ -1430,6 +1479,7 @@ class CommandHandler:
         "account.summary": _handle_account_summary,
         "vanity.set_greeting": _handle_vanity_set_greeting,
         "vanity.set_color": _handle_vanity_set_color,
+        "vanity.check_color": _handle_vanity_check_color,
         "vanity.shoutout": _handle_vanity_shoutout,
         "vanity.resync_colors": _handle_vanity_resync_colors,
         "rank.set": _handle_rank_set,

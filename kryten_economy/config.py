@@ -651,25 +651,10 @@ class VanityItemConfig(BaseModel):
     description: str = ""
 
 
-class ChatColorPaletteEntry(BaseModel):
-    name: str
-    hex: str
-
-
 class ChatColorConfig(BaseModel):
     enabled: bool = True
     cost: int = 7500
-    description: str = "Choose a color for your chat messages from the approved palette"
-    palette: list[ChatColorPaletteEntry] = Field(default_factory=lambda: [
-        ChatColorPaletteEntry(name="Crimson", hex="#DC143C"),
-        ChatColorPaletteEntry(name="Gold", hex="#FFD700"),
-        ChatColorPaletteEntry(name="Emerald", hex="#50C878"),
-        ChatColorPaletteEntry(name="Royal Blue", hex="#4169E1"),
-        ChatColorPaletteEntry(name="Orchid", hex="#DA70D6"),
-        ChatColorPaletteEntry(name="Coral", hex="#FF7F50"),
-        ChatColorPaletteEntry(name="Teal", hex="#008080"),
-        ChatColorPaletteEntry(name="Silver Screen", hex="#C0C0C0"),
-    ])
+    description: str = "Choose a custom color for your chat messages"
 
     # ── CSS application ──────────────────────────────────────
     # When enabled, a purchased chat color is written into the channel's
@@ -690,6 +675,26 @@ class ChatColorConfig(BaseModel):
     # manually-handled colors). The economy bot account is always protected.
     # Matched case-insensitively.
     protected_users: list[str] = Field(default_factory=list)
+
+    # ── Readability guard (perceptual contrast) ──────────────
+    # Chat colors render as light text on a near-black chat background. A
+    # candidate color is scored by combining two scales (see contrast.py):
+    # APCA Lc (perceptual lightness contrast) × a chroma factor that penalises
+    # near-monochromatic reds. This single "readability score" catches BOTH
+    # failure modes on black: too-dark colors (maroon, navy) AND harsh bright
+    # reds (pure red reads badly despite decent APCA). A color scoring below
+    # ``min_contrast_lc`` is refused (no charge); below ``warn_contrast_lc`` it is
+    # allowed but the UI warns that low-vision viewers may struggle. WCAG ratio is
+    # intentionally NOT used (it passes pure red on black). Defaults: reject < 30
+    # (blocks all dark reds, pure red, red-orange, navy, pure blue), warn < 40
+    # (flags deep pink / indian red); pinks, coral, and all normal colors pass.
+    # Chat color is set only via arbitrary 6-digit hex (the web dashboard /
+    # ``vanity.set_color``), so this guard covers every chat-color purchase.
+    enforce_contrast: bool = True
+    contrast_bg: str = "#111111"
+    min_contrast_lc: float = 30.0
+    warn_contrast_lc: float = 40.0
+
 
 
 class ChannelGifConfig(BaseModel):

@@ -81,7 +81,9 @@ async def test_shop_lists_items(
     resp = await handler._cmd_shop("Alice", CH, [])
     assert "Vanity Shop" in resp
     assert "greeting" in resp.lower()
-    assert "color" in resp.lower()
+    # Chat color is set via the web dashboard (arbitrary hex + readability guard),
+    # not the PM shop, so it is intentionally absent from the `buy ...` listing.
+    assert "color" not in resp.lower()
     assert "fortune" in resp.lower()
 
 
@@ -149,40 +151,6 @@ async def test_buy_greeting_too_long(
     long_text = "x" * 201
     resp = await handler._cmd_buy("Alice", CH, ["greeting", long_text])
     assert "too long" in resp.lower() or "200" in resp
-
-
-# ═══════════════════════════════════════════════════════════════
-#  buy color
-# ═══════════════════════════════════════════════════════════════
-
-
-@pytest.mark.asyncio
-async def test_buy_color_valid(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine,
-):
-    """Buying a valid palette color works."""
-    await _seed_account(database, "Alice", 10000)
-    handler = _make_handler(sample_config, database, spending_engine)
-
-    resp = await handler._cmd_buy("Alice", CH, ["color", "Crimson"])
-    assert "#DC143C" in resp or "crimson" in resp.lower()
-
-    color = await database.get_vanity_item("Alice", CH, "chat_color")
-    assert color == "#DC143C"
-
-
-@pytest.mark.asyncio
-async def test_buy_color_invalid(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine,
-):
-    """Unknown color name → rejected."""
-    await _seed_account(database, "Alice", 10000)
-    handler = _make_handler(sample_config, database, spending_engine)
-
-    resp = await handler._cmd_buy("Alice", CH, ["color", "FakeColor"])
-    assert "unknown" in resp.lower() or "available" in resp.lower()
 
 
 # ═══════════════════════════════════════════════════════════════
