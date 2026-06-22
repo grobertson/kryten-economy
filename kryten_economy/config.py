@@ -428,6 +428,15 @@ class RaceTraitsConfig(BaseModel):
     enabled: bool = True
 
 
+class RaceRacerNamesConfig(BaseModel):
+    """Punny driver names assigned to each car per race (web race view)."""
+    enabled: bool = True
+    extra_names: list[str] = Field(
+        default_factory=list,
+        description="Additional driver names appended to the built-in pun pool",
+    )
+
+
 class RaceLLMConfig(BaseModel):
     """LLM back-end for dynamic race commentary generation."""
     endpoint: str = Field(
@@ -496,6 +505,22 @@ class RaceConfig(BaseModel):
         gt=0,
         description="Track length in progress units; must be > 0 (used as a divisor in displays)",
     )
+    target_duration_seconds: float = Field(
+        default=32.0,
+        gt=0,
+        description="Approx wall-clock length of the racing phase (the precomputed timeline is built to last this long)",
+    )
+    frame_interval_seconds: float = Field(
+        default=0.3,
+        gt=0,
+        description="Timeline resolution: seconds between precomputed position frames (browser interpolates between them)",
+    )
+    closeness: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="How tightly the pack stays bunched (0 = spread out, 1 = nail-biter); higher keeps also-rans nearer the winner",
+    )
     min_bet: int = 10
     max_bet: int = 5000
     house_rake_pct: float = 0.05
@@ -507,26 +532,33 @@ class RaceConfig(BaseModel):
     live_betting: RaceLiveBettingConfig = Field(default_factory=RaceLiveBettingConfig)
     random_events: RaceRandomEventConfig = Field(default_factory=RaceRandomEventConfig)
     traits: RaceTraitsConfig = Field(default_factory=RaceTraitsConfig)
+    racer_names: RaceRacerNamesConfig = Field(default_factory=RaceRacerNamesConfig)
     commentary: RaceCommentaryConfig = Field(default_factory=RaceCommentaryConfig)
     odds_profiles: list[RaceOddsProfileConfig] = Field(
         default_factory=lambda: [
             RaceOddsProfileConfig(racers=[
-                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.40, speed_base=1.4),
-                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.30, speed_base=1.2),
-                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.20, speed_base=0.9),
-                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.10, speed_base=0.6),
+                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.30, speed_base=1.4),
+                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.22, speed_base=1.25),
+                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.18, speed_base=1.1),
+                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.12, speed_base=0.95),
+                RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.10, speed_base=0.85),
+                RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.08, speed_base=0.7),
             ]),
             RaceOddsProfileConfig(racers=[
-                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.35, speed_base=1.35),
-                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.25, speed_base=1.1),
-                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.25, speed_base=1.1),
-                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.15, speed_base=0.75),
+                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.26, speed_base=1.35),
+                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.22, speed_base=1.2),
+                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.18, speed_base=1.1),
+                RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.14, speed_base=1.0),
+                RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.11, speed_base=0.9),
+                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.09, speed_base=0.8),
             ]),
             RaceOddsProfileConfig(racers=[
-                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.30, speed_base=1.25),
-                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.30, speed_base=1.25),
-                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.25, speed_base=1.05),
-                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.15, speed_base=0.75),
+                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.24, speed_base=1.3),
+                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.20, speed_base=1.2),
+                RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.18, speed_base=1.1),
+                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.15, speed_base=1.0),
+                RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.13, speed_base=0.9),
+                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.10, speed_base=0.78),
             ]),
         ],
     )

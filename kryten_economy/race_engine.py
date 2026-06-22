@@ -76,6 +76,9 @@ CLOSE_FINISH_MIN_PROGRESS_PCT = 0.7
 # frame is dropped and ``get_race_frame`` returns None.
 FINISHED_FRAME_TTL_SECONDS = 20
 
+# Max commentary lines emitted into a single race's web timeline.
+MAX_WEB_COMMENTARY_LINES = 9
+
 
 @dataclass
 class RacerState:
@@ -86,6 +89,7 @@ class RacerState:
     speed_base: float
     win_chance: float
     trait: RacerTrait
+    name: str = ""  # punny driver name (web race view)
     progress: float = 0.0
     # Temporary modifiers applied by events (ticks remaining → multiplier)
     speed_buff_ticks: int = 0
@@ -129,6 +133,11 @@ class ActiveRace:
     tick_count: int = 0
     leader: str | None = None  # current leader color
     commentary_prepared: bool = False  # LLM story prep kicked off (scheduler)
+    # ── Precomputed race playback (set at close_betting) ──────
+    racing_started_at: datetime | None = None
+    timeline: dict | None = None  # {frame_dt, duration, frames, commentary}
+    winner_color: str | None = None
+    duration: float = 0.0  # racing-phase length in seconds
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -215,6 +224,7 @@ class RaceEngine:
             {
                 "color": r.color,
                 "emoji": r.emoji,
+                "name": r.name,
                 "progress": round(r.progress, 3),
                 "pct": max(0.0, min(100.0, round(r.progress / finish * 100, 1))),
                 "position": positions[r.color],
@@ -236,7 +246,7 @@ class RaceEngine:
                 0, int((race.betting_closes_at - now).total_seconds())
             )
 
-        return {
+        frame = {
             "race_id": race.race_id,
             "channel": race.channel,
             "phase": race.phase.value,
@@ -253,6 +263,18 @@ class RaceEngine:
             "winner": None,
             "payouts": [],
         }
+
+        # While racing, attach the precomputed timeline + how far into it we are
+        # (server clock) so the browser can play it back smoothly and re-sync.
+        if race.phase == RacePhase.RACING and race.timeline:
+            elapsed = 0.0
+            if race.racing_started_at is not None:
+                elapsed = (now - race.racing_started_at).total_seconds()
+            timeline = dict(race.timeline)
+            timeline["elapsed"] = round(max(0.0, elapsed), 2)
+            frame["timeline"] = timeline
+
+        return frame
 
     def get_race_frame(self, channel: str) -> dict | None:
         """Return the current web-view frame for a channel, or None.
@@ -327,6 +349,13 @@ class RaceEngine:
                 win_chance=rp.win_chance,
                 trait=trait,
             )
+
+        # Assign punny driver names (one per car) for the web race view.
+        if cfg.racer_names.enabled:
+            pool = list(race_narratives.DRIVER_NAMES) + list(cfg.racer_names.extra_names)
+            random.shuffle(pool)
+            for i, racer in enumerate(racers.values()):
+                racer.name = pool[i % len(pool)] if pool else ""
 
         now = datetime.now(timezone.utc)
         race = ActiveRace(
@@ -428,7 +457,14 @@ class RaceEngine:
     # ── Transition to racing ──────────────────────────────────
 
     def close_betting(self, channel: str) -> bool:
-        """Transition from BETTING → RACING. Returns False if no bets."""
+        """Transition from BETTING → RACING. Returns False if no bets.
+
+        On success the *entire* race is precomputed here (a position timeline +
+        timed commentary + the winner) so the web race view can play it back
+        smoothly client-side and the scheduler just needs to wait out the
+        duration. The winner is drawn weighted by each racer's win chance, so the
+        displayed odds are exactly meaningful.
+        """
         race = self._active_races.get(channel)
         if not race or race.phase != RacePhase.BETTING:
             return False
@@ -440,7 +476,177 @@ class RaceEngine:
             return False
 
         race.phase = RacePhase.RACING
+        race.racing_started_at = datetime.now(timezone.utc)
+        self._precompute_timeline(race)
         return True
+
+    # ── Precomputed timeline ──────────────────────────────────
+
+    @staticmethod
+    def _pace_weights(trait: RacerTrait, n: int) -> list[float]:
+        """Per-tick pace profile for a racer, shaping *when* it makes ground.
+
+        Trait flavours the curve so the field genuinely shuffles mid-race:
+        sprinters lead early and fade, closers surge late, wildcards lurch
+        about, steady/resilient run even. A little per-tick jitter keeps it
+        organic. Values are relative weights (normalised by the caller).
+        """
+        out: list[float] = []
+        for j in range(n):
+            x = (j + 0.5) / n  # 0→1 across the race
+            if trait == RacerTrait.SPRINTER:
+                base = 1.7 - 1.3 * x
+            elif trait == RacerTrait.CLOSER:
+                base = 0.4 + 1.3 * x
+            elif trait == RacerTrait.WILDCARD:
+                base = random.uniform(0.4, 1.8)
+            else:  # STEADY / RESILIENT
+                base = 1.0
+            out.append(max(0.06, base * random.uniform(0.82, 1.18)))
+        return out
+
+    def _precompute_timeline(self, race: ActiveRace) -> None:
+        """Build the full race: per-frame positions, the winner, and commentary.
+
+        Stores the result on ``race.timeline`` / ``race.winner_color`` /
+        ``race.duration``. Positions are percentages (0–100) of the finish line,
+        one row per frame, in ``race.racers`` order. Exactly one car (the winner)
+        reaches 100%; the rest finish close behind, tuned by ``closeness``.
+        """
+        cfg = self._config.gambling.race
+        dt = cfg.frame_interval_seconds
+        n = max(8, round(cfg.target_duration_seconds / dt))
+        racers = list(race.racers.values())
+
+        # Winner drawn weighted by win chance → odds are exactly meaningful.
+        weights = [max(1e-4, r.win_chance) for r in racers]
+        winner = random.choices(racers, weights=weights, k=1)[0]
+        race.winner_color = winner.color
+
+        # Closeness → how near the also-rans finish to the winner.
+        c = cfg.closeness
+        final_lo = 0.70 + 0.18 * c   # 0.70 … 0.88
+        final_hi = 0.90 + 0.09 * c   # 0.90 … 0.99
+        targets: dict[str, float] = {}
+        for r in racers:
+            targets[r.color] = 100.0 if r is winner else 100.0 * random.uniform(final_lo, final_hi)
+
+        # Monotonic cumulative curves 0 → target (in percent), one per racer.
+        curves: dict[str, list[float]] = {}
+        for r in racers:
+            w = self._pace_weights(r.trait, n)
+            total = sum(w) or 1.0
+            step = [targets[r.color] * (x / total) for x in w]
+            cum = [0.0]
+            for s in step:
+                cum.append(cum[-1] + s)
+            cum[-1] = targets[r.color]  # pin the endpoint exactly
+            curves[r.color] = cum
+
+        # Frames + per-frame leader (for commentary).
+        frames: list[list[float]] = []
+        leaders: list[str] = []
+        for i in range(n + 1):
+            frames.append([round(curves[r.color][i], 2) for r in racers])
+            lead = max(racers, key=lambda r, idx=i: curves[r.color][idx])
+            leaders.append(lead.color)
+
+        commentary = self._build_timeline_commentary(race, leaders, n, dt)
+
+        race.duration = round(n * dt, 2)
+        race.timeline = {
+            "frame_dt": dt,
+            "duration": race.duration,
+            "frames": frames,
+            "commentary": commentary,
+        }
+
+    def _build_timeline_commentary(
+        self,
+        race: ActiveRace,
+        leaders: list[str],
+        n: int,
+        dt: float,
+    ) -> list[dict]:
+        """Timed commentary for the web feed: start, lead changes, close finish.
+
+        Each entry is ``{"t": seconds, "text": str}``. Lead-change and
+        close-finish lines are driver-aware (they name the driver). Variety comes
+        from the static pools even in LLM mode; the LLM story (if any) supplies
+        the start/finish flavour.
+        """
+        out: list[dict] = [{"t": 0.0, "text": self._narrator.web_start_line(race.channel)}]
+        prev = leaders[0]
+        for i in range(1, n + 1):
+            if leaders[i] != prev:
+                prev = leaders[i]
+                if len(out) >= MAX_WEB_COMMENTARY_LINES:
+                    continue
+                r = race.racers[leaders[i]]
+                out.append({
+                    "t": round(i * dt, 2),
+                    "text": self._narrator.web_lead_change_line(r.color, r.emoji, r.name),
+                })
+        # A close-finish flourish in the final stretch.
+        if len(out) < MAX_WEB_COMMENTARY_LINES:
+            out.append({
+                "t": round(max(0.0, (n - 2)) * dt, 2),
+                "text": self._narrator.web_close_finish_line(),
+            })
+        # Winner call at the line.
+        winner = race.racers.get(race.winner_color or "")
+        if winner is not None:
+            out.append({
+                "t": round(n * dt, 2),
+                "text": self._narrator.web_finish_line(race.channel, winner.color, winner.emoji, winner.name),
+            })
+        out.sort(key=lambda e: e["t"])
+        return out
+
+    def _apply_playback_positions(self, race: ActiveRace, elapsed: float) -> None:
+        """Set each racer's ``progress`` to the timeline position at ``elapsed``.
+
+        Keeps the in-memory race in sync with what spectators see (so live-bet
+        cutoffs and any frame fallback reflect the current moment). Interpolates
+        linearly between the two bracketing timeline frames.
+        """
+        tl = race.timeline
+        if not tl:
+            return
+        finish = self._config.gambling.race.finish_distance
+        frames: list[list[float]] = tl["frames"]
+        dt = tl["frame_dt"]
+        racers = list(race.racers.values())
+
+        pos = elapsed / dt if dt > 0 else 0.0
+        i = int(pos)
+        if i >= len(frames) - 1:
+            row = frames[-1]
+        else:
+            frac = pos - i
+            a, b = frames[i], frames[i + 1]
+            row = [a[j] + (b[j] - a[j]) * frac for j in range(len(a))]
+
+        for j, r in enumerate(racers):
+            r.progress = row[j] / 100.0 * finish
+        race.leader = max(racers, key=lambda r: r.progress).color
+
+    def advance_playback(self, channel: str) -> bool:
+        """Advance a racing race to the current wall-clock moment.
+
+        Updates racer positions from the precomputed timeline and returns True
+        once the race's duration has elapsed (time to resolve). Replaces the old
+        per-tick physics for the live game — the simulation is precomputed.
+        """
+        race = self._active_races.get(channel)
+        if not race or race.phase != RacePhase.RACING:
+            return False
+        if not race.timeline or race.racing_started_at is None:
+            return True  # nothing to play back → resolve immediately
+        elapsed = (datetime.now(timezone.utc) - race.racing_started_at).total_seconds()
+        self._apply_playback_positions(race, elapsed)
+        return elapsed >= race.duration
+
 
     # ── Simulation tick ───────────────────────────────────────
 
@@ -540,8 +746,12 @@ class RaceEngine:
 
         race.phase = RacePhase.FINISHED
 
-        # Determine winner (most progress)
-        winner = max(race.racers.values(), key=lambda r: r.progress)
+        # Determine winner. A precomputed race carries its winner (drawn by win
+        # chance); otherwise fall back to furthest progress (legacy/manual path).
+        if race.winner_color and race.winner_color in race.racers:
+            winner = race.racers[race.winner_color]
+        else:
+            winner = max(race.racers.values(), key=lambda r: r.progress)
         winner_color = winner.color
 
         # ── Calculate payouts ────────────────────────────────
@@ -643,7 +853,9 @@ class RaceEngine:
         # show the result for a short while after the race leaves _active_races.
         final_frame = self._build_frame(race)
         final_frame["phase"] = RacePhase.FINISHED.value
-        final_frame["winner"] = {"color": winner_color, "emoji": winner.emoji}
+        final_frame["winner"] = {
+            "color": winner_color, "emoji": winner.emoji, "name": winner.name,
+        }
         final_frame["payouts"] = [
             {"username": bet.username, "net": net}
             for bet, _payout, net in sorted(

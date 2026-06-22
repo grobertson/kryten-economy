@@ -339,19 +339,16 @@ class Scheduler:
                         # pause without blocking other channels with a sleep).
                         continue
 
-                    # Racing phase — advance simulation
+                    # Racing phase — play back the precomputed race.
                     if race.phase == RacePhase.RACING:
-                        # Per-tick play-by-play is intentionally NOT posted to
-                        # public chat — it floods the channel (and tripped the
-                        # bot's antiflood, causing PM drops / reconnects). The
-                        # tick still runs to advance the simulation and detect
-                        # the finish; the live visual race lives on the web view.
-                        # Only the high-signal beats (start, finish + payouts)
-                        # reach chat, so the progress lines/events are discarded.
-                        _progress_lines, _events, finished = self._race_engine.tick(channel)
+                        # The entire race was precomputed at betting close (the
+                        # smooth visual lives on the web view). Here we just
+                        # advance positions to the current wall-clock moment
+                        # (keeps live-bet cutoffs honest) and fire the finish
+                        # once the race duration has elapsed. Nothing is posted
+                        # to chat per tick.
+                        finished = self._race_engine.advance_playback(channel)
 
-                        # Finished! Mark synchronously so subsequent ticks skip
-                        # this race, then offload paced resolution/announcements.
                         if finished:
                             race.phase = RacePhase.FINISHED
                             self._spawn(self._finish_race(channel))

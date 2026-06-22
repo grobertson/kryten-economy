@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-06-22
+
+### Added
+
+- **Precomputed race timeline (smooth web playback).** At betting close the *entire* race is now simulated up front into a position timeline (one row of per-racer percentages every `frame_interval_seconds`, default 0.3s) plus timed commentary and the winner. `race.state`'s racing frame carries this timeline (and the server-clock `elapsed`), so the web race view animates the whole race smoothly client-side and re-syncs to the server clock instead of lurching between coarse polls. New `RaceConfig` knobs: `target_duration_seconds` (race length, default 32s), `frame_interval_seconds` (timeline resolution), `closeness` (0–1, how tightly the pack finishes).
+- **Punny driver names.** Each car is assigned a Car Talk-style pun driver name per race (e.g. *Pikup Andropov*, *Manuel Transmission*) from a built-in pool, surfaced on the web race view and in the winner call. Configurable via `gambling.race.racer_names` (`enabled`, `extra_names`).
+- **Two more racers.** The grid grew from 4 cars to **6** (added Purple and Orange) across all odds profiles, with re-tuned win chances/speeds.
+- **Driver-aware web commentary track.** The timeline includes timed commentary (start, lead changes naming the driver, a close-finish flourish, and the winner call) for a live feed on the web view, independent of the terse chat beats.
+
+### Changed
+
+- **Races are now scripted for drama, not emergent physics.** The winner is drawn weighted by each car's win chance (so displayed odds are exactly meaningful), and the field is shaped by trait-flavoured pace curves and a `closeness` control so also-rans finish near the leader — races feel close instead of blowing out. The scheduler plays back the precomputed timeline (advancing positions to the wall-clock moment and resolving at the end) rather than stepping per-tick physics; nothing is posted to chat per tick (unchanged from 0.11.1).
+
+[0.13.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.13.0
+
 ## [0.12.0] - 2026-06-22
 
 ### Added

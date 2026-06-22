@@ -112,3 +112,83 @@ TRAIT_DESCRIPTIONS: dict[str, str] = {
     "wildcard": "🎲 High variance",
     "resilient": "🛡️ Event-proof",
 }
+
+# ── Driver names ─────────────────────────────────────────────
+# Punny, Car Talk-credits-style driver names, one assigned to each car per
+# race. Kept family-friendly. Admins can extend the pool via
+# ``gambling.race.racer_names.extra_names`` in config.
+
+DRIVER_NAMES: tuple[str, ...] = (
+    "Pikup Andropov",
+    "Carl Burns",
+    "Mario Andmoreti",
+    "Dale Earnhardly",
+    "Lewis Hamburger",
+    "Vin Dieselfumes",
+    "Phil R. Upp",
+    "Otto Mobile",
+    "Manuel Transmission",
+    "Axel Rodd",
+    "Anita Pitstop",
+    "Cam Schaft",
+    "Sparky Plugg",
+    "Rusty Carr",
+    "Burns Rubber",
+    "Sir Lapsalot",
+    "Hairpin Turner",
+    "Donna Brake",
+    "Buck L. Upp",
+    "Gus Gasoline",
+    "Dinah Mite",
+    "Tank Fillerup",
+    "Wheelie Wonka",
+    "Clutch Cargo",
+    "Carrie Onsmoking",
+    "Lap Danforth",
+    "Curtis Slipstream",
+    "Rev Sharpton",
+    "Polly Carbonate",
+    "Skidmark O'Toole",
+    "Wendy Roads",
+    "Dusty Rhodes",
+    "Will Power",
+    "Justin Time",
+    "Hugh L. Pullover",
+    "Reva Lution",
+    "Brake Lightman",
+    "Sandy Speedway",
+    "Cole Driff",
+    "Drew Pole-Position",
+    "Nina Second",
+    "Chase Checkers",
+    "Gripp Tighterson",
+    "Apex Hunter",
+    "Slick Tyrese",
+    "Drift Mackenzie",
+    "Speedy Gonzo",
+    "Torque Vaughn",
+)
+
+# ── Web-view commentary (driver-aware) ───────────────────────
+# Used to build the live commentary feed on the web race view. Supports
+# ``{driver}`` (driver name), ``{racer}`` (colour) and ``{emoji}``.
+
+WEB_LEAD_CHANGE_LINES: tuple[str, ...] = (
+    "{emoji} {driver} muscles the {racer} car into the lead!",
+    "{emoji} {driver} grabs P1 in the {racer} machine!",
+    "Lead change! {emoji} {driver} ({racer}) hits the front!",
+    "{emoji} {driver} sweeps past to lead in {racer}!",
+    "Here comes {emoji} {driver}! The {racer} car takes command!",
+    "{emoji} {driver} finds a gap and seizes the lead for {racer}!",
+    "The crowd roars as {emoji} {driver} storms ahead in {racer}!",
+    "{emoji} {driver} throws the {racer} car to the front!",
+)
+
+WEB_CLOSE_LINES: tuple[str, ...] = (
+    "It's wheel-to-wheel at the front — this is anyone's race!",
+    "Photo finish brewing! The leaders are nose to tail!",
+    "They're side by side heading for the line!",
+    "Paper-thin gaps up front — the crowd is on its feet!",
+    "This one's going down to the wire!",
+)
+

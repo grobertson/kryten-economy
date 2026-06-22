@@ -295,6 +295,11 @@ gambling:
     betting_window_seconds: 20
     tick_interval_seconds: 1.5
     finish_distance: 20.0
+    # The race is precomputed at betting close and played back smoothly on the
+    # web race view. These tune the playback:
+    target_duration_seconds: 32.0   # approx wall-clock length of the race
+    frame_interval_seconds: 0.3     # timeline resolution (browser interpolates)
+    closeness: 0.7                  # 0 = spread out, 1 = nail-biter finishes
     min_bet: 10
     max_bet: 5000
     house_rake_pct: 0.05
@@ -308,6 +313,9 @@ gambling:
       chance_per_tick: 0.08
     traits:
       enabled: true
+    racer_names:
+      enabled: true             # punny driver names on the web race view
+      # extra_names: ["Your Custom Driver"]   # appended to the built-in pool
     commentary:
       mode: "static"            # "static", "llm", or "hybrid"
       max_lines_per_race: 3

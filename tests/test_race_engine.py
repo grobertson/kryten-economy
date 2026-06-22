@@ -10,6 +10,7 @@ import pytest_asyncio
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.race_engine import (
+    RaceBet,
     RaceEngine,
     RacePhase,
     RacerTrait,
@@ -84,7 +85,7 @@ class TestRaceStart:
         race = race_engine.get_active_race(CH)
         assert race is not None
         assert race.phase == RacePhase.BETTING
-        assert len(race.racers) == 4
+        assert len(race.racers) == 6
 
     async def test_start_while_active(self, race_engine: RaceEngine) -> None:
         race_engine.start_race(CH, "Alice")
@@ -115,7 +116,7 @@ class TestBetting:
     ) -> None:
         await _seed_account(database, "Alice")
         race_engine.start_race(CH, "Bob")
-        result = await race_engine.place_bet("Alice", CH, 100, "Purple")
+        result = await race_engine.place_bet("Alice", CH, 100, "Magenta")
         assert "Invalid racer" in result
 
     async def test_insufficient_funds(
@@ -273,7 +274,7 @@ class TestProgressDisplay:
         race = race_engine.get_active_race(CH)
         race.phase = RacePhase.RACING
         lines = race_engine._build_progress_display(race)
-        assert len(lines) == 4
+        assert len(lines) == 6
         for line in lines:
             assert "|" in line
             assert "█" in line or "░" in line
@@ -313,13 +314,13 @@ class TestRaceFrame:
         assert frame["channel"] == CH
         assert frame["winner"] is None
         assert frame["betting_closes_in"] > 0
-        assert len(frame["racers"]) == 4
+        assert len(frame["racers"]) == 6
         # Each racer carries what the browser needs to render it.
         for r in frame["racers"]:
             assert {"color", "emoji", "progress", "pct", "position", "odds"} <= set(r)
             assert 0.0 <= r["pct"] <= 100.0
         # Positions are a 1..N permutation.
-        assert sorted(r["position"] for r in frame["racers"]) == [1, 2, 3, 4]
+        assert sorted(r["position"] for r in frame["racers"]) == [1, 2, 3, 4, 5, 6]
 
     async def test_racing_frame_reflects_progress(
         self, race_engine: RaceEngine, database: EconomyDatabase,
@@ -401,6 +402,108 @@ class TestRaceFrame:
         assert CH not in race_engine._finished_frames
         frame = race_engine.get_race_frame(CH)
         assert frame["phase"] == "betting"
+
+
+@pytest.mark.asyncio
+class TestPrecomputedTimeline:
+    """The scripted-race timeline produced at close_betting."""
+
+    async def _start_with_bet(self, race_engine, database, color=None):
+        await _seed_account(database, "Alice")
+        race_engine.start_race(CH, "Bob")
+        race = race_engine.get_active_race(CH)
+        color = color or list(race.racers.keys())[0]
+        await race_engine.place_bet("Alice", CH, 100, color)
+        return race
+
+    async def test_drivers_assigned(self, race_engine, database) -> None:
+        race = await self._start_with_bet(race_engine, database)
+        names = [r.name for r in race.racers.values()]
+        assert all(names), "every car should have a driver name"
+        assert len(set(names)) == len(names), "driver names should be distinct"
+
+    async def test_close_betting_precomputes(self, race_engine, database) -> None:
+        race = await self._start_with_bet(race_engine, database)
+        assert race_engine.close_betting(CH) is True
+        assert race.timeline is not None
+        assert race.winner_color in race.racers
+        assert race.duration > 0
+        frames = race.timeline["frames"]
+        assert len(frames) >= 8
+        # Each frame has one pct per racer.
+        assert all(len(row) == len(race.racers) for row in frames)
+        # Exactly the winner reaches 100% at the final frame; others are behind.
+        order = list(race.racers.keys())
+        win_idx = order.index(race.winner_color)
+        last = frames[-1]
+        assert last[win_idx] == max(last)
+        assert last[win_idx] >= 99.9
+
+    async def test_winner_respects_win_chance(self, race_engine, database) -> None:
+        """Winner is drawn weighted by win chance — a dominant favourite wins
+        the lion's share over many runs."""
+        await _seed_account(database, "Alice")
+        # Force a lopsided field: one racer with overwhelming win chance.
+        wins = 0
+        for _ in range(40):
+            race_engine._active_races.clear()
+            race_engine.start_race(CH, "Bob")
+            race = race_engine.get_active_race(CH)
+            colors = list(race.racers.keys())
+            fav = colors[0]
+            for c, r in race.racers.items():
+                r.win_chance = 0.9 if c == fav else 0.02
+            race.bets.append(  # bypass debit for the loop
+                RaceBet(username="Alice", color=fav, amount=10, phase="pre")
+            )
+            race_engine.close_betting(CH)
+            if race.winner_color == fav:
+                wins += 1
+        assert wins >= 28  # ~90% expected; allow variance
+
+    async def test_racing_frame_has_timeline(self, race_engine, database) -> None:
+        race = await self._start_with_bet(race_engine, database)
+        race_engine.close_betting(CH)
+        frame = race_engine.get_race_frame(CH)
+        assert frame["phase"] == "racing"
+        tl = frame["timeline"]
+        assert tl["frames"] and tl["frame_dt"] > 0
+        assert tl["duration"] > 0
+        assert "elapsed" in tl
+        assert isinstance(tl["commentary"], list) and tl["commentary"]
+        # First commentary is the start line at t=0.
+        assert tl["commentary"][0]["t"] == 0.0
+
+    async def test_advance_playback_finishes_after_duration(
+        self, race_engine, database,
+    ) -> None:
+        from datetime import timedelta
+
+        race = await self._start_with_bet(race_engine, database)
+        race_engine.close_betting(CH)
+        # Not finished immediately.
+        assert race_engine.advance_playback(CH) is False
+        # Backdate the start so the full duration has elapsed.
+        race.racing_started_at = race.racing_started_at - timedelta(
+            seconds=race.duration + 1,
+        )
+        assert race_engine.advance_playback(CH) is True
+        # Positions snapped to the final frame (winner at the line).
+        assert race.racers[race.winner_color].progress >= (
+            race_engine._config.gambling.race.finish_distance * 0.999
+        )
+
+    async def test_resolve_uses_precomputed_winner(
+        self, race_engine, database,
+    ) -> None:
+        race = await self._start_with_bet(race_engine, database)
+        race_engine.close_betting(CH)
+        expected = race.winner_color
+        result = await race_engine.resolve_race(CH)
+        assert result is not None
+        frame = race_engine.get_race_frame(CH)
+        assert frame["winner"]["color"] == expected
+        assert frame["winner"]["name"]  # driver name carried through
 
 
 class TestRaceConfigValidation:

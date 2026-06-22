@@ -29,9 +29,11 @@ if TYPE_CHECKING:
 
 # Placeholder aliases. Commentary templates document {racer} and {emoji}, but an
 # LLM in llm/hybrid mode occasionally emits an undocumented synonym ({name},
-# {color}, …). Map common aliases onto the two real fields so a stray alias
-# renders the value instead of leaving literal braces in chat.
-_RACER_ALIASES = ("racer", "name", "color", "colour", "racer_name", "runner", "horse", "winner", "leader")
+# {color}, …). Map common aliases onto the real fields so a stray alias renders
+# a value instead of leaving literal braces in chat. {driver}/{name} resolve to
+# the driver name (falling back to the colour when no name is set).
+_RACER_ALIASES = ("racer", "color", "colour", "car", "runner", "horse", "winner", "leader")
+_DRIVER_ALIASES = ("driver", "name", "racer_name")
 _EMOJI_ALIASES = ("emoji", "icon")
 
 
@@ -94,6 +96,9 @@ class RaceNarrator:
         self._lead_change_lines = list(race_narratives.LEAD_CHANGE_LINES)
         self._close_finish_lines = list(race_narratives.CLOSE_FINISH_LINES)
         self._payout_lines = list(race_narratives.PAYOUT_LINES)
+        # Driver-aware lines for the web race-view commentary feed.
+        self._web_lead_change_lines = list(race_narratives.WEB_LEAD_CHANGE_LINES)
+        self._web_close_lines = list(race_narratives.WEB_CLOSE_LINES)
 
     @property
     def max_lines(self) -> int:
@@ -266,20 +271,24 @@ class RaceNarrator:
         self._counts[channel] = self._counts.get(channel, 0) + 1
 
     @staticmethod
-    def _safe_format(template: str, *, racer: str = "", emoji: str = "") -> str:
+    def _safe_format(template: str, *, racer: str = "", emoji: str = "", driver: str = "") -> str:
         """Format a (possibly LLM-authored) commentary template, tolerantly.
 
         In llm/hybrid mode the templates are model-authored and sometimes use an
         undocumented placeholder ({name}, {color}, …) in place of {racer}. Known
-        aliases (see ``_RACER_ALIASES``/``_EMOJI_ALIASES``) are mapped onto the
-        racer/emoji values; any *other* unknown placeholder renders as empty
-        rather than leaving literal braces in chat. A malformed template
-        (unmatched brace, positional ``{}``/``{0}`` field) falls back to its raw
-        text.
+        aliases (see ``_RACER_ALIASES``/``_DRIVER_ALIASES``/``_EMOJI_ALIASES``)
+        are mapped onto the racer/driver/emoji values; any *other* unknown
+        placeholder renders as empty rather than leaving literal braces in chat.
+        ``{driver}``/``{name}`` fall back to the colour when no driver name is
+        set. A malformed template (unmatched brace, positional ``{}``/``{0}``
+        field) falls back to its raw text.
         """
+        driver_value = driver or racer
         values = _ForgivingDict()
         for key in _RACER_ALIASES:
             values[key] = racer
+        for key in _DRIVER_ALIASES:
+            values[key] = driver_value
         for key in _EMOJI_ALIASES:
             values[key] = emoji
         try:
@@ -336,3 +345,29 @@ class RaceNarrator:
     def get_payout_line(self, user: str, payout: str, symbol: str) -> str:
         line = random.choice(self._payout_lines)
         return line.format(user=user, payout=payout, symbol=symbol)
+
+    # ── Web race-view commentary (uncapped, driver-aware) ─────
+    # These feed the web timeline's commentary track. They are independent of
+    # the chat budget (``_can_emit``/``_spend``) — the web view can show more
+    # lines than chat — and always include the driver name when available.
+
+    def web_start_line(self, channel: str) -> str:
+        """Opening line for the web feed (LLM story start, else static)."""
+        return self.get_story_start(channel) or random.choice(self._start_lines)
+
+    def web_lead_change_line(self, racer: str, emoji: str, driver: str = "") -> str:
+        return self._safe_format(
+            random.choice(self._web_lead_change_lines),
+            racer=racer, emoji=emoji, driver=driver,
+        )
+
+    def web_close_finish_line(self) -> str:
+        return random.choice(self._web_close_lines)
+
+    def web_finish_line(self, channel: str, racer: str, emoji: str, driver: str = "") -> str:
+        story = self._stories.get(channel)
+        if story and story.finish:
+            return self._safe_format(story.finish, racer=racer, emoji=emoji, driver=driver)
+        return self._safe_format(
+            random.choice(self._finish_lines), racer=racer, emoji=emoji, driver=driver,
+        )
