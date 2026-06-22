@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-06-22
+
+### Added
+
+- **`race.state` command — a live web race-view feed.** A new read-only request-reply command returns a JSON snapshot of the current race for a channel: `{"active": bool, "frame": {...}|None}`. The frame carries everything a browser needs to animate the race — phase (betting/racing/finished), every racer's position/progress/percent/odds/emoji/trait, the betting countdown, a per-colour bet summary (pool + bettor counts), and, once the race resolves, the winner and top payouts. The live frame is served from the in-memory race state (always current, no persistence), and the final result frame is retained for a short window (`FINISHED_FRAME_TTL_SECONDS`, 20s) after the race ends so the web view can show the outcome before going idle. This is the economy half of moving the race play-by-play off public chat (see 0.11.1) and onto a visual web view; it has no side effects and is safe to poll.
+
+[0.12.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.12.0
+
 ## [0.11.1] - 2026-06-22
 
 ### Fixed

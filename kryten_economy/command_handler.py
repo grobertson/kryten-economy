@@ -631,6 +631,21 @@ class CommandHandler:
         channel = self._channel(request)
         return await self._app.db.get_gambling_summary_global(channel)
 
+    async def _handle_race_state(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Read-only snapshot of the current race for the web race view.
+
+        Returns ``{"active": bool, "frame": {...}|None}``. The frame is the live
+        race state while one is in progress and the final result for a short
+        window after it finishes; ``active`` is False (frame None) when there is
+        no race to show. No side effects — safe to poll.
+        """
+        channel = self._channel(request)
+        engine = self._app.race_engine
+        if engine is None:
+            return {"active": False, "frame": None}
+        frame = engine.get_race_frame(channel)
+        return {"active": frame is not None, "frame": frame}
+
     async def _handle_config_reload(self, request: dict[str, Any]) -> dict[str, Any]:
         config_path = getattr(self._app, "config_path", None)
         if config_path is None:
@@ -1470,6 +1485,7 @@ class CommandHandler:
         "stats.summary": _handle_stats_summary,
         "stats.health": _handle_stats_health,
         "gambling.stats": _handle_gambling_stats,
+        "race.state": _handle_race_state,
         "config.reload": _handle_config_reload,
         "event.start": _handle_event_start,
         "event.stop": _handle_event_stop,

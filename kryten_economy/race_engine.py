@@ -71,6 +71,11 @@ SHORTCUT_BONUS_PCT = 0.15
 CLOSE_FINISH_GAP_PCT = 0.05
 CLOSE_FINISH_MIN_PROGRESS_PCT = 0.7
 
+# How long a finished race's final frame remains queryable (seconds) so the web
+# race view can show the result + payouts before going idle. After this the
+# frame is dropped and ``get_race_frame`` returns None.
+FINISHED_FRAME_TTL_SECONDS = 20
+
 
 @dataclass
 class RacerState:
@@ -169,6 +174,10 @@ class RaceEngine:
         # Active races: channel → ActiveRace
         self._active_races: dict[str, ActiveRace] = {}
 
+        # Final frame of a just-finished race, kept briefly so the web race
+        # view can show the result/payouts: channel → (frame, expires_at).
+        self._finished_frames: dict[str, tuple[dict, datetime]] = {}
+
         # Narrator
         self._narrator = RaceNarrator(
             config.gambling.race.commentary, logger,
@@ -183,6 +192,86 @@ class RaceEngine:
 
     def get_active_race(self, channel: str) -> ActiveRace | None:
         return self._active_races.get(channel)
+
+    # ── Web race-view frames ──────────────────────────────────
+
+    def _build_frame(self, race: ActiveRace) -> dict:
+        """Serialise an in-flight race into a JSON-able snapshot for the web view.
+
+        Captures everything the browser needs to render one moment of the race:
+        phase, every racer's position/progress/odds, the betting countdown, and a
+        per-colour bet summary. The winner/payouts fields stay empty until the
+        race resolves (see ``_finish_frame``).
+        """
+        cfg = self._config.gambling.race
+        finish = cfg.finish_distance
+        now = datetime.now(timezone.utc)
+
+        ranked = sorted(
+            race.racers.values(), key=lambda r: r.progress, reverse=True,
+        )
+        positions = {r.color: i + 1 for i, r in enumerate(ranked)}
+        racers = [
+            {
+                "color": r.color,
+                "emoji": r.emoji,
+                "progress": round(r.progress, 3),
+                "pct": max(0.0, min(100.0, round(r.progress / finish * 100, 1))),
+                "position": positions[r.color],
+                "odds": r.odds_display,
+                "trait": r.trait_label if cfg.traits.enabled else "",
+            }
+            for r in race.racers.values()
+        ]
+
+        bets_by_color: dict[str, dict] = {}
+        for bet in race.bets:
+            slot = bets_by_color.setdefault(bet.color, {"amount": 0, "bettors": 0})
+            slot["amount"] += bet.amount
+            slot["bettors"] += 1
+
+        betting_closes_in = 0
+        if race.phase == RacePhase.BETTING:
+            betting_closes_in = max(
+                0, int((race.betting_closes_at - now).total_seconds())
+            )
+
+        return {
+            "race_id": race.race_id,
+            "channel": race.channel,
+            "phase": race.phase.value,
+            "tick": race.tick_count,
+            "finish_distance": finish,
+            "leader": race.leader,
+            "betting_closes_in": betting_closes_in,
+            "min_bet": cfg.min_bet,
+            "symbol": self._symbol,
+            "racers": racers,
+            "pool": sum(b.amount for b in race.bets),
+            "bettor_count": len(race.bets),
+            "bets_by_color": bets_by_color,
+            "winner": None,
+            "payouts": [],
+        }
+
+    def get_race_frame(self, channel: str) -> dict | None:
+        """Return the current web-view frame for a channel, or None.
+
+        Serves the live frame while a race is in BETTING/RACING, then the final
+        result frame for ``FINISHED_FRAME_TTL_SECONDS`` after it resolves, then
+        None (no active race).
+        """
+        race = self._active_races.get(channel)
+        if race is not None:
+            return self._build_frame(race)
+
+        entry = self._finished_frames.get(channel)
+        if entry is not None:
+            frame, expires_at = entry
+            if datetime.now(timezone.utc) < expires_at:
+                return frame
+            self._finished_frames.pop(channel, None)
+        return None
 
     # ── Commentary (LLM) ──────────────────────────────────────
 
@@ -252,6 +341,9 @@ class RaceEngine:
         )
         self._active_races[channel] = race
         self._narrator.reset_for_race(channel, race.race_id)
+        # Drop any lingering finished-race frame so the web view switches to the
+        # new race immediately instead of showing the previous result.
+        self._finished_frames.pop(channel, None)
 
         self._logger.info(
             "Race %s started in %s by %s (%d racers)",
@@ -546,6 +638,22 @@ class RaceEngine:
             f"Pool {total_pool:,} {self._symbol} · {len(race.bets)} bettor(s)"
         )
         lines.append(" | ".join(summary_bits))
+
+        # Stash a final web-view frame (winner + payouts) so the race view can
+        # show the result for a short while after the race leaves _active_races.
+        final_frame = self._build_frame(race)
+        final_frame["phase"] = RacePhase.FINISHED.value
+        final_frame["winner"] = {"color": winner_color, "emoji": winner.emoji}
+        final_frame["payouts"] = [
+            {"username": bet.username, "net": net}
+            for bet, _payout, net in sorted(
+                winner_payouts, key=lambda wp: wp[1], reverse=True,
+            )
+        ]
+        self._finished_frames[channel] = (
+            final_frame,
+            datetime.now(timezone.utc) + timedelta(seconds=FINISHED_FRAME_TTL_SECONDS),
+        )
 
         # Clear any cached LLM commentary for this channel.
         self._narrator.consume_story(channel)

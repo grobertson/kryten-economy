@@ -96,3 +96,58 @@ class TestCommandHandler:
             "kryten.economy.command",
             handler._handle_command,
         )
+
+
+class TestRaceStateCommand:
+    """race.state — read-only web race-view snapshot."""
+
+    async def test_race_state_no_engine(self, handler: CommandHandler):
+        """With no race engine wired, reports inactive rather than erroring."""
+        handler._app.race_engine = None
+        result = await handler._handle_command({
+            "command": "race.state", "channel": "testchannel",
+        })
+        assert result["success"] is True
+        assert result["data"] == {"active": False, "frame": None}
+
+    async def test_race_state_idle(
+        self, handler: CommandHandler, mock_app: MagicMock, database: EconomyDatabase,
+    ):
+        """With an engine but no race, reports inactive."""
+        from kryten_economy.race_engine import RaceEngine
+
+        mock_app.race_engine = RaceEngine(
+            mock_app.config, database, logging.getLogger("test.race"),
+        )
+        result = await handler._handle_command({
+            "command": "race.state", "channel": "testchannel",
+        })
+        assert result["success"] is True
+        assert result["data"] == {"active": False, "frame": None}
+
+    async def test_race_state_active_returns_frame(
+        self, handler: CommandHandler, mock_app: MagicMock, database: EconomyDatabase,
+    ):
+        """An in-progress race is reported active with a betting-phase frame."""
+        from kryten_economy.race_engine import RaceEngine
+
+        engine = RaceEngine(
+            mock_app.config, database, logging.getLogger("test.race"),
+        )
+        mock_app.race_engine = engine
+        engine.start_race("testchannel", "Alice")
+
+        result = await handler._handle_command({
+            "command": "race.state", "channel": "testchannel",
+        })
+        assert result["success"] is True
+        assert result["data"]["active"] is True
+        assert result["data"]["frame"]["phase"] == "betting"
+        assert result["data"]["frame"]["channel"] == "testchannel"
+
+    async def test_race_state_requires_channel(self, handler: CommandHandler):
+        """Missing channel is a clean error (channel is required)."""
+        result = await handler._handle_command({"command": "race.state"})
+        assert result["success"] is False
+        assert "channel" in result["error"].lower()
+

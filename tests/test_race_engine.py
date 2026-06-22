@@ -298,6 +298,111 @@ class TestBettingDisplay:
         assert race_engine.get_betting_display("nope") == []
 
 
+@pytest.mark.asyncio
+class TestRaceFrame:
+    """The web race-view frame (race.state) — live + finished snapshots."""
+
+    async def test_frame_none_without_race(self, race_engine: RaceEngine) -> None:
+        assert race_engine.get_race_frame(CH) is None
+
+    async def test_betting_frame_shape(self, race_engine: RaceEngine) -> None:
+        race_engine.start_race(CH, "Alice")
+        frame = race_engine.get_race_frame(CH)
+        assert frame is not None
+        assert frame["phase"] == "betting"
+        assert frame["channel"] == CH
+        assert frame["winner"] is None
+        assert frame["betting_closes_in"] > 0
+        assert len(frame["racers"]) == 4
+        # Each racer carries what the browser needs to render it.
+        for r in frame["racers"]:
+            assert {"color", "emoji", "progress", "pct", "position", "odds"} <= set(r)
+            assert 0.0 <= r["pct"] <= 100.0
+        # Positions are a 1..N permutation.
+        assert sorted(r["position"] for r in frame["racers"]) == [1, 2, 3, 4]
+
+    async def test_racing_frame_reflects_progress(
+        self, race_engine: RaceEngine, database: EconomyDatabase,
+    ) -> None:
+        await _seed_account(database, "Alice")
+        race_engine.start_race(CH, "Alice")
+        race = race_engine.get_active_race(CH)
+        color = list(race.racers.keys())[0]
+        await race_engine.place_bet("Alice", CH, 100, color)
+        race.phase = RacePhase.RACING
+        race.racers[color].progress = 5.0  # half of finish_distance 10.0
+        race.tick_count = 3
+
+        frame = race_engine.get_race_frame(CH)
+        assert frame["phase"] == "racing"
+        assert frame["tick"] == 3
+        assert frame["pool"] == 100
+        assert frame["bettor_count"] == 1
+        moved = next(r for r in frame["racers"] if r["color"] == color)
+        assert moved["pct"] == 50.0
+        assert frame["bets_by_color"][color] == {"amount": 100, "bettors": 1}
+
+    async def test_finished_frame_has_winner_and_payouts(
+        self, race_engine: RaceEngine, database: EconomyDatabase,
+    ) -> None:
+        await _seed_account(database, "Alice")
+        race_engine.start_race(CH, "Bob")
+        race = race_engine.get_active_race(CH)
+        winner_color = list(race.racers.keys())[0]
+        await race_engine.place_bet("Alice", CH, 100, winner_color)
+        race.phase = RacePhase.RACING
+        race.racers[winner_color].progress = 25.0
+
+        await race_engine.resolve_race(CH)
+        # Race is no longer active, but the finished frame is retained.
+        assert race_engine.get_active_race(CH) is None
+        frame = race_engine.get_race_frame(CH)
+        assert frame is not None
+        assert frame["phase"] == "finished"
+        assert frame["winner"]["color"] == winner_color
+        assert any(p["username"] == "Alice" for p in frame["payouts"])
+
+    async def test_finished_frame_expires(
+        self, race_engine: RaceEngine, database: EconomyDatabase,
+    ) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        await _seed_account(database, "Alice")
+        race_engine.start_race(CH, "Bob")
+        race = race_engine.get_active_race(CH)
+        winner_color = list(race.racers.keys())[0]
+        await race_engine.place_bet("Alice", CH, 100, winner_color)
+        race.phase = RacePhase.RACING
+        race.racers[winner_color].progress = 25.0
+        await race_engine.resolve_race(CH)
+
+        # Force the stash to be already-expired.
+        frame, _expiry = race_engine._finished_frames[CH]
+        race_engine._finished_frames[CH] = (
+            frame, datetime.now(timezone.utc) - timedelta(seconds=1),
+        )
+        assert race_engine.get_race_frame(CH) is None
+
+    async def test_new_race_clears_finished_frame(
+        self, race_engine: RaceEngine, database: EconomyDatabase,
+    ) -> None:
+        await _seed_account(database, "Alice")
+        race_engine.start_race(CH, "Bob")
+        race = race_engine.get_active_race(CH)
+        winner_color = list(race.racers.keys())[0]
+        await race_engine.place_bet("Alice", CH, 100, winner_color)
+        race.phase = RacePhase.RACING
+        race.racers[winner_color].progress = 25.0
+        await race_engine.resolve_race(CH)
+        assert CH in race_engine._finished_frames
+
+        # Starting a fresh race drops the stale finished frame immediately.
+        race_engine.start_race(CH, "Carol")
+        assert CH not in race_engine._finished_frames
+        frame = race_engine.get_race_frame(CH)
+        assert frame["phase"] == "betting"
+
+
 class TestRaceConfigValidation:
     """Regression for review — finish_distance is a divisor; reject <= 0 at load."""
 
