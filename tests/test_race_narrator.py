@@ -70,7 +70,9 @@ class TestPrepareStory:
         n = _narrator("llm")
         n.reset_for_race(CH, "race-1")
         with patch.object(
-            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+            n,
+            "_generate_llm_story",
+            AsyncMock(return_value=SAMPLE_STORY),
         ):
             await n.prepare_story(CH, "race-1")
         assert n.has_story(CH)
@@ -80,13 +82,17 @@ class TestPrepareStory:
         n = _narrator("llm")
         n.reset_for_race(CH, "race-1")
         with patch.object(
-            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+            n,
+            "_generate_llm_story",
+            AsyncMock(return_value=SAMPLE_STORY),
         ):
             await n.prepare_story(CH, "race-1")
         n.reset_for_race(CH, "race-2")
         # reset clears the story too — re-prepare
         with patch.object(
-            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+            n,
+            "_generate_llm_story",
+            AsyncMock(return_value=SAMPLE_STORY),
         ):
             await n.prepare_story(CH, "race-2")
 
@@ -100,7 +106,9 @@ class TestPrepareStory:
         n = _narrator("hybrid")
         n.reset_for_race(CH, "race-1")
         with patch.object(
-            n, "_generate_llm_story", AsyncMock(return_value=None),
+            n,
+            "_generate_llm_story",
+            AsyncMock(return_value=None),
         ):
             await n.prepare_story(CH, "race-1")
         assert not n.has_story(CH)
@@ -112,7 +120,9 @@ class TestPrepareStory:
         n = _narrator("llm")
         n.reset_for_race(CH, "race-1")
         with patch.object(
-            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+            n,
+            "_generate_llm_story",
+            AsyncMock(return_value=SAMPLE_STORY),
         ):
             await n.prepare_story(CH, "race-1")
         assert n.has_story(CH)
@@ -123,7 +133,10 @@ class TestPrepareStory:
         n = _narrator("llm")
         n.reset_for_race("chan-a", "race-a")
         story_a = RaceStory(
-            start="A start", lead_change="A {racer}", event="A ev", finish="A fin {racer}",
+            start="A start",
+            lead_change="A {racer}",
+            event="A ev",
+            finish="A fin {racer}",
         )
         with patch.object(n, "_generate_llm_story", AsyncMock(return_value=story_a)):
             await n.prepare_story("chan-a", "race-a")
@@ -142,7 +155,7 @@ class TestPrepareStory:
         n.reset_for_race(CH, "race-1")
         bad = RaceStory(
             start="ok",
-            lead_change="{name} took it!",   # alias for {racer}
+            lead_change="{name} took it!",  # alias for {racer}
             event="ev",
             finish="{winner} wins {oops}!",  # {winner} alias, {oops} unknown
         )
@@ -190,7 +203,9 @@ class TestPrepareStory:
         # A new race begins in the same channel before race-1's prep finishes.
         n.reset_for_race(CH, "race-2")
         with patch.object(
-            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+            n,
+            "_generate_llm_story",
+            AsyncMock(return_value=SAMPLE_STORY),
         ):
             await n.prepare_story(CH, "race-1")
         # race-1's late story must not clobber the active race-2.
@@ -202,7 +217,9 @@ class TestPrepareStory:
         n.reset_for_race(CH, "race-1")
         n.consume_story(CH)  # race resolved before prep returned
         with patch.object(
-            n, "_generate_llm_story", AsyncMock(return_value=SAMPLE_STORY),
+            n,
+            "_generate_llm_story",
+            AsyncMock(return_value=SAMPLE_STORY),
         ):
             await n.prepare_story(CH, "race-1")
         assert not n.has_story(CH)

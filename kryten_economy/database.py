@@ -44,7 +44,8 @@ class EconomyDatabase:
         conn = self._get_connection()
         try:
             # ── Sprint 1: Core tables ────────────────────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS accounts (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -69,9 +70,11 @@ class EconomyDatabase:
                     last_active TIMESTAMP,
                     UNIQUE(username, channel)
                 )
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS transactions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL,
@@ -84,9 +87,11 @@ class EconomyDatabase:
                     metadata TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS daily_activity (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -110,7 +115,8 @@ class EconomyDatabase:
                     queues_used INTEGER DEFAULT 0,
                     UNIQUE(username, channel, date)
                 )
-            """)
+            """
+            )
 
             # Sprint 1 indexes
             conn.execute(
@@ -122,16 +128,15 @@ class EconomyDatabase:
                 "ON transactions(created_at)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_transactions_type "
-                "ON transactions(type)"
+                "CREATE INDEX IF NOT EXISTS idx_transactions_type " "ON transactions(type)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_daily_activity_date "
-                "ON daily_activity(date)"
+                "CREATE INDEX IF NOT EXISTS idx_daily_activity_date " "ON daily_activity(date)"
             )
 
             # ── Sprint 2: Streaks & milestones tables ────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS streaks (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -144,9 +149,11 @@ class EconomyDatabase:
                     week_number TEXT,
                     UNIQUE(username, channel)
                 )
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS hourly_milestones (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -158,9 +165,11 @@ class EconomyDatabase:
                     hours_24 BOOLEAN DEFAULT 0,
                     UNIQUE(username, channel, date)
                 )
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS trigger_cooldowns (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -169,10 +178,12 @@ class EconomyDatabase:
                     window_start TIMESTAMP,
                     UNIQUE(username, channel, trigger_id)
                 )
-            """)
+            """
+            )
 
             # ── Sprint 3: Trigger analytics ──────────────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS trigger_analytics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     channel TEXT NOT NULL,
@@ -183,10 +194,12 @@ class EconomyDatabase:
                     total_z_awarded INTEGER DEFAULT 0,
                     UNIQUE(channel, trigger_id, date)
                 )
-            """)
+            """
+            )
 
             # ── Sprint 4: Gambling tables ────────────────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS gambling_stats (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -202,9 +215,11 @@ class EconomyDatabase:
                     net_gambling INTEGER DEFAULT 0,
                     UNIQUE(username, channel)
                 )
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS pending_challenges (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     challenger TEXT NOT NULL,
@@ -215,10 +230,12 @@ class EconomyDatabase:
                     expires_at TIMESTAMP NOT NULL,
                     status TEXT DEFAULT 'pending'
                 )
-            """)
+            """
+            )
 
             # Race results & bets
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS race_results (
                     race_id TEXT PRIMARY KEY,
                     channel TEXT NOT NULL,
@@ -227,8 +244,10 @@ class EconomyDatabase:
                     participants INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-            conn.execute("""
+            """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS race_bets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     race_id TEXT NOT NULL,
@@ -241,10 +260,12 @@ class EconomyDatabase:
                     placed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (race_id) REFERENCES race_results(race_id)
                 )
-            """)
+            """
+            )
 
             # Trivia stats
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS trivia_stats (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -256,10 +277,12 @@ class EconomyDatabase:
                     total_won INTEGER DEFAULT 0,
                     UNIQUE(username, channel)
                 )
-            """)
+            """
+            )
 
             # Blackjack stats
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS blackjack_stats (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -272,10 +295,12 @@ class EconomyDatabase:
                     total_won INTEGER DEFAULT 0,
                     UNIQUE(username, channel)
                 )
-            """)
+            """
+            )
 
             # ── Sprint 5: Spending tables ────────────────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS tip_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sender TEXT NOT NULL,
@@ -284,18 +309,18 @@ class EconomyDatabase:
                     amount INTEGER NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tip_sender ON tip_history(sender, channel)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tip_receiver ON tip_history(receiver, channel)"
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_tip_date ON tip_history(created_at)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tip_date ON tip_history(created_at)")
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS pending_approvals (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL,
@@ -308,7 +333,8 @@ class EconomyDatabase:
                     resolved_by TEXT,
                     resolved_at TIMESTAMP
                 )
-            """)
+            """
+            )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_approval_status ON pending_approvals(status, channel)"
             )
@@ -316,7 +342,8 @@ class EconomyDatabase:
                 "CREATE INDEX IF NOT EXISTS idx_approval_user ON pending_approvals(username, channel)"
             )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS vanity_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL,
@@ -327,13 +354,15 @@ class EconomyDatabase:
                     purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(username, channel, item_type)
                 )
-            """)
+            """
+            )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_vanity_user ON vanity_items(username, channel)"
             )
 
             # ── Sprint 6: Achievements table ─────────────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS achievements (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL,
@@ -342,7 +371,8 @@ class EconomyDatabase:
                     awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(username, channel, achievement_id)
                 )
-            """)
+            """
+            )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_achievements_user ON achievements(username, channel)"
             )
@@ -351,7 +381,8 @@ class EconomyDatabase:
             )
 
             # ── Sprint 7: Bounties table ─────────────────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS bounties (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     creator TEXT NOT NULL,
@@ -365,7 +396,8 @@ class EconomyDatabase:
                     resolved_by TEXT,
                     resolved_at TIMESTAMP
                 )
-            """)
+            """
+            )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_bounties_status ON bounties(channel, status)"
             )
@@ -374,7 +406,8 @@ class EconomyDatabase:
             )
 
             # ── Sprint 8: Snapshots & Bans ───────────────────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS economy_snapshots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     channel TEXT NOT NULL,
@@ -388,13 +421,15 @@ class EconomyDatabase:
                     median_balance INTEGER,
                     participation_rate REAL
                 )
-            """)
+            """
+            )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_snapshots_channel "
                 "ON economy_snapshots(channel, snapshot_time)"
             )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS banned_users (
                     username TEXT NOT NULL,
                     channel TEXT NOT NULL,
@@ -403,10 +438,12 @@ class EconomyDatabase:
                     reason TEXT,
                     UNIQUE(username, channel)
                 )
-            """)
+            """
+            )
 
             # ── Sprint 5: Queue spend requests (idempotency) ─
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS queue_spend_requests (
                     request_id TEXT PRIMARY KEY,
                     username TEXT NOT NULL,
@@ -418,20 +455,23 @@ class EconomyDatabase:
                     refunded INTEGER DEFAULT 0,
                     refunded_at TEXT
                 )
-            """)
+            """
+            )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_qsr_username_channel "
                 "ON queue_spend_requests(username, channel)"
             )
 
             # ── Service metrics (lifetime counters) ───────
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS service_metrics (
                     key TEXT PRIMARY KEY,
                     value INTEGER NOT NULL DEFAULT 0,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
 
             # ── Migrations: add columns if missing ────────
             try:
@@ -444,9 +484,7 @@ class EconomyDatabase:
             # (CREATE TABLE IF NOT EXISTS won't alter an existing table).
             for _col in ("total_races", "total_trivias", "total_blackjacks"):
                 try:
-                    conn.execute(
-                        f"ALTER TABLE gambling_stats ADD COLUMN {_col} INTEGER DEFAULT 0"
-                    )
+                    conn.execute(f"ALTER TABLE gambling_stats ADD COLUMN {_col} INTEGER DEFAULT 0")
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
@@ -547,9 +585,7 @@ class EconomyDatabase:
         def _sync() -> dict[str, int]:
             conn = self._get_connection()
             try:
-                rows = conn.execute(
-                    "SELECT key, value FROM service_metrics"
-                ).fetchall()
+                rows = conn.execute("SELECT key, value FROM service_metrics").fetchall()
                 return {row["key"]: int(row["value"]) for row in rows}
             finally:
                 conn.close()
@@ -686,7 +722,16 @@ class EconomyDatabase:
                 conn.execute(
                     "INSERT INTO transactions (username, channel, amount, type, reason, trigger_id, "
                     "related_user, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (username, channel, amount, tx_type, reason, trigger_id, related_user, metadata),
+                    (
+                        username,
+                        channel,
+                        amount,
+                        tx_type,
+                        reason,
+                        trigger_id,
+                        related_user,
+                        metadata,
+                    ),
                 )
                 conn.commit()
                 row = conn.execute(
@@ -728,7 +773,16 @@ class EconomyDatabase:
                 conn.execute(
                     "INSERT INTO transactions (username, channel, amount, type, reason, trigger_id, "
                     "related_user, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (username, channel, -amount, tx_type, reason, trigger_id, related_user, metadata),
+                    (
+                        username,
+                        channel,
+                        -amount,
+                        tx_type,
+                        reason,
+                        trigger_id,
+                        related_user,
+                        metadata,
+                    ),
                 )
                 conn.commit()
                 row = conn.execute(
@@ -792,7 +846,10 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def get_daily_minutes_present(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> int:
         """Return minutes_present from daily_activity for a given day, or 0."""
         loop = asyncio.get_running_loop()
@@ -1023,9 +1080,7 @@ class EconomyDatabase:
     #  Sprint 2: Hourly Milestones
     # ══════════════════════════════════════════════════════════
 
-    async def get_or_create_hourly_milestones(
-        self, username: str, channel: str, date: str
-    ) -> dict:
+    async def get_or_create_hourly_milestones(self, username: str, channel: str, date: str) -> dict:
         """Return milestones row for today, creating if needed."""
         loop = asyncio.get_running_loop()
 
@@ -1129,9 +1184,7 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
-    async def apply_decay_batch(
-        self, channel: str, rate: float, exempt_below: int
-    ) -> int:
+    async def apply_decay_batch(self, channel: str, rate: float, exempt_below: int) -> int:
         """Apply decay to all qualifying accounts. Returns total decay collected."""
         loop = asyncio.get_running_loop()
 
@@ -1169,7 +1222,10 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def get_or_create_daily_activity(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> dict:
         """Return daily_activity row as dict, creating with defaults if needed."""
         loop = asyncio.get_running_loop()
@@ -1193,7 +1249,10 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def mark_first_message_claimed(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         """Set first_message_claimed = 1 for the given day."""
         loop = asyncio.get_running_loop()
@@ -1215,7 +1274,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_messages_sent(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1236,7 +1298,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_long_messages(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1257,7 +1322,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_gifs_posted(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1278,7 +1346,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_kudos_given(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1299,7 +1370,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_kudos_received(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1320,7 +1394,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_laughs_received(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1341,7 +1418,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_bot_interactions(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1362,7 +1442,11 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def set_daily_unique_emotes(
-        self, username: str, channel: str, date: str, count: int,
+        self,
+        username: str,
+        channel: str,
+        date: str,
+        count: int,
     ) -> None:
         """Set unique_emotes_used to given count."""
         loop = asyncio.get_running_loop()
@@ -1388,7 +1472,10 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def get_trigger_cooldown(
-        self, username: str, channel: str, trigger_id: str,
+        self,
+        username: str,
+        channel: str,
+        trigger_id: str,
     ) -> dict | None:
         """Return cooldown row, or None if not exists."""
         loop = asyncio.get_running_loop()
@@ -1407,8 +1494,12 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def set_trigger_cooldown(
-        self, username: str, channel: str, trigger_id: str,
-        count: int, window_start: Any,
+        self,
+        username: str,
+        channel: str,
+        trigger_id: str,
+        count: int,
+        window_start: Any,
     ) -> None:
         """Insert or replace cooldown entry."""
         loop = asyncio.get_running_loop()
@@ -1431,7 +1522,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_trigger_cooldown(
-        self, username: str, channel: str, trigger_id: str,
+        self,
+        username: str,
+        channel: str,
+        trigger_id: str,
     ) -> None:
         """Increment count by 1 for an existing cooldown entry."""
         loop = asyncio.get_running_loop()
@@ -1455,7 +1549,11 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def record_trigger_analytics(
-        self, channel: str, trigger_id: str, date: str, z_awarded: int,
+        self,
+        channel: str,
+        trigger_id: str,
+        date: str,
+        z_awarded: int,
     ) -> None:
         """Upsert trigger analytics: increment hit_count, add to total_z_awarded."""
         loop = asyncio.get_running_loop()
@@ -1481,8 +1579,13 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def update_gambling_stats(
-        self, username: str, channel: str, game_type: str,
-        net: int, biggest_win: int = 0, biggest_loss: int = 0,
+        self,
+        username: str,
+        channel: str,
+        game_type: str,
+        net: int,
+        biggest_win: int = 0,
+        biggest_loss: int = 0,
     ) -> None:
         """Upsert gambling stats for a game outcome."""
         loop = asyncio.get_running_loop()
@@ -1492,8 +1595,12 @@ class EconomyDatabase:
             conn = self._get_connection()
             try:
                 valid_cols = {
-                    "total_spins", "total_flips", "total_challenges",
-                    "total_heists", "total_races", "total_trivias",
+                    "total_spins",
+                    "total_flips",
+                    "total_challenges",
+                    "total_heists",
+                    "total_races",
+                    "total_trivias",
                     "total_blackjacks",
                 }
                 if game_col not in valid_cols:
@@ -1533,7 +1640,11 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def increment_lifetime_gambled(
-        self, username: str, channel: str, wagered: int, payout: int,
+        self,
+        username: str,
+        channel: str,
+        wagered: int,
+        payout: int,
     ) -> None:
         """Update lifetime_gambled_in and lifetime_gambled_out on accounts."""
         loop = asyncio.get_running_loop()
@@ -1582,8 +1693,12 @@ class EconomyDatabase:
     # ── Race DB helpers ───────────────────────────────────────
 
     async def save_race_result(
-        self, race_id: str, channel: str, winner_color: str,
-        total_pool: int, participants: int,
+        self,
+        race_id: str,
+        channel: str,
+        winner_color: str,
+        total_pool: int,
+        participants: int,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1602,8 +1717,14 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def save_race_bet(
-        self, race_id: str, username: str, channel: str,
-        color: str, amount: int, payout: int, phase: str,
+        self,
+        race_id: str,
+        username: str,
+        channel: str,
+        color: str,
+        amount: int,
+        payout: int,
+        phase: str,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1636,7 +1757,11 @@ class EconomyDatabase:
                     "FROM race_bets WHERE username = ? AND channel = ?",
                     (username, channel),
                 ).fetchone()
-                return dict(row) if row else {"races_bet": 0, "total_wagered": 0, "total_won": 0, "biggest_win": 0}
+                return (
+                    dict(row)
+                    if row
+                    else {"races_bet": 0, "total_wagered": 0, "total_won": 0, "biggest_win": 0}
+                )
             finally:
                 conn.close()
 
@@ -1645,8 +1770,13 @@ class EconomyDatabase:
     # ── Trivia DB helpers ─────────────────────────────────────
 
     async def update_trivia_stats(
-        self, username: str, channel: str, *, correct: bool,
-        wagered: int, won: int,
+        self,
+        username: str,
+        channel: str,
+        *,
+        correct: bool,
+        wagered: int,
+        won: int,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -1700,8 +1830,13 @@ class EconomyDatabase:
     # ── Blackjack DB helpers ──────────────────────────────────
 
     async def update_blackjack_stats(
-        self, username: str, channel: str, *,
-        outcome: str, wagered: int, won: int,
+        self,
+        username: str,
+        channel: str,
+        *,
+        outcome: str,
+        wagered: int,
+        won: int,
     ) -> None:
         """outcome: 'win', 'loss', 'push', 'blackjack'"""
         loop = asyncio.get_running_loop()
@@ -1722,8 +1857,22 @@ class EconomyDatabase:
                     "wins = wins + ?, losses = losses + ?, "
                     "pushes = pushes + ?, blackjacks = blackjacks + ?, "
                     "total_wagered = total_wagered + ?, total_won = total_won + ?",
-                    (username, channel, win_inc, loss_inc, push_inc, bj_inc, wagered, won,
-                     win_inc, loss_inc, push_inc, bj_inc, wagered, won),
+                    (
+                        username,
+                        channel,
+                        win_inc,
+                        loss_inc,
+                        push_inc,
+                        bj_inc,
+                        wagered,
+                        won,
+                        win_inc,
+                        loss_inc,
+                        push_inc,
+                        bj_inc,
+                        wagered,
+                        won,
+                    ),
                 )
                 conn.commit()
             finally:
@@ -1750,8 +1899,12 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def create_challenge(
-        self, challenger: str, target: str, channel: str,
-        wager: int, expires_at: Any,
+        self,
+        challenger: str,
+        target: str,
+        channel: str,
+        wager: int,
+        expires_at: Any,
     ) -> int:
         """Insert a pending challenge. Returns the challenge ID."""
         loop = asyncio.get_running_loop()
@@ -1773,7 +1926,10 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_pending_challenge(
-        self, challenger: str, target: str, channel: str,
+        self,
+        challenger: str,
+        target: str,
+        channel: str,
     ) -> dict | None:
         """Return the latest pending challenge between two users, or None."""
         loop = asyncio.get_running_loop()
@@ -1794,7 +1950,9 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_pending_challenge_for_target(
-        self, target: str, channel: str,
+        self,
+        target: str,
+        channel: str,
     ) -> dict | None:
         """Return the latest pending challenge targeting a user, or None."""
         loop = asyncio.get_running_loop()
@@ -1877,7 +2035,12 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_gambled(
-        self, username: str, channel: str, date: str, wagered: int, payout: int,
+        self,
+        username: str,
+        channel: str,
+        date: str,
+        wagered: int,
+        payout: int,
     ) -> None:
         """Update daily_activity.z_gambled_in += wagered, z_gambled_out += payout."""
         loop = asyncio.get_running_loop()
@@ -1903,7 +2066,11 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def record_tip(
-        self, sender: str, receiver: str, channel: str, amount: int,
+        self,
+        sender: str,
+        receiver: str,
+        channel: str,
+        amount: int,
     ) -> None:
         """Record a tip in tip_history."""
         loop = asyncio.get_running_loop()
@@ -1962,7 +2129,11 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def set_vanity_item(
-        self, username: str, channel: str, item_type: str, value: str,
+        self,
+        username: str,
+        channel: str,
+        item_type: str,
+        value: str,
     ) -> None:
         """Upsert a vanity item, keyed case-insensitively on the username.
 
@@ -2009,7 +2180,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def deactivate_vanity_item(
-        self, username: str, channel: str, item_type: str,
+        self,
+        username: str,
+        channel: str,
+        item_type: str,
     ) -> None:
         """Mark a vanity item inactive.
 
@@ -2034,7 +2208,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def get_vanity_item(
-        self, username: str, channel: str, item_type: str,
+        self,
+        username: str,
+        channel: str,
+        item_type: str,
     ) -> str | None:
         """Get active vanity value, or None.
 
@@ -2104,7 +2281,9 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def get_all_vanity_items(
-        self, username: str, channel: str,
+        self,
+        username: str,
+        channel: str,
     ) -> dict[str, str]:
         """Return all active vanity items as {item_type: value}.
 
@@ -2171,8 +2350,12 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def create_pending_approval(
-        self, username: str, channel: str, approval_type: str,
-        data: dict | str, cost: int,
+        self,
+        username: str,
+        channel: str,
+        approval_type: str,
+        data: dict | str,
+        cost: int,
     ) -> int:
         """Insert a pending approval. Returns the approval ID."""
         loop = asyncio.get_running_loop()
@@ -2194,7 +2377,9 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_pending_approvals(
-        self, channel: str, approval_type: str | None = None,
+        self,
+        channel: str,
+        approval_type: str | None = None,
     ) -> list[dict]:
         """List pending approvals, optionally filtered by type."""
         loop = asyncio.get_running_loop()
@@ -2222,7 +2407,10 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def resolve_approval(
-        self, approval_id: int, resolved_by: str, approved: bool,
+        self,
+        approval_id: int,
+        resolved_by: str,
+        approved: bool,
     ) -> dict | None:
         """Resolve an approval. Returns the approval record or None."""
         loop = asyncio.get_running_loop()
@@ -2293,7 +2481,11 @@ class EconomyDatabase:
                 ts = row["created_at"]
                 if isinstance(ts, str):
                     # Parse ISO or SQLite timestamp format
-                    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S+00:00"):
+                    for fmt in (
+                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%dT%H:%M:%S%z",
+                        "%Y-%m-%dT%H:%M:%S+00:00",
+                    ):
                         try:
                             return datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
                         except ValueError:
@@ -2310,7 +2502,10 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def get_recent_transactions(
-        self, username: str, channel: str, limit: int = 10,
+        self,
+        username: str,
+        channel: str,
+        limit: int = 10,
     ) -> list[dict]:
         """Return last N transactions for a user, newest first."""
         loop = asyncio.get_running_loop()
@@ -2400,7 +2595,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def increment_daily_queues_used(
-        self, username: str, channel: str, date: str,
+        self,
+        username: str,
+        channel: str,
+        date: str,
     ) -> None:
         """Increment queues_used in daily_activity, creating row if needed."""
         loop = asyncio.get_running_loop()
@@ -2745,8 +2943,12 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def create_bounty(
-        self, creator: str, channel: str, description: str,
-        amount: int, expires_at: str | None = None,
+        self,
+        creator: str,
+        channel: str,
+        description: str,
+        amount: int,
+        expires_at: str | None = None,
     ) -> int:
         """Create a bounty. Returns bounty ID."""
         loop = asyncio.get_running_loop()
@@ -2803,7 +3005,11 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def claim_bounty(
-        self, bounty_id: int, channel: str, winner: str, resolved_by: str,
+        self,
+        bounty_id: int,
+        channel: str,
+        winner: str,
+        resolved_by: str,
     ) -> bool:
         """Claim a bounty. Returns True if updated."""
         loop = asyncio.get_running_loop()
@@ -2825,7 +3031,10 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def cancel_bounty(
-        self, bounty_id: int, channel: str, resolved_by: str,
+        self,
+        bounty_id: int,
+        channel: str,
+        resolved_by: str,
     ) -> bool:
         """Cancel a bounty. Returns True if updated."""
         loop = asyncio.get_running_loop()
@@ -2896,15 +3105,29 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_daily_top(
-        self, channel: str, date: str, field: str, limit: int = 1,
+        self,
+        channel: str,
+        date: str,
+        field: str,
+        limit: int = 1,
     ) -> list[dict]:
         """Get top users for a specific daily_activity field."""
         loop = asyncio.get_running_loop()
         valid_fields = {
-            "messages_sent", "long_messages", "gifs_posted", "unique_emotes_used",
-            "kudos_given", "kudos_received", "laughs_received", "bot_interactions",
-            "z_earned", "z_spent", "z_gambled_in", "z_gambled_out",
-            "minutes_present", "minutes_active",
+            "messages_sent",
+            "long_messages",
+            "gifs_posted",
+            "unique_emotes_used",
+            "kudos_given",
+            "kudos_received",
+            "laughs_received",
+            "bot_interactions",
+            "z_earned",
+            "z_spent",
+            "z_gambled_in",
+            "z_gambled_out",
+            "minutes_present",
+            "minutes_active",
         }
 
         def _sync() -> list[dict]:
@@ -2925,15 +3148,29 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_daily_threshold_qualifiers(
-        self, channel: str, date: str, field: str, threshold: int,
+        self,
+        channel: str,
+        date: str,
+        field: str,
+        threshold: int,
     ) -> list[str]:
         """Get usernames where daily_activity.{field} >= threshold."""
         loop = asyncio.get_running_loop()
         valid_fields = {
-            "messages_sent", "long_messages", "gifs_posted", "unique_emotes_used",
-            "kudos_given", "kudos_received", "laughs_received", "bot_interactions",
-            "z_earned", "z_spent", "z_gambled_in", "z_gambled_out",
-            "minutes_present", "minutes_active",
+            "messages_sent",
+            "long_messages",
+            "gifs_posted",
+            "unique_emotes_used",
+            "kudos_given",
+            "kudos_received",
+            "laughs_received",
+            "bot_interactions",
+            "z_earned",
+            "z_spent",
+            "z_gambled_in",
+            "z_gambled_out",
+            "minutes_present",
+            "minutes_active",
         }
 
         def _sync() -> list[str]:
@@ -3028,7 +3265,11 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def increment_trigger_analytics(
-        self, channel: str, trigger_id: str, date: str, z_awarded: int,
+        self,
+        channel: str,
+        trigger_id: str,
+        date: str,
+        z_awarded: int,
     ) -> None:
         """Upsert trigger analytics: increment hit_count and total_z_awarded."""
         loop = asyncio.get_running_loop()
@@ -3067,7 +3308,10 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_trigger_analytics_range(
-        self, channel: str, start_date: str, end_date: str,
+        self,
+        channel: str,
+        start_date: str,
+        end_date: str,
     ) -> list[dict]:
         """Get trigger analytics across a date range."""
         loop = asyncio.get_running_loop()
@@ -3092,7 +3336,11 @@ class EconomyDatabase:
     # ══════════════════════════════════════════════════════════
 
     async def ban_user(
-        self, username: str, channel: str, banned_by: str, reason: str = "",
+        self,
+        username: str,
+        channel: str,
+        banned_by: str,
+        reason: str = "",
     ) -> bool:
         """Ban a user from the economy. Returns True if newly banned."""
         loop = asyncio.get_running_loop()
@@ -3208,16 +3456,26 @@ class EconomyDatabase:
                     "FROM daily_activity WHERE channel = ? AND date = ?",
                     (channel, date),
                 ).fetchone()
-                return dict(row) if row else {
-                    "z_earned": 0, "z_spent": 0, "z_gambled_in": 0, "z_gambled_out": 0,
-                }
+                return (
+                    dict(row)
+                    if row
+                    else {
+                        "z_earned": 0,
+                        "z_spent": 0,
+                        "z_gambled_in": 0,
+                        "z_gambled_out": 0,
+                    }
+                )
             finally:
                 conn.close()
 
         return await loop.run_in_executor(None, _sync)
 
     async def get_weekly_totals(
-        self, channel: str, start_date: str, end_date: str,
+        self,
+        channel: str,
+        start_date: str,
+        end_date: str,
     ) -> dict:
         """Aggregate totals across a week for admin digest."""
         loop = asyncio.get_running_loop()
@@ -3234,16 +3492,27 @@ class EconomyDatabase:
                     "FROM daily_activity WHERE channel = ? AND date >= ? AND date <= ?",
                     (channel, start_date, end_date),
                 ).fetchone()
-                return dict(row) if row else {
-                    "z_earned": 0, "z_spent": 0, "z_gambled_in": 0, "z_gambled_out": 0,
-                }
+                return (
+                    dict(row)
+                    if row
+                    else {
+                        "z_earned": 0,
+                        "z_spent": 0,
+                        "z_gambled_in": 0,
+                        "z_gambled_out": 0,
+                    }
+                )
             finally:
                 conn.close()
 
         return await loop.run_in_executor(None, _sync)
 
     async def get_top_earners_range(
-        self, channel: str, start_date: str, end_date: str, limit: int = 5,
+        self,
+        channel: str,
+        start_date: str,
+        end_date: str,
+        limit: int = 5,
     ) -> list[dict]:
         """Top earners over a date range."""
         loop = asyncio.get_running_loop()
@@ -3264,7 +3533,11 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_top_spenders_range(
-        self, channel: str, start_date: str, end_date: str, limit: int = 5,
+        self,
+        channel: str,
+        start_date: str,
+        end_date: str,
+        limit: int = 5,
     ) -> list[dict]:
         """Top spenders over a date range."""
         loop = asyncio.get_running_loop()
@@ -3302,9 +3575,16 @@ class EconomyDatabase:
                     "WHERE gs.channel = ?",
                     (channel,),
                 ).fetchone()
-                return dict(row) if row else {
-                    "total_in": 0, "total_out": 0, "active_gamblers": 0, "total_games": 0,
-                }
+                return (
+                    dict(row)
+                    if row
+                    else {
+                        "total_in": 0,
+                        "total_out": 0,
+                        "active_gamblers": 0,
+                        "total_games": 0,
+                    }
+                )
             finally:
                 conn.close()
 
@@ -3328,7 +3608,9 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_participation_rate(
-        self, channel: str, total_channel_users: int,
+        self,
+        channel: str,
+        total_channel_users: int,
     ) -> float:
         """Percentage of channel users who have economy accounts."""
         if total_channel_users <= 0:
@@ -3358,8 +3640,14 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def log_transaction(
-        self, username: str, channel: str, amount: int, *,
-        tx_type: str = "admin", trigger_id: str = "", reason: str = "",
+        self,
+        username: str,
+        channel: str,
+        amount: int,
+        *,
+        tx_type: str = "admin",
+        trigger_id: str = "",
+        reason: str = "",
         metadata: str | None = None,
     ) -> None:
         """Insert a transaction log entry without modifying balance."""
@@ -3380,7 +3668,10 @@ class EconomyDatabase:
         await loop.run_in_executor(None, _sync)
 
     async def get_pending_approval(
-        self, username: str, channel: str, approval_type: str,
+        self,
+        username: str,
+        channel: str,
+        approval_type: str,
     ) -> dict | None:
         """Get a single pending approval for a user+type."""
         loop = asyncio.get_running_loop()
@@ -3403,7 +3694,8 @@ class EconomyDatabase:
     # ── Sprint 9: Batch Presence Credit ──────────────────────
 
     async def batch_credit_presence(
-        self, credits: list[tuple[str, str, int]],
+        self,
+        credits: list[tuple[str, str, int]],
     ) -> None:
         """Batch-credit presence Z in a single transaction.
 

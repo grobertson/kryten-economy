@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.bounty_manager import BountyManager
 from kryten_economy.config import EconomyConfig
@@ -188,9 +186,17 @@ async def test_event_stop_none_active(database: EconomyDatabase, mock_client: Ma
 @pytest.mark.asyncio
 async def test_claim_bounty_valid(database: EconomyDatabase, mock_client: MagicMock):
     """Admin claims bounty for user."""
-    cfg = _make_config(bounties={"enabled": True, "min_amount": 100, "max_amount": 50000,
-                                  "max_open_per_user": 3, "default_expiry_hours": 168,
-                                  "expiry_refund_percent": 50, "description_max_length": 200})
+    cfg = _make_config(
+        bounties={
+            "enabled": True,
+            "min_amount": 100,
+            "max_amount": 50000,
+            "max_open_per_user": 3,
+            "default_expiry_hours": 168,
+            "expiry_refund_percent": 50,
+            "description_max_length": 200,
+        }
+    )
     bounty_mgr = BountyManager(cfg, database, mock_client, logging.getLogger("test"))
 
     await _seed_account(database, "Creator", 5000)
@@ -215,9 +221,17 @@ async def test_claim_bounty_valid(database: EconomyDatabase, mock_client: MagicM
 @pytest.mark.asyncio
 async def test_claim_bounty_non_admin(database: EconomyDatabase, mock_client: MagicMock):
     """Rank < 4 → rejected."""
-    cfg = _make_config(bounties={"enabled": True, "min_amount": 100, "max_amount": 50000,
-                                  "max_open_per_user": 3, "default_expiry_hours": 168,
-                                  "expiry_refund_percent": 50, "description_max_length": 200})
+    cfg = _make_config(
+        bounties={
+            "enabled": True,
+            "min_amount": 100,
+            "max_amount": 50000,
+            "max_open_per_user": 3,
+            "default_expiry_hours": 168,
+            "expiry_refund_percent": 50,
+            "description_max_length": 200,
+        }
+    )
     bounty_mgr = BountyManager(cfg, database, mock_client, logging.getLogger("test"))
 
     await _seed_account(database, "Creator", 5000)

@@ -10,7 +10,6 @@ import pytest
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.rank_engine import RankEngine
-from conftest import make_config_dict
 
 CH = "testchannel"
 
@@ -21,7 +20,9 @@ async def _seed_account(db: EconomyDatabase, username: str, balance: int = 0) ->
         await db.credit(username, CH, balance, tx_type="test", reason="seed")
 
 
-def _make_engine(config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> RankEngine:
+def _make_engine(
+    config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> RankEngine:
     return RankEngine(config, database, mock_client, logging.getLogger("test"))
 
 
@@ -31,7 +32,9 @@ def _make_engine(config: EconomyConfig, database: EconomyDatabase, mock_client: 
 
 
 @pytest.mark.asyncio
-async def test_initial_rank(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_initial_rank(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """0 lifetime → 'Extra'."""
     engine = _make_engine(sample_config, database, mock_client)
     idx, tier = engine.get_rank_for_lifetime(0)
@@ -40,7 +43,9 @@ async def test_initial_rank(sample_config: EconomyConfig, database: EconomyDatab
 
 
 @pytest.mark.asyncio
-async def test_rank_at_threshold(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_rank_at_threshold(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Exactly 1000 → 'Grip'."""
     engine = _make_engine(sample_config, database, mock_client)
     idx, tier = engine.get_rank_for_lifetime(1000)
@@ -49,7 +54,9 @@ async def test_rank_at_threshold(sample_config: EconomyConfig, database: Economy
 
 
 @pytest.mark.asyncio
-async def test_rank_promotion(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_rank_promotion(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Lifetime crosses threshold → promote, PM, announce."""
     engine = _make_engine(sample_config, database, mock_client)
     await _seed_account(database, "Alice")
@@ -69,7 +76,9 @@ async def test_rank_promotion(sample_config: EconomyConfig, database: EconomyDat
 
 
 @pytest.mark.asyncio
-async def test_no_promotion_same_rank(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_no_promotion_same_rank(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Already at correct rank → no action."""
     engine = _make_engine(sample_config, database, mock_client)
     await _seed_account(database, "Alice")
@@ -86,7 +95,9 @@ async def test_no_promotion_same_rank(sample_config: EconomyConfig, database: Ec
 
 
 @pytest.mark.asyncio
-async def test_max_rank(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_max_rank(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """'Studio Mogul' → no next tier."""
     engine = _make_engine(sample_config, database, mock_client)
     # Studio Mogul is the last tier index
@@ -98,7 +109,9 @@ async def test_max_rank(sample_config: EconomyConfig, database: EconomyDatabase,
 
 
 @pytest.mark.asyncio
-async def test_cytube_auto_promotion(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_cytube_auto_promotion(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Reaching tier with cytube_level_promotion → calls safe_set_channel_rank()."""
     engine = _make_engine(sample_config, database, mock_client)
     await _seed_account(database, "Alice")
@@ -111,9 +124,13 @@ async def test_cytube_auto_promotion(sample_config: EconomyConfig, database: Eco
 
 
 @pytest.mark.asyncio
-async def test_cytube_promotion_failure_logged(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_cytube_promotion_failure_logged(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Rank change fails → logged, no crash."""
-    mock_client.safe_set_channel_rank = AsyncMock(return_value={"success": False, "error": "test fail"})
+    mock_client.safe_set_channel_rank = AsyncMock(
+        return_value={"success": False, "error": "test fail"}
+    )
     engine = _make_engine(sample_config, database, mock_client)
     await _seed_account(database, "Alice")
     await database.credit("Alice", CH, 5_000_000, tx_type="earn", reason="test")
@@ -125,19 +142,26 @@ async def test_cytube_promotion_failure_logged(sample_config: EconomyConfig, dat
 
 
 @pytest.mark.asyncio
-async def test_rank_discount_calculation(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_rank_discount_calculation(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Tier 5 discount = 5 × 0.02 = 0.10 (10%)."""
     from kryten_economy.spending_engine import SpendingEngine
 
     spending = SpendingEngine(
-        sample_config, database, MagicMock(), logging.getLogger("test"),
+        sample_config,
+        database,
+        MagicMock(),
+        logging.getLogger("test"),
     )
     discount = spending.get_rank_discount(5)
     assert abs(discount - 0.10) < 0.001
 
 
 @pytest.mark.asyncio
-async def test_rank_perks_parsed(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_rank_perks_parsed(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Extra queue slots parsed from perk strings."""
     # Best Boy (index 4) has "+1 queue/day"
     tiers = sample_config.ranks.tiers
@@ -148,7 +172,9 @@ async def test_rank_perks_parsed(sample_config: EconomyConfig, database: Economy
 
 
 @pytest.mark.asyncio
-async def test_rain_multiplier_parsed(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+async def test_rain_multiplier_parsed(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     """Rain bonus parsed from perk strings."""
     # Gaffer (index 3) has "rain drops +20%"
     tiers = sample_config.ranks.tiers

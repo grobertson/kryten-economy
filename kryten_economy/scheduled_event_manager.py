@@ -104,11 +104,16 @@ class ScheduledEventManager:
 
         # Register multiplier
         self._multiplier.set_scheduled_event(
-            channel, event_cfg.name, event_cfg.multiplier, end_time,
+            channel,
+            event_cfg.name,
+            event_cfg.multiplier,
+            end_time,
         )
 
         self._logger.info(
-            "Scheduled event started: %s in %s", event_cfg.name, channel,
+            "Scheduled event started: %s in %s",
+            event_cfg.name,
+            channel,
         )
 
         # Announce start
@@ -134,7 +139,9 @@ class ScheduledEventManager:
         self._multiplier.clear_scheduled_event(channel)
 
         self._logger.info(
-            "Scheduled event ended: %s in %s", event_cfg.name, channel,
+            "Scheduled event ended: %s in %s",
+            event_cfg.name,
+            channel,
         )
 
         if event_cfg.announce:

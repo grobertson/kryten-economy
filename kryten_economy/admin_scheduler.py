@@ -87,7 +87,9 @@ class AdminScheduler:
         data = {
             "total_accounts": await self._db.get_all_accounts_count(channel),
             "total_z_circulation": await self._db.get_total_circulation(channel),
-            "active_economy_users_today": await self._db.get_active_economy_users_today(channel, today),
+            "active_economy_users_today": await self._db.get_active_economy_users_today(
+                channel, today
+            ),
             "z_earned_today": totals.get("z_earned", 0),
             "z_spent_today": totals.get("z_spent", 0),
             "z_gambled_net_today": totals.get("z_gambled_out", 0) - totals.get("z_gambled_in", 0),
@@ -108,7 +110,10 @@ class AdminScheduler:
             now = datetime.now(timezone.utc)
             days_until_monday = (7 - now.weekday()) % 7
             target = now.replace(
-                hour=send_hour, minute=0, second=0, microsecond=0,
+                hour=send_hour,
+                minute=0,
+                second=0,
+                microsecond=0,
             ) + timedelta(days=days_until_monday)
             if target <= now:
                 target += timedelta(weeks=1)
@@ -135,9 +140,8 @@ class AdminScheduler:
         snapshots = await self._db.get_snapshot_history(channel, days=7)
 
         if snapshots and len(snapshots) >= 2:
-            circ_change = (
-                snapshots[-1].get("total_z_circulation", 0)
-                - snapshots[0].get("total_z_circulation", 0)
+            circ_change = snapshots[-1].get("total_z_circulation", 0) - snapshots[0].get(
+                "total_z_circulation", 0
             )
         else:
             circ_change = 0
@@ -168,10 +172,7 @@ class AdminScheduler:
             total_out = gambling.get("total_out", 0)
             edge = ((total_in - total_out) / total_in * 100) if total_in > 0 else 0
             lines.append("")
-            lines.append(
-                f"🎰 {gambling['total_games']:,} games, "
-                f"edge: {edge:.1f}%"
-            )
+            lines.append(f"🎰 {gambling['total_games']:,} games, " f"edge: {edge:.1f}%")
 
         digest_msg = "\n".join(lines)
 

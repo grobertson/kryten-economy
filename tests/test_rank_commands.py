@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -27,7 +27,10 @@ def _cfg_with_achievements(achievements: list[dict] | None = None) -> EconomyCon
 
 
 async def _seed_account(
-    db: EconomyDatabase, username: str, balance: int = 0, lifetime: int = 0,
+    db: EconomyDatabase,
+    username: str,
+    balance: int = 0,
+    lifetime: int = 0,
 ) -> None:
     await db.get_or_create_account(username, CH)
     if balance > 0:
@@ -75,7 +78,11 @@ async def test_rank_shows_progress(
     await _seed_account(database, "Alice", lifetime=500)
 
     handler = _make_handler(
-        sample_config, database, mock_client, spending_engine, rank_engine,
+        sample_config,
+        database,
+        mock_client,
+        spending_engine,
+        rank_engine,
     )
     response = await handler._cmd_rank("Alice", CH, [])
 
@@ -96,7 +103,11 @@ async def test_rank_max_tier(
     await _seed_account(database, "Alice", lifetime=5_000_000)
 
     handler = _make_handler(
-        sample_config, database, mock_client, spending_engine, rank_engine,
+        sample_config,
+        database,
+        mock_client,
+        spending_engine,
+        rank_engine,
     )
     response = await handler._cmd_rank("Alice", CH, [])
 
@@ -121,7 +132,11 @@ async def test_profile_self(
     await _seed_account(database, "Alice", balance=5000, lifetime=2000)
 
     handler = _make_handler(
-        sample_config, database, mock_client, spending_engine, rank_engine,
+        sample_config,
+        database,
+        mock_client,
+        spending_engine,
+        rank_engine,
     )
     response = await handler._cmd_profile("Alice", CH, [])
 
@@ -142,7 +157,11 @@ async def test_profile_other_user(
     await _seed_account(database, "Alice", balance=3000, lifetime=1000)
 
     handler = _make_handler(
-        sample_config, database, mock_client, spending_engine, rank_engine,
+        sample_config,
+        database,
+        mock_client,
+        spending_engine,
+        rank_engine,
     )
     response = await handler._cmd_profile("Bob", CH, ["@Alice"])
 
@@ -160,7 +179,11 @@ async def test_profile_not_found(
     """Unknown user → error."""
     rank_engine = RankEngine(sample_config, database, mock_client, logging.getLogger("test"))
     handler = _make_handler(
-        sample_config, database, mock_client, spending_engine, rank_engine,
+        sample_config,
+        database,
+        mock_client,
+        spending_engine,
+        rank_engine,
     )
     response = await handler._cmd_profile("Bob", CH, ["@NonExistent"])
 
@@ -178,22 +201,24 @@ async def test_achievements_earned_and_progress(
     mock_client: MagicMock,
 ):
     """Shows earned + in-progress."""
-    cfg = _cfg_with_achievements([
-        {
-            "id": "earn_10",
-            "description": "Earn 10 Z",
-            "condition": {"type": "lifetime_earned", "threshold": 10},
-            "reward": 5,
-            "hidden": False,
-        },
-        {
-            "id": "earn_1000",
-            "description": "Earn 1000 Z",
-            "condition": {"type": "lifetime_earned", "threshold": 1000},
-            "reward": 50,
-            "hidden": False,
-        },
-    ])
+    cfg = _cfg_with_achievements(
+        [
+            {
+                "id": "earn_10",
+                "description": "Earn 10 Z",
+                "condition": {"type": "lifetime_earned", "threshold": 10},
+                "reward": 5,
+                "hidden": False,
+            },
+            {
+                "id": "earn_1000",
+                "description": "Earn 1000 Z",
+                "condition": {"type": "lifetime_earned", "threshold": 1000},
+                "reward": 50,
+                "hidden": False,
+            },
+        ]
+    )
     await _seed_account(database, "Alice", lifetime=50)
 
     # Award the first achievement manually
@@ -213,15 +238,17 @@ async def test_achievements_hidden_count(
     mock_client: MagicMock,
 ):
     """Shows hidden count hint."""
-    cfg = _cfg_with_achievements([
-        {
-            "id": "secret_1",
-            "description": "Secret",
-            "condition": {"type": "lifetime_earned", "threshold": 99999},
-            "reward": 100,
-            "hidden": True,
-        },
-    ])
+    cfg = _cfg_with_achievements(
+        [
+            {
+                "id": "secret_1",
+                "description": "Secret",
+                "condition": {"type": "lifetime_earned", "threshold": 99999},
+                "reward": 100,
+                "hidden": True,
+            },
+        ]
+    )
     await _seed_account(database, "Alice")
 
     handler = _make_handler(cfg, database, mock_client)
@@ -243,10 +270,6 @@ async def test_top_earners(
     mock_client: MagicMock,
 ):
     """Formatted leaderboard."""
-    from datetime import datetime, timezone
-
-    # Seed daily_activity for today
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     await _seed_account(database, "Alice", lifetime=300)
     await _seed_account(database, "Bob", lifetime=500)
 

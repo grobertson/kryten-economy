@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from . import heist_narratives
@@ -109,7 +109,9 @@ class HeistNarrator:
 
     def _pick_static_win(self, payout: str, symbol: str, user: str) -> str:
         return random.choice(self._win_lines).format(
-            payout=payout, symbol=symbol, user=user,
+            payout=payout,
+            symbol=symbol,
+            user=user,
         )
 
     def _pick_static_lose(self, user: str, symbol: str) -> str:
@@ -175,13 +177,17 @@ class HeistNarrator:
                             body = await resp.text()
                             self._log.warning(
                                 "LLM narrator HTTP %s (attempt %d): %s",
-                                resp.status, attempt + 1, body[:200],
+                                resp.status,
+                                attempt + 1,
+                                body[:200],
                             )
                             continue
                         data = await resp.json()
             except Exception as exc:
                 self._log.warning(
-                    "LLM narrator error (attempt %d): %s", attempt + 1, exc,
+                    "LLM narrator error (attempt %d): %s",
+                    attempt + 1,
+                    exc,
                 )
                 continue
 
@@ -210,7 +216,9 @@ class HeistNarrator:
                 self._log.warning("LLM narrator returned incomplete story")
             except (json.JSONDecodeError, KeyError, IndexError) as exc:
                 self._log.warning(
-                    "LLM narrator parse error (attempt %d): %s", attempt + 1, exc,
+                    "LLM narrator parse error (attempt %d): %s",
+                    attempt + 1,
+                    exc,
                 )
                 continue
 
@@ -231,9 +239,7 @@ class HeistNarrator:
         if mode in ("llm", "hybrid"):
             self._cached_story = await self._generate_llm_story()
             if self._cached_story is None and mode == "llm":
-                self._log.warning(
-                    "LLM narrator failed with mode='llm'; will use static fallback"
-                )
+                self._log.warning("LLM narrator failed with mode='llm'; will use static fallback")
 
     # ──────────────────────────────────────────────────────────
     #  Public API — called by GamblingEngine
@@ -244,7 +250,9 @@ class HeistNarrator:
         user = random.choice(participants)
         if self._cached_story and self._cached_story.scenario:
             return self._cached_story.scenario.format(
-                user=user, payout="", symbol="",
+                user=user,
+                payout="",
+                symbol="",
             )
         return self._pick_static_scenario(user)
 
@@ -252,7 +260,9 @@ class HeistNarrator:
         if self._cached_story and self._cached_story.win:
             try:
                 return self._cached_story.win.format(
-                    payout=payout, symbol=symbol, user=user,
+                    payout=payout,
+                    symbol=symbol,
+                    user=user,
                 )
             except KeyError:
                 return self._cached_story.win
@@ -262,7 +272,9 @@ class HeistNarrator:
         if self._cached_story and self._cached_story.lose:
             try:
                 return self._cached_story.lose.format(
-                    user=user, symbol=symbol, payout="",
+                    user=user,
+                    symbol=symbol,
+                    payout="",
                 )
             except KeyError:
                 return self._cached_story.lose
@@ -272,7 +284,9 @@ class HeistNarrator:
         if self._cached_story and self._cached_story.push:
             try:
                 return self._cached_story.push.format(
-                    user=user, symbol=symbol, payout="",
+                    user=user,
+                    symbol=symbol,
+                    payout="",
                 )
             except KeyError:
                 return self._cached_story.push

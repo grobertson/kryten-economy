@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import logging
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.admin_scheduler import AdminScheduler
@@ -62,16 +58,19 @@ async def test_latest_snapshot(
     database: EconomyDatabase,
 ):
     """Most recent snapshot returned."""
-    await database.write_snapshot(CH, {
-        "total_accounts": 10,
-        "total_z_circulation": 5000,
-        "active_economy_users_today": 3,
-        "z_earned_today": 500,
-        "z_spent_today": 200,
-        "z_gambled_net_today": -50,
-        "median_balance": 400,
-        "participation_rate": 30.0,
-    })
+    await database.write_snapshot(
+        CH,
+        {
+            "total_accounts": 10,
+            "total_z_circulation": 5000,
+            "active_economy_users_today": 3,
+            "z_earned_today": 500,
+            "z_spent_today": 200,
+            "z_gambled_net_today": -50,
+            "median_balance": 400,
+            "participation_rate": 30.0,
+        },
+    )
 
     latest = await database.get_latest_snapshot(CH)
     assert latest is not None

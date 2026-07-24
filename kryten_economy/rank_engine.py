@@ -73,7 +73,9 @@ class RankEngine:
         return None
 
     async def check_rank_promotion(
-        self, username: str, channel: str,
+        self,
+        username: str,
+        channel: str,
     ) -> RankTierConfig | None:
         """Check if a user should be promoted. Returns new tier or ``None``.
 
@@ -98,7 +100,9 @@ class RankEngine:
             # Auto CyTube level promotion if configured
             if new_tier.cytube_level_promotion is not None:
                 await self._promote_cytube_level(
-                    username, channel, new_tier.cytube_level_promotion,
+                    username,
+                    channel,
+                    new_tier.cytube_level_promotion,
                 )
 
             return new_tier
@@ -215,7 +219,9 @@ class RankEngine:
         """Promote user to a CyTube level via kryten-py wrapper."""
         try:
             result = await self._client.safe_set_channel_rank(
-                channel, username, level,
+                channel,
+                username,
+                level,
             )
             if result.get("success"):
                 self._logger.info(

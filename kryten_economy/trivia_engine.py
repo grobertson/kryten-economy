@@ -98,8 +98,12 @@ class TriviaEngine:
 
         # Account validation (shared across all gambling engines)
         error = await validate_gamble_account(
-            self._db, self._config.gambling, self._symbol,
-            initiator, channel, wager,
+            self._db,
+            self._config.gambling,
+            self._symbol,
+            initiator,
+            channel,
+            wager,
         )
         if error:
             return error
@@ -137,7 +141,9 @@ class TriviaEngine:
 
         self._logger.info(
             "Trivia started in %s by %s (difficulty=%s)",
-            channel, initiator, question.difficulty,
+            channel,
+            initiator,
+            question.difficulty,
         )
         return f"trivia_started:{channel}"
 
@@ -173,8 +179,12 @@ class TriviaEngine:
         # Account validation (shared; includes the min-account-age gate that
         # start_trivia also enforces, so joining can't bypass it)
         error = await validate_gamble_account(
-            self._db, self._config.gambling, self._symbol,
-            username, channel, amount,
+            self._db,
+            self._config.gambling,
+            self._symbol,
+            username,
+            channel,
+            amount,
         )
         if error:
             return error
@@ -268,19 +278,28 @@ class TriviaEngine:
                 payout = int(wager * multiplier)
                 net = payout - wager
                 await self._db.credit(
-                    username, channel, payout,
+                    username,
+                    channel,
+                    payout,
                     tx_type="gamble_win",
                     trigger_id="gambling.trivia",
                     reason=f"Trivia correct: {q.correct_answer}",
                 )
                 await self._db.update_gambling_stats(
-                    username, channel, "trivia", net=net,
+                    username,
+                    channel,
+                    "trivia",
+                    net=net,
                     biggest_win=max(0, net),
                 )
                 await self._db.increment_lifetime_gambled(username, channel, wager, payout)
                 await self._db.increment_daily_gambled(username, channel, today, wager, payout)
                 await self._db.update_trivia_stats(
-                    username, channel, correct=True, wagered=wager, won=payout,
+                    username,
+                    channel,
+                    correct=True,
+                    wagered=wager,
+                    won=payout,
                 )
                 per_user_pm[username] = (
                     f"✅ Correct! The answer was {correct_letter}) {q.correct_answer}. "
@@ -291,13 +310,20 @@ class TriviaEngine:
                 # Wrong or no answer
                 reason = "no answer" if user_answer is None else f"answered {user_answer}"
                 await self._db.update_gambling_stats(
-                    username, channel, "trivia", net=-wager,
+                    username,
+                    channel,
+                    "trivia",
+                    net=-wager,
                     biggest_loss=wager,
                 )
                 await self._db.increment_lifetime_gambled(username, channel, wager, 0)
                 await self._db.increment_daily_gambled(username, channel, today, wager, 0)
                 await self._db.update_trivia_stats(
-                    username, channel, correct=False, wagered=wager, won=0,
+                    username,
+                    channel,
+                    correct=False,
+                    wagered=wager,
+                    won=0,
                 )
                 per_user_pm[username] = (
                     f"❌ Wrong! The answer was {correct_letter}) {q.correct_answer}. "
@@ -326,9 +352,9 @@ class TriviaEngine:
         if not trivia:
             return None
 
-        remaining = max(0, int(
-            (trivia.answer_deadline - datetime.now(timezone.utc)).total_seconds()
-        ))
+        remaining = max(
+            0, int((trivia.answer_deadline - datetime.now(timezone.utc)).total_seconds())
+        )
 
         display = trivia.question.format_display()
         display += f"\n\nBet now: !trivia <amount> — Answer in chat within {remaining}s!"

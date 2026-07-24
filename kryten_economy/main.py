@@ -175,7 +175,9 @@ class EconomyApp:
         try:
             items = await get_playlist(channel) or []
         except Exception:
-            self.logger.debug("Could not resolve playlist state for queued-by lookup in %s", channel)
+            self.logger.debug(
+                "Could not resolve playlist state for queued-by lookup in %s", channel
+            )
             return None
 
         for row in items:
@@ -195,7 +197,11 @@ class EconomyApp:
         return None
 
     async def _announce_now_playing_credit(
-        self, channel: str, title: str, uid: int, event,
+        self,
+        channel: str,
+        title: str,
+        uid: int,
+        event,
     ) -> None:
         """Announce now-playing item credit to the user who queued it."""
         if not self.client:
@@ -347,9 +353,7 @@ class EconomyApp:
         )
 
         # Build ignored-user set for event handlers
-        self._ignored_users: set[str] = {
-            u.lower() for u in (self.config.ignored_users or [])
-        }
+        self._ignored_users: set[str] = {u.lower() for u in (self.config.ignored_users or [])}
 
         # 4. Create KrytenClient
         self.client = KrytenClient(self.config)
@@ -385,11 +389,15 @@ class EconomyApp:
                 self.events_processed += 1
                 rank = getattr(event, "rank", 0) or 0
                 self.presence_tracker.update_user_rank(event.channel, event.username, rank)
-                is_genuine = await self.presence_tracker.handle_user_join(event.username, event.channel)
+                is_genuine = await self.presence_tracker.handle_user_join(
+                    event.username, event.channel
+                )
                 if is_genuine:
                     await self.greeting_handler.on_user_join(event.channel, event.username)
             except Exception:
-                self.logger.exception("adduser handler error for %s", getattr(event, "username", "?"))
+                self.logger.exception(
+                    "adduser handler error for %s", getattr(event, "username", "?")
+                )
 
         @self.client.on("userleave")
         async def handle_leave(event):
@@ -397,7 +405,9 @@ class EconomyApp:
                 self.events_processed += 1
                 await self.presence_tracker.handle_user_leave(event.username, event.channel)
             except Exception:
-                self.logger.exception("userleave handler error for %s", getattr(event, "username", "?"))
+                self.logger.exception(
+                    "userleave handler error for %s", getattr(event, "username", "?")
+                )
 
         @self.client.on("pm")
         async def handle_pm(event):
@@ -420,14 +430,22 @@ class EconomyApp:
                 if username.lower() in self._ignored_users:
                     return
 
+                # Filter shadow-muted users — CyTube silently delivers their messages
+                # to all clients but sets shadow=True; only moderators should see them.
+                if event.shadow:
+                    return
+
                 # Bot's own messages — detect bot_interaction
                 if username.lower() == self.config.bot.username.lower():
                     last_human = self.channel_state.get_last_non_self_message_user(
-                        channel, username,
+                        channel,
+                        username,
                     )
                     if last_human and self.config.social_triggers.bot_interaction.enabled:
                         await self.earning_engine.evaluate_bot_interaction(
-                            last_human, channel, timestamp,
+                            last_human,
+                            channel,
+                            timestamp,
                         )
                     return
 
@@ -448,16 +466,21 @@ class EconomyApp:
                                 amt = int(parts[1])
                             except ValueError:
                                 await self.pm_handler._send_pm(
-                                    channel, username,
+                                    channel,
+                                    username,
                                     "Usage: !race <amount> <color>",
                                 )
                             else:
                                 await self.pm_handler.handle_chat_race_bet(
-                                    username, channel, amt, parts[2],
+                                    username,
+                                    channel,
+                                    amt,
+                                    parts[2],
                                 )
                         else:
                             await self.pm_handler._send_pm(
-                                channel, username,
+                                channel,
+                                username,
                                 "Usage: !race <amount> <color>",
                             )
 
@@ -468,16 +491,20 @@ class EconomyApp:
                                 wager = int(parts[1])
                             except ValueError:
                                 await self.pm_handler._send_pm(
-                                    channel, username,
+                                    channel,
+                                    username,
                                     "Usage: !trivia <wager>",
                                 )
                             else:
                                 await self.pm_handler.handle_chat_trivia_bet(
-                                    username, channel, wager,
+                                    username,
+                                    channel,
+                                    wager,
                                 )
                         else:
                             await self.pm_handler._send_pm(
-                                channel, username,
+                                channel,
+                                username,
                                 "Usage: !trivia <wager>",
                             )
 
@@ -485,7 +512,8 @@ class EconomyApp:
                     elif cmd in ("hit", "stand", "double"):
                         game = (
                             self.blackjack_engine.get_game(username, channel)
-                            if self.blackjack_engine else None
+                            if self.blackjack_engine
+                            else None
                         )
                         if game:
                             handler = {
@@ -496,26 +524,38 @@ class EconomyApp:
                             if handler:
                                 result = await handler(username, channel, [])
                                 await self.pm_handler._send_pm(
-                                    channel, username, result,
+                                    channel,
+                                    username,
+                                    result,
                                 )
 
                 # Trivia answer detection (any chat msg during active trivia)
                 if self.pm_handler is not None:
                     await self.pm_handler.handle_chat_trivia_answer(
-                        username, channel, message,
+                        username,
+                        channel,
+                        message,
                     )
 
                 # Main earning pipeline
                 outcome = await self.earning_engine.evaluate_chat_message(
-                    username, channel, message, timestamp,
+                    username,
+                    channel,
+                    message,
+                    timestamp,
                 )
                 if outcome.total_earned > 0:
                     self.logger.debug(
                         "Chat triggers for %s in %s: %d Z from %d triggers",
-                        username, channel, outcome.total_earned, len(outcome.awarded_triggers),
+                        username,
+                        channel,
+                        outcome.total_earned,
+                        len(outcome.awarded_triggers),
                     )
             except Exception:
-                self.logger.exception("chatmsg handler error for %s", getattr(event, "username", "?"))
+                self.logger.exception(
+                    "chatmsg handler error for %s", getattr(event, "username", "?")
+                )
 
         @self.client.on("changemedia")
         async def handle_changemedia(event):
@@ -531,22 +571,34 @@ class EconomyApp:
                 connected = self.presence_tracker.get_connected_users(channel)
 
                 previous = self.channel_state.handle_media_change(
-                    channel, title, media_id, float(duration), connected, timestamp,
+                    channel,
+                    title,
+                    media_id,
+                    float(duration),
+                    connected,
+                    timestamp,
                 )
 
                 if previous is not None:
                     rewarded = await self.earning_engine.evaluate_survived_full_media(
-                        channel, previous, connected, timestamp,
+                        channel,
+                        previous,
+                        connected,
+                        timestamp,
                     )
                     if rewarded:
                         self.logger.info(
                             "survived_full_media: %d users rewarded for '%s' in %s",
-                            len(rewarded), previous.title, channel,
+                            len(rewarded),
+                            previous.title,
+                            channel,
                         )
 
                 await self._announce_now_playing_credit(channel, title, uid, event)
             except Exception:
-                self.logger.exception("changemedia handler error for %s", getattr(event, "channel", "?"))
+                self.logger.exception(
+                    "changemedia handler error for %s", getattr(event, "channel", "?")
+                )
 
         # 6. Connect to NATS
         await self.client.connect()
@@ -557,20 +609,26 @@ class EconomyApp:
             try:
                 bucket = f"kryten_{ch_cfg.channel}_userlist"
                 users = await self.client.kv_get(
-                    bucket, "users", default=[], parse_json=True,
+                    bucket,
+                    "users",
+                    default=[],
+                    parse_json=True,
                 )
                 if users:
                     seeded = await self.presence_tracker.seed_initial_users(
-                        ch_cfg.channel, users,
+                        ch_cfg.channel,
+                        users,
                     )
                     self.logger.info(
                         "Seeded %d users from KV for %s",
-                        seeded, ch_cfg.channel,
+                        seeded,
+                        ch_cfg.channel,
                     )
             except Exception as exc:
                 self.logger.warning(
                     "Could not seed userlist for %s: %s",
-                    ch_cfg.channel, exc,
+                    ch_cfg.channel,
+                    exc,
                 )
 
         # 6c. Restore persisted metrics counters from SQLite

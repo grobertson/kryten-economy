@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from kryten_economy.config import EconomyConfig
-from kryten_economy.multiplier_engine import ActiveMultiplier, MultiplierEngine
+from kryten_economy.multiplier_engine import MultiplierEngine
 from conftest import make_config_dict
 
 CH = "testchannel"
@@ -36,11 +36,15 @@ def _make_engine(
 async def test_no_multipliers():
     """Normal time → combined = 1.0, empty list."""
     # Use a config with multipliers all disabled
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": False},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     combined, active = engine.get_combined_multiplier(CH)
@@ -51,11 +55,20 @@ async def test_no_multipliers():
 @pytest.mark.asyncio
 async def test_off_peak_active():
     """During off-peak hours → 2.0×."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": True, "days": [0, 1, 2, 3, 4, 5, 6], "hours": list(range(24)), "multiplier": 2.0},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {
+                    "enabled": True,
+                    "days": [0, 1, 2, 3, 4, 5, 6],
+                    "hours": list(range(24)),
+                    "multiplier": 2.0,
+                },
+                "high_population": {"enabled": False},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     combined, active = engine.get_combined_multiplier(CH)
@@ -68,11 +81,15 @@ async def test_off_peak_active():
 async def test_off_peak_inactive():
     """Outside off-peak → not in list."""
     # Set off-peak to only day 6 (invalid for most test runs)
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": True, "days": [], "hours": [], "multiplier": 2.0},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": True, "days": [], "hours": [], "multiplier": 2.0},
+                "high_population": {"enabled": False},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     combined, active = engine.get_combined_multiplier(CH)
@@ -83,11 +100,20 @@ async def test_off_peak_inactive():
 @pytest.mark.asyncio
 async def test_population_active():
     """10+ users → 1.5×."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": True, "min_users": 10, "multiplier": 1.5, "hidden": True},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {
+                    "enabled": True,
+                    "min_users": 10,
+                    "multiplier": 1.5,
+                    "hidden": True,
+                },
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     users = {f"user{i}" for i in range(12)}
     engine = _make_engine(cfg, users)
 
@@ -101,11 +127,15 @@ async def test_population_active():
 @pytest.mark.asyncio
 async def test_population_below():
     """5 users → not in list."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": True, "min_users": 10, "multiplier": 1.5},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": True, "min_users": 10, "multiplier": 1.5},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     users = {f"user{i}" for i in range(5)}
     engine = _make_engine(cfg, users)
 
@@ -117,11 +147,18 @@ async def test_population_below():
 @pytest.mark.asyncio
 async def test_holiday_match():
     """Dec 25 → 3.0× Christmas."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": True, "dates": [{"date": "12-25", "name": "Christmas", "multiplier": 3.0}]},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": False},
+                "holidays": {
+                    "enabled": True,
+                    "dates": [{"date": "12-25", "name": "Christmas", "multiplier": 3.0}],
+                },
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     # Mock the current date to be Dec 25
@@ -139,11 +176,18 @@ async def test_holiday_match():
 @pytest.mark.asyncio
 async def test_holiday_no_match():
     """Regular day → no holiday."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": True, "dates": [{"date": "12-25", "name": "Christmas", "multiplier": 3.0}]},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": False},
+                "holidays": {
+                    "enabled": True,
+                    "dates": [{"date": "12-25", "name": "Christmas", "multiplier": 3.0}],
+                },
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     fake_now = datetime(2025, 7, 15, 14, 0, 0, tzinfo=timezone.utc)
@@ -159,11 +203,15 @@ async def test_holiday_no_match():
 @pytest.mark.asyncio
 async def test_scheduled_event_active():
     """Registered event not expired → in list."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": False},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     end_time = datetime.now(timezone.utc) + timedelta(hours=2)
@@ -178,11 +226,15 @@ async def test_scheduled_event_active():
 @pytest.mark.asyncio
 async def test_scheduled_event_expired():
     """Past end_time → auto-cleared."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": False},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     end_time = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -196,11 +248,15 @@ async def test_scheduled_event_expired():
 @pytest.mark.asyncio
 async def test_adhoc_event_active():
     """Admin-started event → in list."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": False},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     engine.start_adhoc_event("Triple Z Friday", 3.0, 120)
@@ -214,11 +270,15 @@ async def test_adhoc_event_active():
 @pytest.mark.asyncio
 async def test_adhoc_event_expired():
     """Past end_time → auto-cleared."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {"enabled": False},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     engine = _make_engine(cfg)
 
     engine._adhoc_event = {
@@ -236,11 +296,20 @@ async def test_adhoc_event_expired():
 @pytest.mark.asyncio
 async def test_stacking_multiplicative():
     """off_peak 2.0 × population 1.5 = 3.0."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": True, "days": list(range(7)), "hours": list(range(24)), "multiplier": 2.0},
-        "high_population": {"enabled": True, "min_users": 2, "multiplier": 1.5},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {
+                    "enabled": True,
+                    "days": list(range(7)),
+                    "hours": list(range(24)),
+                    "multiplier": 2.0,
+                },
+                "high_population": {"enabled": True, "min_users": 2, "multiplier": 1.5},
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     users = {f"user{i}" for i in range(5)}
     engine = _make_engine(cfg, users)
 
@@ -252,11 +321,20 @@ async def test_stacking_multiplicative():
 @pytest.mark.asyncio
 async def test_hidden_not_shown_in_events_cmd():
     """Hidden multiplier has hidden=True which the PM handler filters."""
-    cfg = EconomyConfig(**make_config_dict(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": True, "min_users": 1, "multiplier": 1.5, "hidden": True},
-        "holidays": {"enabled": False},
-    }))
+    cfg = EconomyConfig(
+        **make_config_dict(
+            multipliers={
+                "off_peak": {"enabled": False},
+                "high_population": {
+                    "enabled": True,
+                    "min_users": 1,
+                    "multiplier": 1.5,
+                    "hidden": True,
+                },
+                "holidays": {"enabled": False},
+            }
+        )
+    )
     users = {"user1", "user2"}
     engine = _make_engine(cfg, users)
 

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -30,6 +28,7 @@ async def _seed_account(
         await db.credit(username, CH, balance, tx_type="test", reason="seed")
     if lifetime > 0:
         import asyncio
+
         loop = asyncio.get_running_loop()
 
         def _set():
@@ -71,7 +70,8 @@ def _make_handler(
 
 @pytest.mark.asyncio
 async def test_shop_lists_items(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """shop lists available vanity items."""
@@ -89,7 +89,8 @@ async def test_shop_lists_items(
 
 @pytest.mark.asyncio
 async def test_shop_shows_discount(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """High-rank user sees discounted prices."""
@@ -102,7 +103,8 @@ async def test_shop_shows_discount(
 
 @pytest.mark.asyncio
 async def test_shop_shows_owned(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Shop shows items the user already owns."""
@@ -121,7 +123,8 @@ async def test_shop_shows_owned(
 
 @pytest.mark.asyncio
 async def test_buy_greeting_success(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Buying greeting deducts cost and stores vanity item."""
@@ -141,7 +144,8 @@ async def test_buy_greeting_success(
 
 @pytest.mark.asyncio
 async def test_buy_greeting_too_long(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Greeting over 200 chars → rejected."""
@@ -160,7 +164,8 @@ async def test_buy_greeting_too_long(
 
 @pytest.mark.asyncio
 async def test_buy_gif_creates_approval(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Channel GIF creates a pending approval."""
@@ -181,8 +186,10 @@ async def test_buy_gif_creates_approval(
 
 @pytest.mark.asyncio
 async def test_buy_shoutout_sends_chat(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_client: MagicMock,
 ):
     """Shoutout delivers message to public chat."""
     await _seed_account(database, "Alice", 10000)
@@ -199,8 +206,10 @@ async def test_buy_shoutout_sends_chat(
 
 @pytest.mark.asyncio
 async def test_buy_shoutout_cooldown(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_client: MagicMock,
 ):
     """Second shoutout within cooldown → blocked."""
     await _seed_account(database, "Alice", 10000)
@@ -218,7 +227,8 @@ async def test_buy_shoutout_cooldown(
 
 @pytest.mark.asyncio
 async def test_fortune_once_per_day(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Fortune can only be used once per day."""
@@ -226,7 +236,13 @@ async def test_fortune_once_per_day(
     handler = _make_handler(sample_config, database, spending_engine)
 
     resp1 = await handler._cmd_fortune("Alice", CH, [])
-    assert "🔮" in resp1 or "🎱" in resp1 or "🌙" in resp1 or "fortune" not in resp1.lower() or resp1 in PmHandler.FORTUNES
+    assert (
+        "🔮" in resp1
+        or "🎱" in resp1
+        or "🌙" in resp1
+        or "fortune" not in resp1.lower()
+        or resp1 in PmHandler.FORTUNES
+    )
 
     resp2 = await handler._cmd_fortune("Alice", CH, [])
     assert "already" in resp2.lower()
@@ -234,7 +250,8 @@ async def test_fortune_once_per_day(
 
 @pytest.mark.asyncio
 async def test_fortune_different_per_user(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Different users can get different fortunes."""
@@ -256,7 +273,8 @@ async def test_fortune_different_per_user(
 
 @pytest.mark.asyncio
 async def test_buy_rename_success(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Rename currency stores new name."""
@@ -272,7 +290,8 @@ async def test_buy_rename_success(
 
 @pytest.mark.asyncio
 async def test_buy_rename_too_long(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Rename > 30 chars → rejected."""
@@ -292,9 +311,12 @@ async def test_buy_rename_too_long(
 async def test_buy_disabled_item(database: EconomyDatabase):
     """Buying a disabled item → rejected."""
     from conftest import make_config_dict
-    cfg = EconomyConfig(**make_config_dict(
-        vanity_shop={"custom_greeting": {"cost": 500, "enabled": False}},
-    ))
+
+    cfg = EconomyConfig(
+        **make_config_dict(
+            vanity_shop={"custom_greeting": {"cost": 500, "enabled": False}},
+        )
+    )
     engine = SpendingEngine(cfg, database, None, logging.getLogger("test"))
     handler = _make_handler(cfg, database, engine)
 

@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Generator
+from typing import Any, AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -42,6 +39,7 @@ from kryten_economy.greeting_handler import GreetingHandler
 
 
 # ── Minimal config dict matching EconomyConfig schema ────────
+
 
 def make_config_dict(**overrides) -> dict:
     """Build a valid config dict with sensible test defaults."""
@@ -92,26 +90,75 @@ def make_config_dict(**overrides) -> dict:
             "decay": {"enabled": False, "daily_rate": 0.005, "exempt_below": 50000},
         },
         "retention": {
-            "welcome_back": {"enabled": True, "days_absent": 7, "bonus": 100, "message": "Welcome back! {amount} {currency}"},
+            "welcome_back": {
+                "enabled": True,
+                "days_absent": 7,
+                "bonus": 100,
+                "message": "Welcome back! {amount} {currency}",
+            },
             "inactivity_nudge": {"enabled": False},
         },
         "chat_triggers": {
-            "long_message": {"enabled": True, "min_chars": 30, "reward": 1, "max_per_hour": 30, "hidden": True},
-            "laugh_received": {"enabled": True, "reward_per_laugher": 2, "max_laughers_per_joke": 10, "self_excluded": True, "hidden": True},
+            "long_message": {
+                "enabled": True,
+                "min_chars": 30,
+                "reward": 1,
+                "max_per_hour": 30,
+                "hidden": True,
+            },
+            "laugh_received": {
+                "enabled": True,
+                "reward_per_laugher": 2,
+                "max_laughers_per_joke": 10,
+                "self_excluded": True,
+                "hidden": True,
+            },
             "kudos_received": {"enabled": True, "reward": 3, "self_excluded": True, "hidden": True},
             "first_message_of_day": {"enabled": True, "reward": 5, "hidden": True},
-            "conversation_starter": {"enabled": True, "min_silence_minutes": 10, "reward": 10, "hidden": True},
+            "conversation_starter": {
+                "enabled": True,
+                "min_silence_minutes": 10,
+                "reward": 10,
+                "hidden": True,
+            },
         },
         "content_triggers": {
-            "first_after_media_change": {"enabled": True, "window_seconds": 30, "reward": 3, "hidden": True},
-            "comment_during_media": {"enabled": True, "reward_per_message": 0.5, "max_per_item_base": 10, "scale_with_duration": True, "hidden": True},
+            "first_after_media_change": {
+                "enabled": True,
+                "window_seconds": 30,
+                "reward": 3,
+                "hidden": True,
+            },
+            "comment_during_media": {
+                "enabled": True,
+                "reward_per_message": 0.5,
+                "max_per_item_base": 10,
+                "scale_with_duration": True,
+                "hidden": True,
+            },
             "like_current": {"enabled": True, "reward": 2, "hidden": True},
-            "survived_full_media": {"enabled": True, "min_presence_percent": 80, "reward": 5, "hidden": True},
+            "survived_full_media": {
+                "enabled": True,
+                "min_presence_percent": 80,
+                "reward": 5,
+                "hidden": True,
+            },
             "present_at_event_start": {"enabled": True, "default_reward": 100, "hidden": True},
         },
         "social_triggers": {
-            "greeted_newcomer": {"enabled": True, "window_seconds": 60, "reward": 3, "bot_joins_excluded": True, "hidden": True},
-            "mentioned_by_other": {"enabled": True, "reward": 1, "max_per_hour_same_user": 5, "hidden": True},
+            "greeted_newcomer": {
+                "enabled": True,
+                "window_seconds": 60,
+                "reward": 3,
+                "bot_joins_excluded": True,
+                "hidden": True,
+            },
+            "mentioned_by_other": {
+                "enabled": True,
+                "reward": 1,
+                "max_per_hour_same_user": 5,
+                "hidden": True,
+            },
             "bot_interaction": {"enabled": True, "reward": 2, "max_per_day": 10, "hidden": True},
         },
     }
@@ -141,6 +188,7 @@ def tmp_db_path(tmp_path: Path) -> str:
 async def database(tmp_db_path: str) -> AsyncGenerator[EconomyDatabase, None]:
     """Provide an initialized database with temp file."""
     import logging
+
     db = EconomyDatabase(tmp_db_path, logging.getLogger("test"))
     await db.initialize()
     yield db
@@ -164,6 +212,7 @@ def mock_client() -> MagicMock:
 
 # ── Sprint 3 fixtures ───────────────────────────────────────
 
+
 @pytest.fixture
 def channel_state(sample_config: EconomyConfig) -> ChannelStateTracker:
     """ChannelStateTracker with test config."""
@@ -178,7 +227,10 @@ async def earning_engine(
 ) -> EarningEngine:
     """EarningEngine with test dependencies."""
     return EarningEngine(
-        sample_config, database, channel_state, logging.getLogger("test"),
+        sample_config,
+        database,
+        channel_state,
+        logging.getLogger("test"),
     )
 
 
@@ -196,6 +248,7 @@ def sample_media_info() -> MediaInfo:
 
 # ── Sprint 4 fixtures ───────────────────────────────────────
 
+
 @pytest_asyncio.fixture
 async def gambling_engine(
     sample_config: EconomyConfig,
@@ -203,11 +256,14 @@ async def gambling_engine(
 ) -> GamblingEngine:
     """GamblingEngine with test dependencies."""
     return GamblingEngine(
-        sample_config, database, logging.getLogger("test"),
+        sample_config,
+        database,
+        logging.getLogger("test"),
     )
 
 
 # ── Sprint 5 fixtures ───────────────────────────────────────
+
 
 @pytest.fixture
 def mock_media_client() -> MagicMock:
@@ -229,11 +285,15 @@ async def spending_engine(
 ) -> SpendingEngine:
     """SpendingEngine with test dependencies."""
     return SpendingEngine(
-        sample_config, database, mock_media_client, logging.getLogger("test"),
+        sample_config,
+        database,
+        mock_media_client,
+        logging.getLogger("test"),
     )
 
 
 # ── Sprint 6 fixtures ───────────────────────────────────────
+
 
 @pytest_asyncio.fixture
 async def achievement_engine(
@@ -243,7 +303,10 @@ async def achievement_engine(
 ) -> AchievementEngine:
     """AchievementEngine with test dependencies."""
     return AchievementEngine(
-        sample_config, database, mock_client, logging.getLogger("test"),
+        sample_config,
+        database,
+        mock_client,
+        logging.getLogger("test"),
     )
 
 
@@ -255,11 +318,15 @@ async def rank_engine(
 ) -> RankEngine:
     """RankEngine with test dependencies."""
     return RankEngine(
-        sample_config, database, mock_client, logging.getLogger("test"),
+        sample_config,
+        database,
+        mock_client,
+        logging.getLogger("test"),
     )
 
 
 # ── Sprint 7 fixtures ───────────────────────────────────────
+
 
 @pytest.fixture
 def multiplier_engine(
@@ -269,7 +336,9 @@ def multiplier_engine(
     mock_presence = MagicMock()
     mock_presence.get_connected_users = MagicMock(return_value=set())
     return MultiplierEngine(
-        sample_config, mock_presence, logging.getLogger("test"),
+        sample_config,
+        mock_presence,
+        logging.getLogger("test"),
     )
 
 
@@ -281,7 +350,10 @@ async def competition_engine(
 ) -> CompetitionEngine:
     """CompetitionEngine with test dependencies."""
     return CompetitionEngine(
-        sample_config, database, mock_client, logging.getLogger("test"),
+        sample_config,
+        database,
+        mock_client,
+        logging.getLogger("test"),
     )
 
 
@@ -293,11 +365,15 @@ async def bounty_manager(
 ) -> BountyManager:
     """BountyManager with test dependencies."""
     return BountyManager(
-        sample_config, database, mock_client, logging.getLogger("test"),
+        sample_config,
+        database,
+        mock_client,
+        logging.getLogger("test"),
     )
 
 
 # ── Sprint 8 fixtures ───────────────────────────────────────
+
 
 @pytest_asyncio.fixture
 async def presence_tracker(
@@ -371,6 +447,7 @@ async def admin_scheduler(
 
 # ── Sprint 9: MockKrytenClient ──────────────────────────────
 
+
 class MockKrytenClient:
     """Mock kryten-py client for integration testing.
 
@@ -387,41 +464,76 @@ class MockKrytenClient:
         self._kv_store: dict[str, dict[str, Any]] = {}
 
     async def send_pm(
-        self, channel: str, username: str, message: str, *, domain: str | None = None,
+        self,
+        channel: str,
+        username: str,
+        message: str,
+        *,
+        domain: str | None = None,
     ) -> str:
         self.sent_pms.append((channel, username, message))
         return "mock-corr-id"
 
     async def send_chat(
-        self, channel: str, message: str, *, domain: str | None = None,
+        self,
+        channel: str,
+        message: str,
+        *,
+        domain: str | None = None,
     ) -> str:
         self.sent_chats.append((channel, message))
         return "mock-corr-id"
 
     async def safe_set_channel_rank(
-        self, channel: str, username: str, rank: int,
-        *, domain: str | None = None, check_rank: bool = True, timeout: float = 2.0,
+        self,
+        channel: str,
+        username: str,
+        rank: int,
+        *,
+        domain: str | None = None,
+        check_rank: bool = True,
+        timeout: float = 2.0,
     ) -> dict:
         self.rank_changes.append((channel, username, rank))
         return {"success": True}
 
     async def add_media(
-        self, channel: str, media_type: str, media_id: str,
-        *, position: str = "end", temp: bool = True, domain: str | None = None,
+        self,
+        channel: str,
+        media_type: str,
+        media_id: str,
+        *,
+        position: str = "end",
+        temp: bool = True,
+        domain: str | None = None,
     ) -> str:
-        self.media_adds.append({
-            "channel": channel, "media_type": media_type,
-            "media_id": media_id, "position": position, "temp": temp,
-        })
+        self.media_adds.append(
+            {
+                "channel": channel,
+                "media_type": media_type,
+                "media_id": media_id,
+                "position": position,
+                "temp": temp,
+            }
+        )
         return "mock-corr-id"
 
     async def kv_get(
-        self, bucket_name: str, key: str, default: Any = None, parse_json: bool = False,
+        self,
+        bucket_name: str,
+        key: str,
+        default: Any = None,
+        parse_json: bool = False,
     ) -> Any:
         return self._kv_store.get(bucket_name, {}).get(key, default)
 
     async def kv_put(
-        self, bucket_name: str, key: str, value: Any, *, as_json: bool = False,
+        self,
+        bucket_name: str,
+        key: str,
+        value: Any,
+        *,
+        as_json: bool = False,
     ) -> None:
         self._kv_store.setdefault(bucket_name, {})[key] = value
 
@@ -449,9 +561,11 @@ class MockKrytenClient:
 
     def on(self, event_name: str, channel: str | None = None, domain: str | None = None):
         """Match kryten-py's ``on()`` decorator signature."""
+
         def decorator(func):
             self._handlers.setdefault(event_name, []).append(func)
             return func
+
         return decorator
 
     def on_group_restart(self, callback):
@@ -470,6 +584,7 @@ def mock_kryten_client() -> MockKrytenClient:
 
 
 # ── Sprint 9 fixtures ────────────────────────────────────────
+
 
 @pytest_asyncio.fixture
 async def event_announcer(

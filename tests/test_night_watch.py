@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from unittest.mock import MagicMock
 
@@ -24,9 +23,13 @@ def night_config() -> EconomyConfig:
 
 
 @pytest.fixture
-def night_tracker(night_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> PresenceTracker:
+def night_tracker(
+    night_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> PresenceTracker:
     return PresenceTracker(
-        config=night_config, database=database, client=mock_client,
+        config=night_config,
+        database=database,
+        client=mock_client,
         logger=logging.getLogger("test.nightwatch"),
     )
 

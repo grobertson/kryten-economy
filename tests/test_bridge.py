@@ -13,9 +13,13 @@ from kryten_economy.presence_tracker import PresenceTracker
 
 
 @pytest.fixture
-def tracker(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> PresenceTracker:
+def tracker(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> PresenceTracker:
     return PresenceTracker(
-        config=sample_config, database=database, client=mock_client,
+        config=sample_config,
+        database=database,
+        client=mock_client,
         logger=logging.getLogger("test.bridge"),
     )
 
@@ -48,7 +52,9 @@ class TestBridgeBonus:
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 500  # bridge bonus
 
-    async def test_bridge_not_double_claimed(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_bridge_not_double_claimed(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Bridge should only be claimed once per week."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._evaluate_bridge("alice", "testchannel", "2026-01-05")  # Mon W02
@@ -71,7 +77,9 @@ class TestBridgeBonus:
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 1000  # 500 per week × 2
 
-    async def test_bridge_pm_sent(self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock):
+    async def test_bridge_pm_sent(
+        self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock
+    ):
         """Bridge bonus should trigger a PM notification."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._evaluate_bridge("alice", "testchannel", "2026-01-05")  # Mon W02

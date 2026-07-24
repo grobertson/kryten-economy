@@ -23,6 +23,7 @@ from . import __version__
 #  Sprint 1 — Core Foundation
 # ═══════════════════════════════════════════════════════════════
 
+
 class DatabaseConfig(BaseModel):
     path: str = "economy.db"
 
@@ -53,6 +54,7 @@ class OnboardingConfig(BaseModel):
 
 class NightWatchConfig(BaseModel):
     """Night-watch multiplier for off-peak presence earning."""
+
     enabled: bool = False
     hours: list[int] = Field(default=[2, 3, 4, 5, 6, 7], description="UTC hours (24h format)")
     multiplier: float = 1.5
@@ -75,6 +77,7 @@ class PresenceConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 #  Sprint 2 — Streaks, Milestones & Dwell Incentives
 # ═══════════════════════════════════════════════════════════════
+
 
 class DailyStreakConfig(BaseModel):
     enabled: bool = True
@@ -149,6 +152,7 @@ class RetentionConfig(BaseModel):
 #  Sprint 3 — Chat Earning Triggers
 # ═══════════════════════════════════════════════════════════════
 
+
 class LongMessageTrigger(BaseModel):
     enabled: bool = True
     min_chars: int = 30
@@ -197,7 +201,9 @@ class ChatTriggersConfig(BaseModel):
     laugh_received: LaughReceivedTrigger = Field(default_factory=LaughReceivedTrigger)
     kudos_received: KudosReceivedTrigger = Field(default_factory=KudosReceivedTrigger)
     first_message_of_day: FirstMessageOfDayTrigger = Field(default_factory=FirstMessageOfDayTrigger)
-    conversation_starter: ConversationStarterTrigger = Field(default_factory=ConversationStarterTrigger)
+    conversation_starter: ConversationStarterTrigger = Field(
+        default_factory=ConversationStarterTrigger
+    )
 
 
 class CommentDuringMediaTrigger(BaseModel):
@@ -228,11 +234,17 @@ class PresentAtEventStartTrigger(BaseModel):
 
 
 class ContentTriggersConfig(BaseModel):
-    first_after_media_change: FirstAfterMediaChangeTrigger = Field(default_factory=FirstAfterMediaChangeTrigger)
-    comment_during_media: CommentDuringMediaTrigger = Field(default_factory=CommentDuringMediaTrigger)
+    first_after_media_change: FirstAfterMediaChangeTrigger = Field(
+        default_factory=FirstAfterMediaChangeTrigger
+    )
+    comment_during_media: CommentDuringMediaTrigger = Field(
+        default_factory=CommentDuringMediaTrigger
+    )
     like_current: LikeCurrentTrigger = Field(default_factory=LikeCurrentTrigger)
     survived_full_media: SurvivedFullMediaTrigger = Field(default_factory=SurvivedFullMediaTrigger)
-    present_at_event_start: PresentAtEventStartTrigger = Field(default_factory=PresentAtEventStartTrigger)
+    present_at_event_start: PresentAtEventStartTrigger = Field(
+        default_factory=PresentAtEventStartTrigger
+    )
 
 
 class GreetedNewcomerTrigger(BaseModel):
@@ -267,6 +279,7 @@ class SocialTriggersConfig(BaseModel):
 #  Sprint 4 — Gambling
 # ═══════════════════════════════════════════════════════════════
 
+
 class SpinPayoutConfig(BaseModel):
     symbols: str
     multiplier: float
@@ -279,14 +292,16 @@ class SpinConfig(BaseModel):
     max_wager: int = 500
     cooldown_seconds: int = 30
     daily_limit: int = 50
-    payouts: list[SpinPayoutConfig] = Field(default_factory=lambda: [
-        SpinPayoutConfig(symbols="🍒🍒🍒", multiplier=3, probability=0.10),
-        SpinPayoutConfig(symbols="🍋🍋🍋", multiplier=5, probability=0.05),
-        SpinPayoutConfig(symbols="💎💎💎", multiplier=10, probability=0.02),
-        SpinPayoutConfig(symbols="7️⃣7️⃣7️⃣", multiplier=50, probability=0.002),
-        SpinPayoutConfig(symbols="partial", multiplier=2, probability=0.15),
-        SpinPayoutConfig(symbols="loss", multiplier=0, probability=0.678),
-    ])
+    payouts: list[SpinPayoutConfig] = Field(
+        default_factory=lambda: [
+            SpinPayoutConfig(symbols="🍒🍒🍒", multiplier=3, probability=0.10),
+            SpinPayoutConfig(symbols="🍋🍋🍋", multiplier=5, probability=0.05),
+            SpinPayoutConfig(symbols="💎💎💎", multiplier=10, probability=0.02),
+            SpinPayoutConfig(symbols="7️⃣7️⃣7️⃣", multiplier=50, probability=0.002),
+            SpinPayoutConfig(symbols="partial", multiplier=2, probability=0.15),
+            SpinPayoutConfig(symbols="loss", multiplier=0, probability=0.678),
+        ]
+    )
     announce_jackpots_public: bool = True
     jackpot_announce_threshold: int = 500
 
@@ -316,6 +331,7 @@ class DailyFreeSpinConfig(BaseModel):
 
 class HeistLLMConfig(BaseModel):
     """LLM back-end for dynamic heist narrative generation."""
+
     endpoint: str = Field(
         default="http://localhost:11434/v1/chat/completions",
         description="OpenAI-compatible chat-completions URL",
@@ -348,6 +364,7 @@ class HeistLLMConfig(BaseModel):
 
 class HeistNarrativeConfig(BaseModel):
     """Controls where heist text comes from: static library, LLM, or hybrid."""
+
     mode: str = Field(
         default="static",
         description="'static' = built-in library, 'llm' = LLM-generated, 'hybrid' = try LLM then fall back",
@@ -397,6 +414,7 @@ class HeistConfig(BaseModel):
 
 class RacerProfileConfig(BaseModel):
     """A single racer colour/odds entry within an odds profile."""
+
     color: str
     emoji: str = ""
     win_chance: float
@@ -405,6 +423,7 @@ class RacerProfileConfig(BaseModel):
 
 class RaceOddsProfileConfig(BaseModel):
     """One complete set of racers for a single race."""
+
     racers: list[RacerProfileConfig]
 
 
@@ -430,6 +449,7 @@ class RaceTraitsConfig(BaseModel):
 
 class RaceRacerNamesConfig(BaseModel):
     """Punny driver names assigned to each car per race (web race view)."""
+
     enabled: bool = True
     extra_names: list[str] = Field(
         default_factory=list,
@@ -439,6 +459,7 @@ class RaceRacerNamesConfig(BaseModel):
 
 class RaceLLMConfig(BaseModel):
     """LLM back-end for dynamic race commentary generation."""
+
     endpoint: str = Field(
         default="http://localhost:11434/v1/chat/completions",
         description="OpenAI-compatible chat-completions URL",
@@ -477,6 +498,7 @@ class RaceCommentaryConfig(BaseModel):
       OpenAI-compatible endpoint (falls back to static if generation fails).
     - ``hybrid`` — try LLM first, fall back to static on timeout/error.
     """
+
     mode: str = Field(
         default="static",
         description="'static' = built-in library, 'llm' = LLM-generated, 'hybrid' = try LLM then fall back",
@@ -536,30 +558,50 @@ class RaceConfig(BaseModel):
     commentary: RaceCommentaryConfig = Field(default_factory=RaceCommentaryConfig)
     odds_profiles: list[RaceOddsProfileConfig] = Field(
         default_factory=lambda: [
-            RaceOddsProfileConfig(racers=[
-                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.30, speed_base=1.4),
-                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.22, speed_base=1.25),
-                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.18, speed_base=1.1),
-                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.12, speed_base=0.95),
-                RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.10, speed_base=0.85),
-                RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.08, speed_base=0.7),
-            ]),
-            RaceOddsProfileConfig(racers=[
-                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.26, speed_base=1.35),
-                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.22, speed_base=1.2),
-                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.18, speed_base=1.1),
-                RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.14, speed_base=1.0),
-                RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.11, speed_base=0.9),
-                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.09, speed_base=0.8),
-            ]),
-            RaceOddsProfileConfig(racers=[
-                RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.24, speed_base=1.3),
-                RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.20, speed_base=1.2),
-                RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.18, speed_base=1.1),
-                RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.15, speed_base=1.0),
-                RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.13, speed_base=0.9),
-                RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.10, speed_base=0.78),
-            ]),
+            RaceOddsProfileConfig(
+                racers=[
+                    RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.26, speed_base=1.4),
+                    RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.19, speed_base=1.25),
+                    RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.15, speed_base=1.1),
+                    RacerProfileConfig(
+                        color="Yellow", emoji="🟡", win_chance=0.11, speed_base=0.98
+                    ),
+                    RacerProfileConfig(
+                        color="Purple", emoji="🟣", win_chance=0.09, speed_base=0.88
+                    ),
+                    RacerProfileConfig(
+                        color="Orange", emoji="🟠", win_chance=0.08, speed_base=0.78
+                    ),
+                    RacerProfileConfig(color="Brown", emoji="🟤", win_chance=0.07, speed_base=0.7),
+                    RacerProfileConfig(color="White", emoji="⚪", win_chance=0.05, speed_base=0.62),
+                ]
+            ),
+            RaceOddsProfileConfig(
+                racers=[
+                    RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.24, speed_base=1.35),
+                    RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.19, speed_base=1.2),
+                    RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.15, speed_base=1.1),
+                    RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.12, speed_base=1.0),
+                    RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.10, speed_base=0.9),
+                    RacerProfileConfig(
+                        color="Yellow", emoji="🟡", win_chance=0.08, speed_base=0.82
+                    ),
+                    RacerProfileConfig(color="Brown", emoji="🟤", win_chance=0.07, speed_base=0.72),
+                    RacerProfileConfig(color="White", emoji="⚪", win_chance=0.05, speed_base=0.64),
+                ]
+            ),
+            RaceOddsProfileConfig(
+                racers=[
+                    RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.22, speed_base=1.3),
+                    RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.18, speed_base=1.2),
+                    RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.15, speed_base=1.1),
+                    RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.12, speed_base=1.0),
+                    RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.11, speed_base=0.9),
+                    RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.09, speed_base=0.8),
+                    RacerProfileConfig(color="Brown", emoji="🟤", win_chance=0.08, speed_base=0.72),
+                    RacerProfileConfig(color="White", emoji="⚪", win_chance=0.05, speed_base=0.62),
+                ]
+            ),
         ],
     )
 
@@ -640,6 +682,7 @@ class GamblingConfig(BaseModel):
 #  Sprint 5 — Spending, Queue, Tips & Shop
 # ═══════════════════════════════════════════════════════════════
 
+
 class QueueTierConfig(BaseModel):
     max_minutes: int
     label: str
@@ -653,12 +696,14 @@ class BlackoutWindowConfig(BaseModel):
 
 
 class SpendingConfig(BaseModel):
-    queue_tiers: list[QueueTierConfig] = Field(default_factory=lambda: [
-        QueueTierConfig(max_minutes=15, label="Short / Music Video", cost=2500),
-        QueueTierConfig(max_minutes=35, label="30-min Episode", cost=5000),
-        QueueTierConfig(max_minutes=65, label="60-min Episode", cost=7500),
-        QueueTierConfig(max_minutes=999, label="Movie", cost=10000),
-    ])
+    queue_tiers: list[QueueTierConfig] = Field(
+        default_factory=lambda: [
+            QueueTierConfig(max_minutes=15, label="Short / Music Video", cost=2500),
+            QueueTierConfig(max_minutes=35, label="30-min Episode", cost=5000),
+            QueueTierConfig(max_minutes=65, label="60-min Episode", cost=7500),
+            QueueTierConfig(max_minutes=999, label="Movie", cost=10000),
+        ]
+    )
     interrupt_play_next: int = 100000
     force_play_now: int = 1000000
     force_play_requires_admin: bool = True
@@ -728,7 +773,6 @@ class ChatColorConfig(BaseModel):
     warn_contrast_lc: float = 40.0
 
 
-
 class ChannelGifConfig(BaseModel):
     enabled: bool = True
     cost: int = 50000
@@ -758,10 +802,14 @@ class RenameCurrencyConfig(BaseModel):
 
 class VanityShopConfig(BaseModel):
     custom_greeting: VanityItemConfig = Field(
-        default_factory=lambda: VanityItemConfig(cost=5000, description="Bot greets you by name when you join")
+        default_factory=lambda: VanityItemConfig(
+            cost=5000, description="Bot greets you by name when you join"
+        )
     )
     custom_title: VanityItemConfig = Field(
-        default_factory=lambda: VanityItemConfig(cost=10000, description="Custom title shown in bot announcements")
+        default_factory=lambda: VanityItemConfig(
+            cost=10000, description="Custom title shown in bot announcements"
+        )
     )
     chat_color: ChatColorConfig = Field(default_factory=ChatColorConfig)
     channel_gif: ChannelGifConfig = Field(default_factory=ChannelGifConfig)
@@ -781,6 +829,7 @@ class TippingConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 #  Sprint 6 — Achievements & Ranks
 # ═══════════════════════════════════════════════════════════════
+
 
 class AchievementConditionConfig(BaseModel):
     type: str
@@ -807,25 +856,41 @@ class RankTierConfig(BaseModel):
 class RanksConfig(BaseModel):
     earn_multiplier_per_rank: float = 0.0
     spend_discount_per_rank: float = 0.02
-    tiers: list[RankTierConfig] = Field(default_factory=lambda: [
-        RankTierConfig(name="Extra", min_lifetime_earned=0),
-        RankTierConfig(name="Grip", min_lifetime_earned=1000, perks=["1 free daily fortune"]),
-        RankTierConfig(name="Key Grip", min_lifetime_earned=5000, perks=["2% spend discount"]),
-        RankTierConfig(name="Gaffer", min_lifetime_earned=15000, perks=["4% discount", "rain drops +20%"]),
-        RankTierConfig(name="Best Boy", min_lifetime_earned=40000, perks=["6% discount", "+1 queue/day"]),
-        RankTierConfig(
-            name="Associate Producer", min_lifetime_earned=100000, perks=["8% discount", "premium vanity items"]
-        ),
-        RankTierConfig(name="Producer", min_lifetime_earned=250000, perks=["10% discount", "priority queue position"]),
-        RankTierConfig(name="Director", min_lifetime_earned=500000, perks=["12% discount", "+2 queues/day"]),
-        RankTierConfig(name="Executive Producer", min_lifetime_earned=1000000, perks=["15% discount"]),
-        RankTierConfig(
-            name="Studio Mogul",
-            min_lifetime_earned=5000000,
-            perks=["20% discount", "custom everything", "legendary status"],
-            cytube_level_promotion=2,
-        ),
-    ])
+    tiers: list[RankTierConfig] = Field(
+        default_factory=lambda: [
+            RankTierConfig(name="Extra", min_lifetime_earned=0),
+            RankTierConfig(name="Grip", min_lifetime_earned=1000, perks=["1 free daily fortune"]),
+            RankTierConfig(name="Key Grip", min_lifetime_earned=5000, perks=["2% spend discount"]),
+            RankTierConfig(
+                name="Gaffer", min_lifetime_earned=15000, perks=["4% discount", "rain drops +20%"]
+            ),
+            RankTierConfig(
+                name="Best Boy", min_lifetime_earned=40000, perks=["6% discount", "+1 queue/day"]
+            ),
+            RankTierConfig(
+                name="Associate Producer",
+                min_lifetime_earned=100000,
+                perks=["8% discount", "premium vanity items"],
+            ),
+            RankTierConfig(
+                name="Producer",
+                min_lifetime_earned=250000,
+                perks=["10% discount", "priority queue position"],
+            ),
+            RankTierConfig(
+                name="Director", min_lifetime_earned=500000, perks=["12% discount", "+2 queues/day"]
+            ),
+            RankTierConfig(
+                name="Executive Producer", min_lifetime_earned=1000000, perks=["15% discount"]
+            ),
+            RankTierConfig(
+                name="Studio Mogul",
+                min_lifetime_earned=5000000,
+                perks=["20% discount", "custom everything", "legendary status"],
+                cytube_level_promotion=2,
+            ),
+        ]
+    )
 
 
 class CytubePromotionConfig(BaseModel):
@@ -838,6 +903,7 @@ class CytubePromotionConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 #  Sprint 7 — Events, Multipliers & Bounties
 # ═══════════════════════════════════════════════════════════════
+
 
 class CompetitionConditionConfig(BaseModel):
     type: str
@@ -877,10 +943,12 @@ class HolidayDateConfig(BaseModel):
 
 class HolidaysMultiplierConfig(BaseModel):
     enabled: bool = True
-    dates: list[HolidayDateConfig] = Field(default_factory=lambda: [
-        HolidayDateConfig(date="12-25", name="Christmas", multiplier=3.0),
-        HolidayDateConfig(date="10-31", name="Halloween", multiplier=2.0),
-    ])
+    dates: list[HolidayDateConfig] = Field(
+        default_factory=lambda: [
+            HolidayDateConfig(date="12-25", name="Christmas", multiplier=3.0),
+            HolidayDateConfig(date="10-31", name="Halloween", multiplier=2.0),
+        ]
+    )
     announce: bool = True
 
 
@@ -895,7 +963,9 @@ class ScheduledEventConfig(BaseModel):
 
 class MultipliersConfig(BaseModel):
     off_peak: OffPeakMultiplierConfig = Field(default_factory=OffPeakMultiplierConfig)
-    high_population: HighPopulationMultiplierConfig = Field(default_factory=HighPopulationMultiplierConfig)
+    high_population: HighPopulationMultiplierConfig = Field(
+        default_factory=HighPopulationMultiplierConfig
+    )
     holidays: HolidaysMultiplierConfig = Field(default_factory=HolidaysMultiplierConfig)
     scheduled_events: list[ScheduledEventConfig] = Field(default_factory=list)
 
@@ -913,6 +983,7 @@ class BountyConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 #  Sprint 8 — Admin & Reporting
 # ═══════════════════════════════════════════════════════════════
+
 
 class AdminConfig(BaseModel):
     owner_level: int = 4
@@ -972,6 +1043,7 @@ class DigestConfig(BaseModel):
 #  Sprint 9 — Polish & Hardening
 # ═══════════════════════════════════════════════════════════════
 
+
 class CommandsConfig(BaseModel):
     rate_limit_per_minute: int = 10
 
@@ -984,6 +1056,7 @@ class CommandsConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 #  Top-Level Economy Config
 # ═══════════════════════════════════════════════════════════════
+
 
 class EconomyConfig(KrytenConfig):
     """Full economy config — extends KrytenConfig with all economy sub-models."""
@@ -1040,6 +1113,7 @@ class EconomyConfig(KrytenConfig):
 # ═══════════════════════════════════════════════════════════════
 #  Config Loading
 # ═══════════════════════════════════════════════════════════════
+
 
 def _expand_env_vars(obj: Any) -> Any:
     """Recursively expand ${VAR} and ${VAR:-default} in string values."""

@@ -14,13 +14,16 @@ CH = "testchannel"
 
 
 async def _seed_account(
-    db: EconomyDatabase, username: str = "Alice", balance: int = 5000,
+    db: EconomyDatabase,
+    username: str = "Alice",
+    balance: int = 5000,
 ) -> None:
     """Create account with generous balance and old enough age."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
 
     import asyncio
+
     loop = asyncio.get_running_loop()
     first_seen = datetime.now(timezone.utc) - timedelta(hours=2)
 

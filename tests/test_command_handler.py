@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,7 +14,9 @@ from kryten_economy.presence_tracker import PresenceTracker
 
 
 @pytest.fixture
-def mock_app(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> MagicMock:
+def mock_app(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> MagicMock:
     """Mock EconomyApp with real database."""
     app = MagicMock()
     app.config = sample_config
@@ -58,22 +60,26 @@ class TestCommandHandler:
         """balance.get should return account details."""
         await database.get_or_create_account("alice", "testchannel")
         await database.credit("alice", "testchannel", 999, "earn")
-        result = await handler._handle_command({
-            "command": "balance.get",
-            "username": "alice",
-            "channel": "testchannel",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "balance.get",
+                "username": "alice",
+                "channel": "testchannel",
+            }
+        )
         assert result["success"] is True
         assert result["data"]["found"] is True
         assert result["data"]["balance"] == 999
 
     async def test_balance_get_not_found(self, handler: CommandHandler):
         """balance.get for nonexistent user should return found=False."""
-        result = await handler._handle_command({
-            "command": "balance.get",
-            "username": "ghost",
-            "channel": "testchannel",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "balance.get",
+                "username": "ghost",
+                "channel": "testchannel",
+            }
+        )
         assert result["success"] is True
         assert result["data"]["found"] is False
 
@@ -104,42 +110,61 @@ class TestRaceStateCommand:
     async def test_race_state_no_engine(self, handler: CommandHandler):
         """With no race engine wired, reports inactive rather than erroring."""
         handler._app.race_engine = None
-        result = await handler._handle_command({
-            "command": "race.state", "channel": "testchannel",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "race.state",
+                "channel": "testchannel",
+            }
+        )
         assert result["success"] is True
         assert result["data"] == {"active": False, "frame": None}
 
     async def test_race_state_idle(
-        self, handler: CommandHandler, mock_app: MagicMock, database: EconomyDatabase,
+        self,
+        handler: CommandHandler,
+        mock_app: MagicMock,
+        database: EconomyDatabase,
     ):
         """With an engine but no race, reports inactive."""
         from kryten_economy.race_engine import RaceEngine
 
         mock_app.race_engine = RaceEngine(
-            mock_app.config, database, logging.getLogger("test.race"),
+            mock_app.config,
+            database,
+            logging.getLogger("test.race"),
         )
-        result = await handler._handle_command({
-            "command": "race.state", "channel": "testchannel",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "race.state",
+                "channel": "testchannel",
+            }
+        )
         assert result["success"] is True
         assert result["data"] == {"active": False, "frame": None}
 
     async def test_race_state_active_returns_frame(
-        self, handler: CommandHandler, mock_app: MagicMock, database: EconomyDatabase,
+        self,
+        handler: CommandHandler,
+        mock_app: MagicMock,
+        database: EconomyDatabase,
     ):
         """An in-progress race is reported active with a betting-phase frame."""
         from kryten_economy.race_engine import RaceEngine
 
         engine = RaceEngine(
-            mock_app.config, database, logging.getLogger("test.race"),
+            mock_app.config,
+            database,
+            logging.getLogger("test.race"),
         )
         mock_app.race_engine = engine
         engine.start_race("testchannel", "Alice")
 
-        result = await handler._handle_command({
-            "command": "race.state", "channel": "testchannel",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "race.state",
+                "channel": "testchannel",
+            }
+        )
         assert result["success"] is True
         assert result["data"]["active"] is True
         assert result["data"]["frame"]["phase"] == "betting"
@@ -150,4 +175,3 @@ class TestRaceStateCommand:
         result = await handler._handle_command({"command": "race.state"})
         assert result["success"] is False
         assert "channel" in result["error"].lower()
-

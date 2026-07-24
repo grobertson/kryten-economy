@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,6 +28,7 @@ async def _seed_account(
         await db.credit(username, CH, balance, tx_type="test", reason="seed")
     if lifetime > 0:
         import asyncio
+
         loop = asyncio.get_running_loop()
 
         def _set():
@@ -85,16 +85,20 @@ def _fake_media(mid: str = "abc123", title: str = "Test Video", dur: int = 600) 
 
 @pytest.mark.asyncio
 async def test_search_no_mediacms(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     spending_engine: SpendingEngine,
 ):
     """Search with no media client → not configured."""
     sample_config.mediacms.web_queue_redirect = False
     handler = PmHandler(
-        config=sample_config, database=database, client=None,
+        config=sample_config,
+        database=database,
+        client=None,
         presence_tracker=PresenceTracker(sample_config, database, logging.getLogger("test")),
         logger=logging.getLogger("test"),
-        spending_engine=spending_engine, media_client=None,
+        spending_engine=spending_engine,
+        media_client=None,
     )
     resp = await handler._cmd_search("Alice", CH, ["test"])
     assert "not configured" in resp.lower()
@@ -102,14 +106,18 @@ async def test_search_no_mediacms(
 
 @pytest.mark.asyncio
 async def test_search_shows_results(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """Search returns formatted results."""
-    mock_media_client.search = AsyncMock(return_value=[
-        _fake_media("v1", "Cool Video", 600),
-        _fake_media("v2", "Nice Movie", 7200),
-    ])
+    mock_media_client.search = AsyncMock(
+        return_value=[
+            _fake_media("v1", "Cool Video", 600),
+            _fake_media("v2", "Nice Movie", 7200),
+        ]
+    )
     await _seed_account(database, "Alice")
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
@@ -123,8 +131,10 @@ async def test_search_shows_results(
 
 @pytest.mark.asyncio
 async def test_search_shows_discount(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """High-rank user sees discount in queue confirmation (not in search results)."""
     mock_media_client.search = AsyncMock(return_value=[_fake_media("v1", "Video", 600)])
@@ -147,14 +157,18 @@ async def test_search_shows_discount(
 
 @pytest.mark.asyncio
 async def test_queue_success(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
     """Successful queue deducts funds and calls add_media after YES confirmation."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Hit Song", 180))
     await _seed_account(database, "Alice", 5000)
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     # Step 1: queue command returns confirmation prompt
     resp = await handler._cmd_queue("Alice", CH, ["v1"])
@@ -183,8 +197,10 @@ async def test_queue_success(
 
 @pytest.mark.asyncio
 async def test_queue_not_found(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """Queue with unknown ID → not found."""
     mock_media_client.get_by_id = AsyncMock(return_value=None)
@@ -197,8 +213,10 @@ async def test_queue_not_found(
 
 @pytest.mark.asyncio
 async def test_queue_insufficient_funds(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """Queue with too little Z → insufficient funds at confirm stage."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Movie", 7200))
@@ -217,14 +235,18 @@ async def test_queue_insufficient_funds(
 
 @pytest.mark.asyncio
 async def test_queue_daily_limit(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
     """Queue past daily limit → blocked at confirm stage."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Song", 180))
     await _seed_account(database, "Alice", 500000)
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     # Bypass cooldown by making get_last_queue_time return None
     original_get_last = database.get_last_queue_time
@@ -254,14 +276,18 @@ async def test_queue_daily_limit(
 
 @pytest.mark.asyncio
 async def test_queue_cooldown(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
     """Second queue within cooldown → blocked at confirm stage."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Song", 180))
     await _seed_account(database, "Alice", 50000)
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     # First queue succeeds
     resp = await handler._cmd_queue("Alice", CH, ["v1"])
@@ -284,14 +310,18 @@ async def test_queue_cooldown(
 
 @pytest.mark.asyncio
 async def test_playnext_uses_position(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
     """playnext calls add_media with position='next' after YES."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Priority", 300))
     await _seed_account(database, "Alice", 500000)
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     # Step 1: legacy playnext command uses queue behavior
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
@@ -306,19 +336,25 @@ async def test_playnext_uses_position(
 
     # Check position kwarg
     call_args = mock_client.add_media.call_args
-    assert call_args.kwargs.get("position") == "next" or (len(call_args.args) > 3 and call_args.args[3] == "next")
+    assert call_args.kwargs.get("position") == "next" or (
+        len(call_args.args) > 3 and call_args.args[3] == "next"
+    )
 
 
 @pytest.mark.asyncio
 async def test_playnext_higher_cost(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
     """playnext is alias to queue with the same tiered pricing."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Short", 60))
     await _seed_account(database, "Alice", 500000)
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     # Confirm prompt should match normal queue pricing, not premium interrupt cost
     resp = await handler._cmd_playnext("Alice", CH, ["v1"])
@@ -343,15 +379,19 @@ async def test_playnext_higher_cost(
 
 @pytest.mark.asyncio
 async def test_paid_queue_fifo_after_current(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """Second paid queue item is moved behind the first pending paid item (FIFO)."""
     # Two distinct media picks
-    mock_media_client.get_by_id = AsyncMock(side_effect=[
-        _fake_media("v1", "First", 300),
-        _fake_media("v2", "Second", 300),
-    ])
+    mock_media_client.get_by_id = AsyncMock(
+        side_effect=[
+            _fake_media("v1", "First", 300),
+            _fake_media("v2", "Second", 300),
+        ]
+    )
 
     await _seed_account(database, "Alice", 500000)
     await _seed_account(database, "Bob", 500000)
@@ -362,14 +402,21 @@ async def test_paid_queue_fifo_after_current(
         [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
         [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
         [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
-        [{"uid": 100, "media": {}}, {"uid": 302, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [
+            {"uid": 100, "media": {}},
+            {"uid": 302, "media": {}},
+            {"uid": 301, "media": {}},
+            {"uid": 200, "media": {}},
+        ],
     ]
     mock_client.get_state_playlist_items = AsyncMock(side_effect=playlist_states)
     mock_client.get_state_current_uid = AsyncMock(return_value=100)
     mock_client.add_media = AsyncMock(return_value=None)
     mock_client.move_media = AsyncMock(return_value=None)
 
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     # First queue purchase
     resp = await handler._cmd_queue("Alice", CH, ["v1"])
@@ -399,14 +446,18 @@ async def test_paid_queue_fifo_after_current(
 
 @pytest.mark.asyncio
 async def test_paid_queue_fifo_with_lagged_uid_visibility(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """Lagged state visibility still discovers new UID and preserves FIFO moves."""
-    mock_media_client.get_by_id = AsyncMock(side_effect=[
-        _fake_media("v1", "First", 300),
-        _fake_media("v2", "Second", 300),
-    ])
+    mock_media_client.get_by_id = AsyncMock(
+        side_effect=[
+            _fake_media("v1", "First", 300),
+            _fake_media("v2", "Second", 300),
+        ]
+    )
 
     await _seed_account(database, "Alice", 500000)
     await _seed_account(database, "Bob", 500000)
@@ -419,14 +470,21 @@ async def test_paid_queue_fifo_with_lagged_uid_visibility(
         [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
         [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
         [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
-        [{"uid": 100, "media": {}}, {"uid": 302, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [
+            {"uid": 100, "media": {}},
+            {"uid": 302, "media": {}},
+            {"uid": 301, "media": {}},
+            {"uid": 200, "media": {}},
+        ],
     ]
     mock_client.get_state_playlist_items = AsyncMock(side_effect=playlist_states)
     mock_client.get_state_current_uid = AsyncMock(return_value=100)
     mock_client.add_media = AsyncMock(return_value=None)
     mock_client.move_media = AsyncMock(return_value=None)
 
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     # First queue purchase
     resp = await handler._cmd_queue("Alice", CH, ["v1"])
@@ -457,8 +515,10 @@ async def test_paid_queue_fifo_with_lagged_uid_visibility(
 
 @pytest.mark.asyncio
 async def test_forcenow_creates_approval(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """forcenow with admin gate → creates pending approval."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Urgent", 300))
@@ -475,12 +535,15 @@ async def test_forcenow_creates_approval(
 
 @pytest.mark.asyncio
 async def test_forcenow_without_admin_gate(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    mock_media_client: MagicMock, mock_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    mock_media_client: MagicMock,
+    mock_client: MagicMock,
 ):
     """forcenow with admin gate disabled → queues directly."""
     # Override config to disable admin gate
     from conftest import make_config_dict
+
     cfg_dict = make_config_dict(spending={"force_play_requires_admin": False})
     config = EconomyConfig(**cfg_dict)
     engine = SpendingEngine(config, database, mock_media_client, logging.getLogger("test"))

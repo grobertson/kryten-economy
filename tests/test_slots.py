@@ -19,6 +19,7 @@ async def _seed_account(db: EconomyDatabase, username: str = "Alice", balance: i
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
 
     import asyncio
+
     loop = asyncio.get_running_loop()
     first_seen = datetime.now(timezone.utc) - timedelta(hours=2)
 
@@ -158,7 +159,9 @@ async def test_spin_payout_table_valid(gambling_engine: GamblingEngine):
 
 
 @pytest.mark.asyncio
-async def test_spin_transaction_logged_win(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_transaction_logged_win(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Win → transaction with type='gamble_win'."""
     await _seed_account(database)
 
@@ -181,6 +184,7 @@ async def test_spin_transaction_logged_win(gambling_engine: GamblingEngine, data
     if result.outcome in (GambleOutcome.WIN, GambleOutcome.JACKPOT):
         # Check transaction logged
         import asyncio
+
         loop = asyncio.get_running_loop()
 
         def _check():
@@ -199,7 +203,9 @@ async def test_spin_transaction_logged_win(gambling_engine: GamblingEngine, data
 
 
 @pytest.mark.asyncio
-async def test_spin_gambling_stats_updated(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_gambling_stats_updated(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """total_spins incremented, net_gambling updated."""
     await _seed_account(database)
 
@@ -213,7 +219,9 @@ async def test_spin_gambling_stats_updated(gambling_engine: GamblingEngine, data
 
 
 @pytest.mark.asyncio
-async def test_spin_display_jackpot_symbols(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_display_jackpot_symbols(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Jackpot → display shows the jackpot symbols."""
     await _seed_account(database)
 
@@ -242,7 +250,9 @@ async def test_spin_display_loss_random(gambling_engine: GamblingEngine, databas
 
 
 @pytest.mark.asyncio
-async def test_jackpot_announce_threshold(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_jackpot_announce_threshold(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Payout < threshold → no announcement."""
     await _seed_account(database)
 

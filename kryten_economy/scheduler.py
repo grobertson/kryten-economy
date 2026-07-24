@@ -74,18 +74,23 @@ class Scheduler:
         exc = task.exception()
         if exc is not None:
             self._logger.error(
-                "Background task failed", exc_info=exc,
+                "Background task failed",
+                exc_info=exc,
             )
 
     async def start(self) -> None:
         """Start all scheduled tasks."""
         if self._config.rain.enabled:
             self._tasks.append(asyncio.create_task(self._rain_loop()))
-            self._logger.info("Rain drops task started (interval: ~%d min)", self._config.rain.interval_minutes)
+            self._logger.info(
+                "Rain drops task started (interval: ~%d min)", self._config.rain.interval_minutes
+            )
 
         if self._config.balance_maintenance.mode != "none":
             self._tasks.append(asyncio.create_task(self._daily_maintenance_loop()))
-            self._logger.info("Balance maintenance task started (mode: %s)", self._config.balance_maintenance.mode)
+            self._logger.info(
+                "Balance maintenance task started (mode: %s)", self._config.balance_maintenance.mode
+            )
 
         # Sprint 4: challenge expiry + heist check
         if self._gambling_engine and self._config.gambling.enabled:
@@ -117,7 +122,9 @@ class Scheduler:
         for task in self._bg_tasks:
             task.cancel()
         await asyncio.gather(
-            *self._tasks, *self._bg_tasks, return_exceptions=True,
+            *self._tasks,
+            *self._bg_tasks,
+            return_exceptions=True,
         )
         self._tasks.clear()
         self._bg_tasks.clear()
@@ -403,7 +410,9 @@ class Scheduler:
                 self._logger.exception("Trivia check failed")
 
     async def _announce_trivia_result(
-        self, channel: str, result: tuple[list[str], dict[str, str]],
+        self,
+        channel: str,
+        result: tuple[list[str], dict[str, str]],
     ) -> None:
         """Deliver trivia result announcements + PMs off the deadline loop."""
         try:

@@ -136,43 +136,64 @@ class AchievementEngine:
     # ══════════════════════════════════════════════════════════
 
     async def _eval_lifetime_messages(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         total = await self._db.get_lifetime_messages(username, channel)
         return total >= condition.threshold
 
     async def _eval_lifetime_presence_hours(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         hours = await self._db.get_lifetime_presence_hours(username, channel)
         return hours >= condition.threshold
 
     async def _eval_daily_streak(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         streak = await self._db.get_or_create_streak(username, channel)
         return streak.get("current_daily_streak", 0) >= condition.threshold
 
     async def _eval_unique_tip_recipients(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         count = await self._db.get_unique_tip_recipients(username, channel)
         return count >= condition.threshold
 
     async def _eval_unique_tip_senders(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         count = await self._db.get_unique_tip_senders(username, channel)
         return count >= condition.threshold
 
     async def _eval_lifetime_earned(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         earned = await self._db.get_lifetime_earned(username, channel)
         return earned >= condition.threshold
 
     async def _eval_lifetime_spent(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         account = await self._db.get_account(username, channel)
         if not account:
@@ -180,19 +201,28 @@ class AchievementEngine:
         return account.get("lifetime_spent", 0) >= condition.threshold
 
     async def _eval_lifetime_gambled(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         total = await self._db.get_lifetime_gambled(username, channel)
         return total >= condition.threshold
 
     async def _eval_gambling_biggest_win(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         biggest = await self._db.get_biggest_gambling_win(username, channel)
         return biggest >= condition.threshold
 
     async def _eval_rank_reached(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         """Check if user has reached a specific rank tier index."""
         account = await self._db.get_account(username, channel)
@@ -202,7 +232,10 @@ class AchievementEngine:
         return current_tier >= condition.threshold
 
     async def _eval_unique_emotes(
-        self, username: str, channel: str, condition: AchievementConditionConfig,
+        self,
+        username: str,
+        channel: str,
+        condition: AchievementConditionConfig,
     ) -> bool:
         account = await self._db.get_account(username, channel)
         if not account:

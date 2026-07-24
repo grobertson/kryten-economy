@@ -10,7 +10,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .channel_state import ChannelStateTracker, MediaInfo
 from .database import EconomyDatabase
@@ -103,9 +103,7 @@ class EarningEngine:
         self._fractional: dict[tuple[str, str, str], float] = {}
 
         # Ignored users (lowercase) for fast lookup
-        self._ignored_users: set[str] = {
-            u.lower() for u in (config.ignored_users or [])
-        }
+        self._ignored_users: set[str] = {u.lower() for u in (config.ignored_users or [])}
 
         # Unique emote tracking: (username, channel, date) → set[str]
         self._emote_sets: dict[tuple[str, str, str], set[str]] = {}
@@ -188,7 +186,11 @@ class EarningEngine:
 
         if social_cfg.mentioned_by_other.enabled:
             await self._eval_mentioned_by_other(
-                username, channel, message, timestamp, outcome,
+                username,
+                channel,
+                message,
+                timestamp,
+                outcome,
             )
 
         # bot_interaction is evaluated externally (see evaluate_bot_interaction)
@@ -196,11 +198,15 @@ class EarningEngine:
         # ── Reactive triggers (laugh + kudos) ───────────────
         if chat_cfg.laugh_received.enabled:
             laugh_result = await self._eval_laugh_received(
-                username, channel, message, timestamp,
+                username,
+                channel,
+                message,
+                timestamp,
             )
             if laugh_result and laugh_result.amount > 0:
                 joke_teller = self._channel_state.get_last_non_self_message_user(
-                    channel, username,
+                    channel,
+                    username,
                 )
                 if joke_teller and joke_teller.lower() not in self._ignored_users:
                     await self._db.credit(
@@ -213,16 +219,24 @@ class EarningEngine:
                         related_user=username,
                     )
                     await self._record_analytics(
-                        channel, laugh_result.trigger_id, laugh_result.amount, timestamp,
+                        channel,
+                        laugh_result.trigger_id,
+                        laugh_result.amount,
+                        timestamp,
                     )
                     today = timestamp.strftime("%Y-%m-%d")
                     await self._db.increment_daily_laughs_received(
-                        joke_teller, channel, today,
+                        joke_teller,
+                        channel,
+                        today,
                     )
 
         if chat_cfg.kudos_received.enabled:
             kudos_results = await self._eval_kudos_received(
-                username, channel, message, timestamp,
+                username,
+                channel,
+                message,
+                timestamp,
             )
             for target, result in kudos_results:
                 if result.amount > 0:
@@ -236,7 +250,10 @@ class EarningEngine:
                         related_user=username,
                     )
                     await self._record_analytics(
-                        channel, result.trigger_id, result.amount, timestamp,
+                        channel,
+                        result.trigger_id,
+                        result.amount,
+                        timestamp,
                     )
                     today = timestamp.strftime("%Y-%m-%d")
                     await self._db.increment_daily_kudos_received(target, channel, today)
@@ -256,7 +273,10 @@ class EarningEngine:
                 reason=f"Chat trigger: {result.trigger_id}",
             )
             await self._record_analytics(
-                channel, result.trigger_id, result.amount, timestamp,
+                channel,
+                result.trigger_id,
+                result.amount,
+                timestamp,
             )
 
         # ── Update last message time (AFTER trigger eval) ───
@@ -282,7 +302,12 @@ class EarningEngine:
             return TriggerResult(trigger_id, 0, blocked_by="condition")
 
         if not await self._check_cooldown(
-            username, channel, trigger_id, cfg.max_per_hour, 3600, timestamp,
+            username,
+            channel,
+            trigger_id,
+            cfg.max_per_hour,
+            3600,
+            timestamp,
         ):
             return TriggerResult(trigger_id, 0, blocked_by="cap")
 
@@ -343,7 +368,8 @@ class EarningEngine:
             return None
 
         joke_teller = self._channel_state.get_last_non_self_message_user(
-            channel, laughing_user,
+            channel,
+            laughing_user,
         )
         if joke_teller is None:
             return None
@@ -354,7 +380,12 @@ class EarningEngine:
 
         # Cap: max laughers per joke (per joke-teller, rolling 5-min window)
         if not await self._check_cooldown(
-            joke_teller, channel, trigger_id, cfg.max_laughers_per_joke, 300, timestamp,
+            joke_teller,
+            channel,
+            trigger_id,
+            cfg.max_laughers_per_joke,
+            300,
+            timestamp,
         ):
             return None
 
@@ -390,10 +421,12 @@ class EarningEngine:
             if target in self._ignored_users:
                 continue
 
-            results.append((
-                target_raw,  # Preserve original casing
-                TriggerResult(trigger_id, cfg.reward),
-            ))
+            results.append(
+                (
+                    target_raw,  # Preserve original casing
+                    TriggerResult(trigger_id, cfg.reward),
+                )
+            )
 
         return results
 
@@ -411,7 +444,9 @@ class EarningEngine:
         cfg = self._config.content_triggers.first_after_media_change
 
         claimed = self._channel_state.try_claim_first_after_media(
-            channel, username, timestamp,
+            channel,
+            username,
+            timestamp,
         )
         if not claimed:
             return TriggerResult(trigger_id, 0, blocked_by="condition")
@@ -438,12 +473,17 @@ class EarningEngine:
             return TriggerResult(trigger_id, 0, blocked_by="cap")
 
         amount = self._accumulate_fractional(
-            username, channel, trigger_id, cfg.reward_per_message,
+            username,
+            channel,
+            trigger_id,
+            cfg.reward_per_message,
         )
         return TriggerResult(trigger_id, amount)
 
     async def evaluate_like_current(
-        self, username: str, channel: str,
+        self,
+        username: str,
+        channel: str,
     ) -> TriggerResult:
         """Called by PM handler when user sends 'like'."""
         trigger_id = "content.like_current"
@@ -509,7 +549,6 @@ class EarningEngine:
         survivors = unbanned
 
         rewarded: list[str] = []
-        today = now.strftime("%Y-%m-%d")
         for username in survivors:
             await self._db.credit(
                 username,
@@ -539,7 +578,9 @@ class EarningEngine:
         cfg = self._config.social_triggers.greeted_newcomer
 
         recent = self._channel_state.get_recent_joiners(
-            channel, timestamp, cfg.window_seconds,
+            channel,
+            timestamp,
+            cfg.window_seconds,
         )
         if not recent:
             return TriggerResult(trigger_id, 0, blocked_by="condition")
@@ -584,7 +625,12 @@ class EarningEngine:
             if target.lower() in message_lower:
                 cooldown_key = f"{trigger_id}.{sender.lower()}.{target.lower()}"
                 if not await self._check_cooldown(
-                    target, channel, cooldown_key, cfg.max_per_hour_same_user, 3600, timestamp,
+                    target,
+                    channel,
+                    cooldown_key,
+                    cfg.max_per_hour_same_user,
+                    3600,
+                    timestamp,
                 ):
                     continue
 
@@ -598,7 +644,10 @@ class EarningEngine:
                     related_user=sender,
                 )
                 await self._record_analytics(
-                    channel, trigger_id, cfg.reward, timestamp,
+                    channel,
+                    trigger_id,
+                    cfg.reward,
+                    timestamp,
                 )
 
     async def evaluate_bot_interaction(
@@ -622,13 +671,17 @@ class EarningEngine:
 
         today = timestamp.strftime("%Y-%m-%d")
         activity = await self._db.get_or_create_daily_activity(
-            responding_to_user, channel, today,
+            responding_to_user,
+            channel,
+            today,
         )
         if activity.get("bot_interactions", 0) >= cfg.max_per_day:
             return TriggerResult(trigger_id, 0, blocked_by="cap")
 
         await self._db.increment_daily_bot_interactions(
-            responding_to_user, channel, today,
+            responding_to_user,
+            channel,
+            today,
         )
 
         await self._db.credit(
@@ -744,7 +797,10 @@ class EarningEngine:
             if new_emotes:
                 self._emote_sets[key] |= new_emotes
                 await self._db.set_daily_unique_emotes(
-                    username, channel, today, len(self._emote_sets[key]),
+                    username,
+                    channel,
+                    today,
+                    len(self._emote_sets[key]),
                 )
 
         # Prune old date emote sets

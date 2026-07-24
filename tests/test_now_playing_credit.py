@@ -30,10 +30,12 @@ async def test_resolve_queued_by_from_playlist(sample_config, mock_client):
 
     event = MagicMock()
     event.queueby = None
-    mock_client.get_state_playlist_items = AsyncMock(return_value=[
-        {"uid": 99, "queueby": "Bob"},
-        {"uid": 101, "queueby": "Carol"},
-    ])
+    mock_client.get_state_playlist_items = AsyncMock(
+        return_value=[
+            {"uid": 99, "queueby": "Bob"},
+            {"uid": 101, "queueby": "Carol"},
+        ]
+    )
 
     queued_by = await app._resolve_queued_by("testchannel", 101, event)
     assert queued_by == "Carol"

@@ -7,11 +7,10 @@ command handlers in CommandHandler.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.command_handler import CommandHandler
 from kryten_economy.config import EconomyConfig
@@ -65,7 +64,10 @@ def spending_app(
     app.commands_processed = 0
     app.uptime_seconds = 1.0
     app.spending_engine = SpendingEngine(
-        sample_config, database, None, logging.getLogger("test.spending"),
+        sample_config,
+        database,
+        None,
+        logging.getLogger("test.spending"),
     )
     return app
 
@@ -80,20 +82,21 @@ def handler(spending_app: MagicMock, mock_client: MagicMock) -> CommandHandler:
 #  spending.queue_preview
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestQueuePreview:
     """Tests for Gap 4: spending.queue_preview."""
 
-    async def test_preview_returns_cost(
-        self, handler: CommandHandler, database: EconomyDatabase
-    ):
+    async def test_preview_returns_cost(self, handler: CommandHandler, database: EconomyDatabase):
         """Happy path: correct cost_z, tier_label, available: true."""
         await _seed_account(database, "alice", balance=50000)
-        result = await handler._handle_command({
-            "command": "spending.queue_preview",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,  # 10 minutes — Short tier
-        })
+        result = await handler._handle_command(
+            {
+                "command": "spending.queue_preview",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,  # 10 minutes — Short tier
+            }
+        )
         assert result["success"] is True
         data = result["data"]
         assert data["available"] is True
@@ -106,20 +109,20 @@ class TestQueuePreview:
     ):
         """available: false, error_code: insufficient_balance."""
         await _seed_account(database, "alice", balance=5)  # too poor
-        result = await handler._handle_command({
-            "command": "spending.queue_preview",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,
-        })
+        result = await handler._handle_command(
+            {
+                "command": "spending.queue_preview",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,
+            }
+        )
         assert result["success"] is True
         data = result["data"]
         assert data["available"] is False
         assert data["error_code"] == "insufficient_balance"
 
-    async def test_preview_daily_limit(
-        self, handler: CommandHandler, database: EconomyDatabase
-    ):
+    async def test_preview_daily_limit(self, handler: CommandHandler, database: EconomyDatabase):
         """Seed daily_activity.queues_used = max; expect daily_limit_reached."""
         await _seed_account(database, "alice", balance=50000)
         today = datetime.now(timezone.utc).date().isoformat()
@@ -127,32 +130,32 @@ class TestQueuePreview:
         for _ in range(3):
             await database.increment_daily_queues_used("alice", CH, today)
 
-        result = await handler._handle_command({
-            "command": "spending.queue_preview",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,
-        })
+        result = await handler._handle_command(
+            {
+                "command": "spending.queue_preview",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,
+            }
+        )
         assert result["success"] is True
         data = result["data"]
         assert data["available"] is False
         assert data["error_code"] == "daily_limit_reached"
 
-    async def test_preview_cooldown(
-        self, handler: CommandHandler, database: EconomyDatabase
-    ):
+    async def test_preview_cooldown(self, handler: CommandHandler, database: EconomyDatabase):
         """Seed a recent queue transaction; expect cooldown_active."""
         await _seed_account(database, "alice", balance=50000)
         # Insert a queue transaction (simulating recent spend)
-        await database.debit(
-            "alice", CH, 100, "spend", trigger_id="spend.queue.test1"
+        await database.debit("alice", CH, 100, "spend", trigger_id="spend.queue.test1")
+        result = await handler._handle_command(
+            {
+                "command": "spending.queue_preview",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,
+            }
         )
-        result = await handler._handle_command({
-            "command": "spending.queue_preview",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,
-        })
         assert result["success"] is True
         data = result["data"]
         assert data["available"] is False
@@ -164,22 +167,23 @@ class TestQueuePreview:
 #  spending.queue
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestQueueSpend:
     """Tests for Gap 5: spending.queue."""
 
-    async def test_queue_happy_path(
-        self, handler: CommandHandler, database: EconomyDatabase
-    ):
+    async def test_queue_happy_path(self, handler: CommandHandler, database: EconomyDatabase):
         """Debit succeeds; idempotency row inserted; daily counter incremented."""
         await _seed_account(database, "alice", balance=50000)
-        result = await handler._handle_command({
-            "command": "spending.queue",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,
-            "tier": "queue",
-            "request_id": "req-001",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "spending.queue",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,
+                "tier": "queue",
+                "request_id": "req-001",
+            }
+        )
         assert result["success"] is True
         data = result["data"]
         assert data["success"] is True
@@ -198,9 +202,7 @@ class TestQueueSpend:
         activity = await database.get_or_create_daily_activity("alice", CH, today)
         assert activity["queues_used"] >= 1
 
-    async def test_queue_idempotent(
-        self, handler: CommandHandler, database: EconomyDatabase
-    ):
+    async def test_queue_idempotent(self, handler: CommandHandler, database: EconomyDatabase):
         """Call spending.queue twice with same request_id; balance debited only once."""
         await _seed_account(database, "alice", balance=50000)
         req = {
@@ -228,14 +230,16 @@ class TestQueueSpend:
     ):
         """success: false when balance too low."""
         await _seed_account(database, "alice", balance=5)
-        result = await handler._handle_command({
-            "command": "spending.queue",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,
-            "tier": "queue",
-            "request_id": "req-poor",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "spending.queue",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,
+                "tier": "queue",
+                "request_id": "req-poor",
+            }
+        )
         assert result["success"] is True
         data = result["data"]
         assert data["success"] is False
@@ -246,35 +250,38 @@ class TestQueueSpend:
 #  spending.queue_refund
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestQueueRefund:
     """Tests for Gap 6: spending.queue_refund."""
 
-    async def test_refund_happy_path(
-        self, handler: CommandHandler, database: EconomyDatabase
-    ):
+    async def test_refund_happy_path(self, handler: CommandHandler, database: EconomyDatabase):
         """Spend first, then refund; balance restored."""
         await _seed_account(database, "alice", balance=50000)
         # Spend
-        spend_result = await handler._handle_command({
-            "command": "spending.queue",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,
-            "tier": "queue",
-            "request_id": "req-refund1",
-        })
+        spend_result = await handler._handle_command(
+            {
+                "command": "spending.queue",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,
+                "tier": "queue",
+                "request_id": "req-refund1",
+            }
+        )
         assert spend_result["success"] is True
         cost = spend_result["data"]["cost_z"]
         balance_after_spend = spend_result["data"]["new_balance"]
 
         # Refund
-        refund_result = await handler._handle_command({
-            "command": "spending.queue_refund",
-            "username": "alice",
-            "channel": CH,
-            "request_id": "req-refund1",
-            "reason": "video broken",
-        })
+        refund_result = await handler._handle_command(
+            {
+                "command": "spending.queue_refund",
+                "username": "alice",
+                "channel": CH,
+                "request_id": "req-refund1",
+                "reason": "video broken",
+            }
+        )
         assert refund_result["success"] is True
         data = refund_result["data"]
         assert data["refunded"] == cost
@@ -284,38 +291,42 @@ class TestQueueRefund:
         row = await database.get_queue_spend_request("req-refund1")
         assert row["refunded"] == 1
 
-    async def test_refund_idempotent(
-        self, handler: CommandHandler, database: EconomyDatabase
-    ):
+    async def test_refund_idempotent(self, handler: CommandHandler, database: EconomyDatabase):
         """Call spending.queue_refund twice; balance credited only once."""
         await _seed_account(database, "alice", balance=50000)
         # Spend
-        await handler._handle_command({
-            "command": "spending.queue",
-            "username": "alice",
-            "channel": CH,
-            "duration_sec": 600,
-            "tier": "queue",
-            "request_id": "req-idem-refund",
-        })
+        await handler._handle_command(
+            {
+                "command": "spending.queue",
+                "username": "alice",
+                "channel": CH,
+                "duration_sec": 600,
+                "tier": "queue",
+                "request_id": "req-idem-refund",
+            }
+        )
         # First refund
-        r1 = await handler._handle_command({
-            "command": "spending.queue_refund",
-            "username": "alice",
-            "channel": CH,
-            "request_id": "req-idem-refund",
-            "reason": "test",
-        })
+        r1 = await handler._handle_command(
+            {
+                "command": "spending.queue_refund",
+                "username": "alice",
+                "channel": CH,
+                "request_id": "req-idem-refund",
+                "reason": "test",
+            }
+        )
         balance_after_refund = r1["data"]["new_balance"]
 
         # Second refund (should be replay)
-        r2 = await handler._handle_command({
-            "command": "spending.queue_refund",
-            "username": "alice",
-            "channel": CH,
-            "request_id": "req-idem-refund",
-            "reason": "test",
-        })
+        r2 = await handler._handle_command(
+            {
+                "command": "spending.queue_refund",
+                "username": "alice",
+                "channel": CH,
+                "request_id": "req-idem-refund",
+                "reason": "test",
+            }
+        )
         assert r2["success"] is True
         assert r2["data"].get("idempotent_replay") is True
 
@@ -328,13 +339,15 @@ class TestQueueRefund:
     ):
         """success: false, error: unknown_request_id."""
         await _seed_account(database, "alice", balance=50000)
-        result = await handler._handle_command({
-            "command": "spending.queue_refund",
-            "username": "alice",
-            "channel": CH,
-            "request_id": "req-nonexistent",
-            "reason": "test",
-        })
+        result = await handler._handle_command(
+            {
+                "command": "spending.queue_refund",
+                "username": "alice",
+                "channel": CH,
+                "request_id": "req-nonexistent",
+                "reason": "test",
+            }
+        )
         assert result["success"] is True
         data = result["data"]
         assert data["success"] is False

@@ -21,7 +21,7 @@ from .config import (
     StreaksConfig,
 )
 from .database import EconomyDatabase
-from .utils import now_utc, parse_timestamp, today_str
+from .utils import now_utc, parse_timestamp
 
 if TYPE_CHECKING:
     from .channel_state import ChannelStateTracker
@@ -38,7 +38,9 @@ class UserSession:
     is_afk: bool = False
     cumulative_minutes_today: int = 0
     is_genuine_arrival: bool = False
-    _current_date: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    _current_date: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    )
     _streak_checked_today: bool = False
 
 
@@ -128,10 +130,7 @@ class PresenceTracker:
                 session.cumulative_minutes_today = restored
                 # Check if streak already evaluated today
                 streak_cfg = self._streak_config.daily
-                if (
-                    streak_cfg.enabled
-                    and restored >= streak_cfg.min_presence_minutes
-                ):
+                if streak_cfg.enabled and restored >= streak_cfg.min_presence_minutes:
                     streak = await self._db.get_or_create_streak(username, channel)
                     if streak.get("last_streak_date") == today:
                         session._streak_checked_today = True
@@ -216,11 +215,7 @@ class PresenceTracker:
 
     def get_connected_users(self, channel: str) -> set[str]:
         """Return set of currently connected usernames for channel."""
-        return {
-            session.username
-            for (_, ch), session in self._sessions.items()
-            if ch == channel
-        }
+        return {session.username for (_, ch), session in self._sessions.items() if ch == channel}
 
     def get_connected_count(self, channel: str) -> int:
         """Return count of connected users (excludes ignored)."""
@@ -241,10 +236,7 @@ class PresenceTracker:
     def get_admin_users(self, channel: str, min_rank: int) -> list[str]:
         """Get present users with CyTube rank >= min_rank."""
         present = self.get_connected_users(channel)
-        return [
-            u for u in present
-            if self._user_ranks.get((channel, u.lower()), 0) >= min_rank
-        ]
+        return [u for u in present if self._user_ranks.get((channel, u.lower()), 0) >= min_rank]
 
     def update_config(self, new_config: EconomyConfig) -> None:
         """Hot-swap the config reference."""
@@ -270,10 +262,13 @@ class PresenceTracker:
         if departure_time is None:
             return True  # No record → treat as long absence
         from datetime import timedelta as _td
+
         return now_utc() - departure_time >= _td(minutes=minutes)
 
     async def seed_initial_users(
-        self, channel: str, users: list[dict],
+        self,
+        channel: str,
+        users: list[dict],
     ) -> int:
         """Seed presence sessions from KV-store userlist on startup.
 
@@ -315,10 +310,7 @@ class PresenceTracker:
             # If user already crossed the streak threshold today and the
             # streak was recorded, mark the flag so we don't re-evaluate.
             streak_already_done = False
-            if (
-                streak_cfg.enabled
-                and restored_minutes >= streak_cfg.min_presence_minutes
-            ):
+            if streak_cfg.enabled and restored_minutes >= streak_cfg.min_presence_minutes:
                 streak = await self._db.get_or_create_streak(username, channel)
                 if streak.get("last_streak_date") == today:
                     streak_already_done = True
@@ -509,7 +501,9 @@ class PresenceTracker:
                             await self._rank_engine.check_rank_promotion(username, channel)
                         except Exception:
                             self._logger.exception(
-                                "Rank check error for %s/%s", username, channel,
+                                "Rank check error for %s/%s",
+                                username,
+                                channel,
                             )
                 except Exception:
                     self._logger.exception("Presence tick error for %s/%s", username, channel)
@@ -696,7 +690,10 @@ class PresenceTracker:
     _QUIET_HINT: str = "(PM 'quiet' to mute notifications)"
 
     async def _delayed_welcome_pm(
-        self, channel: str, username: str, wallet_amount: int,
+        self,
+        channel: str,
+        username: str,
+        wallet_amount: int,
     ) -> None:
         """Send the welcome-wallet PM after a configurable delay.
 

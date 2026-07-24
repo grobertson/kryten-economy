@@ -10,7 +10,7 @@ import pytest
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
-from kryten_economy.gambling_engine import GambleOutcome, GamblingEngine
+from kryten_economy.gambling_engine import GamblingEngine
 
 CH = "testchannel"
 
@@ -29,6 +29,7 @@ async def _make_account(
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
     # Update first_seen and banned status
     import asyncio as _aio
+
     loop = _aio.get_running_loop()
 
     def _set_fields():
@@ -47,7 +48,9 @@ async def _make_account(
 
 
 @pytest.mark.asyncio
-async def test_gambling_disabled(gambling_engine: GamblingEngine, database: EconomyDatabase, sample_config: EconomyConfig):
+async def test_gambling_disabled(
+    gambling_engine: GamblingEngine, database: EconomyDatabase, sample_config: EconomyConfig
+):
     """All games return error when gambling.enabled = false."""
     gambling_engine._config.gambling.enabled = False
     await _make_account(database, "Alice")
@@ -69,7 +72,9 @@ async def test_min_account_age_enforced(gambling_engine: GamblingEngine, databas
 
 
 @pytest.mark.asyncio
-async def test_min_account_age_satisfied(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_min_account_age_satisfied(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Account >= 60 min old → allowed (not rejected by age check)."""
     await _make_account(database, "OldUser", age_minutes=120)
 
@@ -116,7 +121,9 @@ async def test_max_wager_enforced(gambling_engine: GamblingEngine, database: Eco
 
 
 @pytest.mark.asyncio
-async def test_atomic_debit_prevents_overdraft(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_atomic_debit_prevents_overdraft(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Two concurrent spins with balance for one → only one succeeds."""
     await _make_account(database, "Tester", balance=120)
 

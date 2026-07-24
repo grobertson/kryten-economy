@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import logging
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
-from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.pm_handler import PmHandler
 
@@ -23,7 +20,10 @@ async def _create_pending_gif(database: EconomyDatabase, username: str) -> dict:
     await database.debit(username, CH, 200, tx_type="spend", trigger_id="vanity.channel_gif")
     # Insert pending approval
     approval_id = await database.create_pending_approval(
-        username, CH, "channel_gif", cost=200,
+        username,
+        CH,
+        "channel_gif",
+        cost=200,
         data='{"gif_url": "https://example.com/test.gif"}',
     )
     return {"id": approval_id, "username": username, "cost": 200}
@@ -31,7 +31,9 @@ async def _create_pending_gif(database: EconomyDatabase, username: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_approve_gif(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Resolves pending, PMs user."""
     await _create_pending_gif(database, "alice")
@@ -52,7 +54,9 @@ async def test_approve_no_pending(pm_handler: PmHandler, database: EconomyDataba
 
 @pytest.mark.asyncio
 async def test_reject_gif_refund(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Resolves rejected, refunds cost, PMs user."""
     await _create_pending_gif(database, "charlie")

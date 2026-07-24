@@ -138,7 +138,9 @@ class TestDeck:
 @pytest.mark.asyncio
 class TestDeal:
     async def test_deal_success(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         result = await bj_engine.deal("Alice", CH, 100)
@@ -150,21 +152,27 @@ class TestDeal:
             assert len(game.dealer_hand.cards) == 2
 
     async def test_deal_disabled(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         bj_engine._config.gambling.blackjack.enabled = False
         result = await bj_engine.deal("Alice", CH, 100)
         assert "disabled" in result
 
     async def test_deal_insufficient_funds(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice", balance=5)
         result = await bj_engine.deal("Alice", CH, 100)
         assert "Insufficient" in result
 
     async def test_double_deal_blocked(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await bj_engine.deal("Alice", CH, 100)
@@ -176,7 +184,9 @@ class TestDeal:
 @pytest.mark.asyncio
 class TestHitStand:
     async def test_hit_draws_card(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         # Rig the deck so we don't bust or get blackjack
@@ -193,7 +203,9 @@ class TestHitStand:
             assert len(game.player_hand.cards) == initial_count + 1
 
     async def test_stand_resolves(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await bj_engine.deal("Alice", CH, 100)
@@ -205,7 +217,9 @@ class TestHitStand:
         assert "Balance" in result
 
     async def test_hit_no_active_game(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         result = await bj_engine.hit("Alice", CH)
         assert "No active" in result
@@ -214,7 +228,9 @@ class TestHitStand:
 @pytest.mark.asyncio
 class TestDoubleDown:
     async def test_double_down(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice", balance=10000)
         await bj_engine.deal("Alice", CH, 100)
@@ -227,7 +243,9 @@ class TestDoubleDown:
         assert "Balance" in result
 
     async def test_double_after_hit_blocked(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice", balance=10000)
         await bj_engine.deal("Alice", CH, 100)
@@ -244,7 +262,9 @@ class TestDoubleDown:
 @pytest.mark.asyncio
 class TestTimeout:
     async def test_timeout_warning(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await bj_engine.deal("Alice", CH, 100)
@@ -253,6 +273,7 @@ class TestTimeout:
             return
         # Simulate time passage
         from datetime import datetime, timedelta, timezone
+
         game.last_action_at = datetime.now(timezone.utc) - timedelta(seconds=95)
         results = await bj_engine.check_timeouts(CH)
         # Should get warning
@@ -260,7 +281,9 @@ class TestTimeout:
         assert len(warned) >= 1 or game.warned
 
     async def test_timeout_auto_stand(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await bj_engine.deal("Alice", CH, 100)
@@ -268,6 +291,7 @@ class TestTimeout:
         if not game:
             return
         from datetime import datetime, timedelta, timezone
+
         game.last_action_at = datetime.now(timezone.utc) - timedelta(seconds=130)
         results = await bj_engine.check_timeouts(CH)
         # Game should be resolved
@@ -284,7 +308,9 @@ class TestRateLimits:
             await bj_engine.stand("Alice", CH)
 
     async def test_cooldown_enforced(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         bj_engine._config.gambling.blackjack.cooldown_seconds = 60
         await _seed_account(database, "Alice", balance=10000)
@@ -294,7 +320,9 @@ class TestRateLimits:
         assert "Cooldown" in result
 
     async def test_daily_limit_enforced(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         bj_engine._config.gambling.blackjack.cooldown_seconds = 0
         bj_engine._config.gambling.blackjack.daily_limit = 1
@@ -310,7 +338,9 @@ class TestLossMessages:
     """Regression for review #6 — a non-bust loss must not say 'Bust!'."""
 
     async def test_dealer_wins_not_bust(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice", balance=10000)
         # Player stands on 18; dealer holds 19 and stands (no draw, no bust).
@@ -328,7 +358,9 @@ class TestLossMessages:
         assert "Bust" not in result
 
     async def test_player_bust_says_bust(
-        self, bj_engine: BlackjackEngine, database: EconomyDatabase,
+        self,
+        bj_engine: BlackjackEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice", balance=10000)
         game = ActiveBlackjack(
@@ -342,4 +374,3 @@ class TestLossMessages:
         bj_engine._games[("alice", CH)] = game
         result = await bj_engine.hit("Alice", CH)  # 19 + 10 = 29 → bust
         assert "Bust" in result
-

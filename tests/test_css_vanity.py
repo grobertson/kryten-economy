@@ -116,15 +116,21 @@ class TestMergeVanityCss:
     def test_replaces_prior_managed_block_idempotently(self):
         existing = "body{}\n"
         first = merge_vanity_css(
-            existing, {"alice": "#111111"},
+            existing,
+            {"alice": "#111111"},
             display_overrides={"alice": "Alice"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         # Apply again with an updated color — should not stack blocks
         second = merge_vanity_css(
-            first, {"alice": "#222222"},
+            first,
+            {"alice": "#222222"},
             display_overrides={"alice": "Alice"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert second.count(BEGIN) == 1
         assert second.count(END) == 1
@@ -136,7 +142,9 @@ class TestMergeVanityCss:
             "body{}\n",
             {"a}body{display:none": "#000000", "alice": "#abcabc"},
             display_overrides={"alice": "Alice"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert "display:none" not in out
         assert ".chat-msg-Alice { color: #abcabc; }" in out
@@ -146,7 +154,9 @@ class TestMergeVanityCss:
             "body{}\n",
             {"charlie": "#333333", "alice": "#111111", "bob": "#222222"},
             display_overrides={"charlie": "Charlie", "alice": "Alice", "bob": "Bob"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert out.index("Alice") < out.index("Bob") < out.index("Charlie")
 
@@ -155,7 +165,10 @@ class TestStrip:
     def test_removes_managed_block_only(self):
         css = f"keep{{}}\n{BEGIN}\n.chat-msg-X {{ color: #000; }}\n{END}\ntail{{}}"
         out = strip_managed_and_legacy(
-            css, begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            css,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert "keep{}" in out
         assert "tail{}" in out
@@ -172,7 +185,10 @@ class TestHarvestManagedColors:
             f"{BEGIN}\n.chat-msg-Alice {{ color: #222222; }}\n{END}\n"
         )
         harvested = harvest_managed_colors(
-            css, begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            css,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         # Legacy + managed are captured (with original casing)…
         assert harvested["oldtimer"] == ("OldTimer", "#abcdef")
@@ -184,16 +200,15 @@ class TestHarvestManagedColors:
 class TestUpgradePreservation:
     def test_preserves_css_only_color_absent_from_db(self):
         """A user whose color is only in a legacy CSS rule survives a rebuild."""
-        existing = (
-            "body{}\n"
-            f"{LEGACY}\n.chat-msg-OldTimer {{ color: #abcdef; }}\n"
-        )
+        existing = "body{}\n" f"{LEGACY}\n.chat-msg-OldTimer {{ color: #abcdef; }}\n"
         # DB only knows about the active buyer.
         out = merge_vanity_css(
             existing,
             {"alice": "#112233"},
             display_overrides={"alice": "Alice"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert ".chat-msg-OldTimer { color: #abcdef; }" in out
         assert ".chat-msg-Alice { color: #112233; }" in out
@@ -205,22 +220,23 @@ class TestUpgradePreservation:
             existing,
             {"alice": "#222222"},
             display_overrides={"alice": "Alice"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert ".chat-msg-Alice { color: #222222; }" in out
         assert "#111111" not in out
 
     def test_protected_user_excluded_even_if_in_css(self):
-        existing = (
-            "body{}\n"
-            f"{LEGACY}\n.chat-msg-ZcoinBank {{ color: #1cfcfc; }}\n"
-        )
+        existing = "body{}\n" f"{LEGACY}\n.chat-msg-ZcoinBank {{ color: #1cfcfc; }}\n"
         out = merge_vanity_css(
             existing,
             {"alice": "#112233"},
             display_overrides={"alice": "Alice"},
             protected={"zcoinbank"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         # The protected user never appears in the auto-managed block…
         managed = out.split(BEGIN, 1)[1]
@@ -241,7 +257,9 @@ class TestUpgradePreservation:
             {"alice": "#112233"},
             display_overrides={"alice": "Alice"},
             protected={"faxybrown"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         # Untouched: still present exactly once, not duplicated into the block.
         assert out.count(".chat-msg-FaxyBrown") == 1
@@ -250,33 +268,37 @@ class TestUpgradePreservation:
 
     def test_protected_preservation_converges(self):
         """Re-applying does not duplicate a preserved protected rule."""
-        existing = (
-            "body{}\n"
-            f"{LEGACY}\n.chat-msg-ZcoinBank {{ color: #1cfcfc; }}\n"
-        )
+        existing = "body{}\n" f"{LEGACY}\n.chat-msg-ZcoinBank {{ color: #1cfcfc; }}\n"
         first = merge_vanity_css(
-            existing, {"alice": "#112233"},
-            display_overrides={"alice": "Alice"}, protected={"zcoinbank"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            existing,
+            {"alice": "#112233"},
+            display_overrides={"alice": "Alice"},
+            protected={"zcoinbank"},
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         second = merge_vanity_css(
-            first, {"alice": "#112233"},
-            display_overrides={"alice": "Alice"}, protected={"zcoinbank"},
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            first,
+            {"alice": "#112233"},
+            display_overrides={"alice": "Alice"},
+            protected={"zcoinbank"},
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert second.count(".chat-msg-ZcoinBank") == 1
 
     def test_preserve_disabled_drops_css_only_color(self):
-        existing = (
-            "body{}\n"
-            f"{LEGACY}\n.chat-msg-OldTimer {{ color: #abcdef; }}\n"
-        )
+        existing = "body{}\n" f"{LEGACY}\n.chat-msg-OldTimer {{ color: #abcdef; }}\n"
         out = merge_vanity_css(
             existing,
             {"alice": "#112233"},
             display_overrides={"alice": "Alice"},
             preserve_existing=False,
-            begin_marker=BEGIN, end_marker=END, legacy_marker=LEGACY,
+            begin_marker=BEGIN,
+            end_marker=END,
+            legacy_marker=LEGACY,
         )
         assert "OldTimer" not in out
         assert ".chat-msg-Alice { color: #112233; }" in out

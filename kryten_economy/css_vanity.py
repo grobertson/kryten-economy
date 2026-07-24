@@ -271,9 +271,7 @@ def merge_vanity_css(
         display = casing.get(lower_user, lower_user)
         if not is_safe_username(display):
             continue
-        selectors_and_colors.append(
-            (selector_template.format(username=display), value)
-        )
+        selectors_and_colors.append((selector_template.format(username=display), value))
 
     block = build_managed_block(
         selectors_and_colors,

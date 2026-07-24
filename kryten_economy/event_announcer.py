@@ -131,7 +131,8 @@ class EventAnnouncer:
         while True:
             try:
                 channel, message = await asyncio.wait_for(
-                    self._queue.get(), timeout=self._batch_delay_seconds,
+                    self._queue.get(),
+                    timeout=self._batch_delay_seconds,
                 )
             except asyncio.TimeoutError:
                 continue

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,9 +15,13 @@ from kryten_economy.scheduler import Scheduler
 
 
 @pytest.fixture
-def presence(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> PresenceTracker:
+def presence(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> PresenceTracker:
     return PresenceTracker(
-        config=sample_config, database=database, client=mock_client,
+        config=sample_config,
+        database=database,
+        client=mock_client,
         logger=logging.getLogger("test.presence"),
     )
 
@@ -94,6 +98,7 @@ class TestRain:
             await scheduler._execute_rain()
 
         import sqlite3
+
         conn = sqlite3.connect(database._db_path)
         conn.row_factory = sqlite3.Row
         rain_tx = conn.execute(
@@ -104,8 +109,11 @@ class TestRain:
         assert rain_tx["amount"] == 20
 
     async def test_rain_uses_scheduled_event_multiplier(
-        self, sample_config: EconomyConfig, database: EconomyDatabase,
-        presence: PresenceTracker, mock_client: MagicMock,
+        self,
+        sample_config: EconomyConfig,
+        database: EconomyDatabase,
+        presence: PresenceTracker,
+        mock_client: MagicMock,
     ):
         """Scheduled event multiplier should scale rain drops."""
         await presence.handle_user_join("Alice", "testchannel")

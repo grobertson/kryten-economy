@@ -18,7 +18,10 @@ NOW = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
 async def test_ignored_user_earns_nothing(earning_engine, database):
     """Message from ignored user → empty outcome, no DB writes."""
     outcome = await earning_engine.evaluate_chat_message(
-        "IgnoredBot", CH, "hello world this is a long message indeed!", NOW,
+        "IgnoredBot",
+        CH,
+        "hello world this is a long message indeed!",
+        NOW,
     )
     assert outcome.total_earned == 0
     assert len(outcome.results) == 0
@@ -28,7 +31,10 @@ async def test_ignored_user_earns_nothing(earning_engine, database):
 async def test_ignored_user_case_insensitive(earning_engine, database):
     """'IgnoredBot' in config matches 'ignoredbot' message sender."""
     outcome = await earning_engine.evaluate_chat_message(
-        "ignoredbot", CH, "hello world this is a long message indeed!", NOW,
+        "ignoredbot",
+        CH,
+        "hello world this is a long message indeed!",
+        NOW,
     )
     assert outcome.total_earned == 0
 

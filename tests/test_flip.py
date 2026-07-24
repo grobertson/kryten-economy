@@ -19,6 +19,7 @@ async def _seed_account(db: EconomyDatabase, username: str = "Alice", balance: i
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
 
     import asyncio
+
     loop = asyncio.get_running_loop()
     first_seen = datetime.now(timezone.utc) - timedelta(hours=2)
 
@@ -103,7 +104,9 @@ async def test_flip_balance_updates(gambling_engine: GamblingEngine, database: E
 
 
 @pytest.mark.asyncio
-async def test_flip_gambling_stats_updated(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_flip_gambling_stats_updated(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """total_flips incremented."""
     await _seed_account(database)
 

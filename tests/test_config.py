@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -12,10 +11,8 @@ import yaml
 from kryten_economy import __version__
 from kryten_economy.config import (
     CurrencyConfig,
-    DatabaseConfig,
     EconomyConfig,
     NightWatchConfig,
-    PresenceConfig,
     load_config,
 )
 
@@ -148,7 +145,9 @@ class TestLoadConfig:
         assert cfg.service.name == "economy"
         assert cfg.service.version == __version__
 
-    def test_service_identity_overrides_config_values(self, sample_config_dict: dict, tmp_path: Path):
+    def test_service_identity_overrides_config_values(
+        self, sample_config_dict: dict, tmp_path: Path
+    ):
         """User-provided service.name/version should be ignored in favor of runtime identity."""
         sample_config_dict["service"] = {
             "name": "not-economy",

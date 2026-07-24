@@ -104,10 +104,10 @@ def apca_contrast(text_hex: str, bg_hex: str) -> float:
         return 0.0
 
     if ybg > ytxt:  # dark text on light bg
-        sapc = (ybg ** _NORM_BG - ytxt ** _NORM_TXT) * _SCALE_BOW
+        sapc = (ybg**_NORM_BG - ytxt**_NORM_TXT) * _SCALE_BOW
         output = 0.0 if sapc < _LO_CLIP else sapc - _LO_BOW_OFFSET
     else:  # light text on dark bg (our chat case)
-        sapc = (ybg ** _REV_BG - ytxt ** _REV_TXT) * _SCALE_WOB
+        sapc = (ybg**_REV_BG - ytxt**_REV_TXT) * _SCALE_WOB
         output = 0.0 if sapc > -_LO_CLIP else sapc + _LO_WOB_OFFSET
 
     return output * 100.0
@@ -132,9 +132,7 @@ def chroma_factor(text_hex: str, *, knee: int = CHROMA_KNEE) -> float:
     return min(g + b, knee) / float(knee)
 
 
-def readability_score(
-    text_hex: str, bg_hex: str, *, knee: int = CHROMA_KNEE
-) -> float:
+def readability_score(text_hex: str, bg_hex: str, *, knee: int = CHROMA_KNEE) -> float:
     """Combined readability score: APCA Lc scaled by the chroma penalty.
 
     This is the single number the guard and UI threshold against. It is high only
@@ -182,9 +180,7 @@ def evaluate_color(
     ``acceptable`` is False only when rejected.
     """
     lc = round(readability(text_hex, bg_hex), 1)
-    level, score = classify_contrast(
-        text_hex, bg_hex, min_lc=min_lc, warn_lc=warn_lc, knee=knee
-    )
+    level, score = classify_contrast(text_hex, bg_hex, min_lc=min_lc, warn_lc=warn_lc, knee=knee)
     if level == LEVEL_REJECT:
         # Tailor the hint to the failure mode: a near-mono red that APCA alone
         # would pass (good lc, chroma killed it) vs. a genuinely too-dark colour.
@@ -213,4 +209,3 @@ def evaluate_color(
         "acceptable": level != LEVEL_REJECT,
         "message": message,
     }
-

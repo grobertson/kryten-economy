@@ -138,7 +138,10 @@ class ChannelStateTracker:
     # ══════════════════════════════════════════════════════════
 
     def try_claim_first_after_media(
-        self, channel: str, username: str, now: datetime,
+        self,
+        channel: str,
+        username: str,
+        now: datetime,
     ) -> bool:
         """Attempt to claim 'first comment after media change'.
         Returns True if this user is the first (and within the window)."""
@@ -206,7 +209,10 @@ class ChannelStateTracker:
         state.recent_joins[username.lower()] = timestamp
 
     def get_recent_joiners(
-        self, channel: str, now: datetime, window_seconds: int,
+        self,
+        channel: str,
+        now: datetime,
+        window_seconds: int,
     ) -> dict[str, datetime]:
         """Return {username_lower: join_time} for users who joined within window.
         Prunes expired entries."""

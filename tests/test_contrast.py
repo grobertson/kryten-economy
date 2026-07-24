@@ -62,16 +62,23 @@ class TestReadabilityScore:
 
     def test_pink_keeps_its_score(self):
         # Pink: chroma factor 1, so score == Lc.
-        assert readability_score("#FF69B4", BG) == pytest.approx(readability("#FF69B4", BG), abs=0.05)
+        assert readability_score("#FF69B4", BG) == pytest.approx(
+            readability("#FF69B4", BG), abs=0.05
+        )
 
 
 class TestClassify:
-    @pytest.mark.parametrize("hexv", ["#800000", "#AA0000", "#DC143C", "#FF0000", "#FF3300", "#0000FF", "#000080"])
+    @pytest.mark.parametrize(
+        "hexv", ["#800000", "#AA0000", "#DC143C", "#FF0000", "#FF3300", "#0000FF", "#000080"]
+    )
     def test_harsh_or_dark_colors_reject(self, hexv):
         level, _ = classify_contrast(hexv, BG, min_lc=MIN, warn_lc=WARN)
         assert level == LEVEL_REJECT, hexv
 
-    @pytest.mark.parametrize("hexv", ["#FF69B4", "#FF7F50", "#FF6347", "#50C878", "#FFD700", "#DA70D6", "#AAAAAA", "#FFFFFF"])
+    @pytest.mark.parametrize(
+        "hexv",
+        ["#FF69B4", "#FF7F50", "#FF6347", "#50C878", "#FFD700", "#DA70D6", "#AAAAAA", "#FFFFFF"],
+    )
     def test_good_colors_pass(self, hexv):
         level, _ = classify_contrast(hexv, BG, min_lc=MIN, warn_lc=WARN)
         assert level == LEVEL_OK, hexv

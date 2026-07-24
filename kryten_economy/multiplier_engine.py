@@ -52,32 +52,38 @@ class MultiplierEngine:
             # Config uses 0=Sun, so convert:  (py_weekday + 1) % 7
             if (now.weekday() + 1) % 7 in self._config.off_peak.days:
                 if now.hour in self._config.off_peak.hours:
-                    active.append(ActiveMultiplier(
-                        source="off_peak",
-                        multiplier=self._config.off_peak.multiplier,
-                        hidden=False,
-                    ))
+                    active.append(
+                        ActiveMultiplier(
+                            source="off_peak",
+                            multiplier=self._config.off_peak.multiplier,
+                            hidden=False,
+                        )
+                    )
 
         # High population
         if self._config.high_population.enabled:
             user_count = len(self._presence.get_connected_users(channel))
             if user_count >= self._config.high_population.min_users:
-                active.append(ActiveMultiplier(
-                    source="population",
-                    multiplier=self._config.high_population.multiplier,
-                    hidden=self._config.high_population.hidden,
-                ))
+                active.append(
+                    ActiveMultiplier(
+                        source="population",
+                        multiplier=self._config.high_population.multiplier,
+                        hidden=self._config.high_population.hidden,
+                    )
+                )
 
         # Holidays
         if self._config.holidays.enabled:
             today_mmdd = now.strftime("%m-%d")
             for holiday in self._config.holidays.dates:
                 if holiday.date == today_mmdd:
-                    active.append(ActiveMultiplier(
-                        source=f"holiday:{holiday.name}",
-                        multiplier=holiday.multiplier,
-                        hidden=False,
-                    ))
+                    active.append(
+                        ActiveMultiplier(
+                            source=f"holiday:{holiday.name}",
+                            multiplier=holiday.multiplier,
+                            hidden=False,
+                        )
+                    )
 
         # Scheduled events
         sched = self._get_scheduled_multiplier(channel)
@@ -87,11 +93,13 @@ class MultiplierEngine:
         # Ad-hoc event
         if self._adhoc_event:
             if now < self._adhoc_event["end_time"]:
-                active.append(ActiveMultiplier(
-                    source=f"adhoc:{self._adhoc_event['name']}",
-                    multiplier=self._adhoc_event["multiplier"],
-                    hidden=False,
-                ))
+                active.append(
+                    ActiveMultiplier(
+                        source=f"adhoc:{self._adhoc_event['name']}",
+                        multiplier=self._adhoc_event["multiplier"],
+                        hidden=False,
+                    )
+                )
             else:
                 # Auto-expire
                 self._adhoc_event = None
@@ -99,7 +107,8 @@ class MultiplierEngine:
         return active
 
     def get_combined_multiplier(
-        self, channel: str,
+        self,
+        channel: str,
     ) -> tuple[float, list[ActiveMultiplier]]:
         """Return the combined multiplier and the list of active sources.
 
@@ -114,7 +123,11 @@ class MultiplierEngine:
     # ── Scheduled event registration ─────────────────────────
 
     def set_scheduled_event(
-        self, channel: str, name: str, multiplier: float, end_time: datetime,
+        self,
+        channel: str,
+        name: str,
+        multiplier: float,
+        end_time: datetime,
     ) -> None:
         """Register an active scheduled event."""
         self._scheduled_events[channel] = {
@@ -143,7 +156,10 @@ class MultiplierEngine:
     # ── Ad-hoc event management ──────────────────────────────
 
     def start_adhoc_event(
-        self, name: str, multiplier: float, duration_minutes: int,
+        self,
+        name: str,
+        multiplier: float,
+        duration_minutes: int,
     ) -> None:
         """Start an admin-triggered ad-hoc multiplier event."""
         self._adhoc_event = {

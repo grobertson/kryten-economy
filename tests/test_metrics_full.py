@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
@@ -65,7 +64,8 @@ class FakeApp:
 
 @pytest.mark.asyncio
 async def test_metrics_counters_present(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """All counter metrics in output with HELP/TYPE."""
     await database.get_or_create_account("alice", CH)
@@ -135,7 +135,8 @@ async def test_metrics_counters_present(
 
 @pytest.mark.asyncio
 async def test_metrics_gauges_present(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """All gauge metrics in output with HELP/TYPE."""
     await database.get_or_create_account("alice", CH)
@@ -172,7 +173,8 @@ async def test_metrics_gauges_present(
 
 @pytest.mark.asyncio
 async def test_metrics_by_channel(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Channel label on per-channel gauges."""
     await database.get_or_create_account("alice", CH)
@@ -188,7 +190,8 @@ async def test_metrics_by_channel(
 
 @pytest.mark.asyncio
 async def test_metrics_rank_distribution(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Rank labels on distribution gauge."""
     await database.get_or_create_account("alice", CH)

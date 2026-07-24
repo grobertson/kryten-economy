@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .config import BountyConfig, EconomyConfig
+    from .config import EconomyConfig
     from .database import EconomyDatabase
 
 
@@ -53,9 +53,17 @@ class BountyManager:
             return {"success": False, "bounty_id": 0, "message": "Bounties are disabled."}
 
         if amount < cfg.min_amount:
-            return {"success": False, "bounty_id": 0, "message": f"Minimum bounty: {cfg.min_amount:,} Z"}
+            return {
+                "success": False,
+                "bounty_id": 0,
+                "message": f"Minimum bounty: {cfg.min_amount:,} Z",
+            }
         if amount > cfg.max_amount:
-            return {"success": False, "bounty_id": 0, "message": f"Maximum bounty: {cfg.max_amount:,} Z"}
+            return {
+                "success": False,
+                "bounty_id": 0,
+                "message": f"Maximum bounty: {cfg.max_amount:,} Z",
+            }
         if len(description) > cfg.description_max_length:
             return {
                 "success": False,
@@ -94,7 +102,11 @@ class BountyManager:
         ).isoformat()
 
         bounty_id = await self._db.create_bounty(
-            creator, channel, description, amount, expires_at,
+            creator,
+            channel,
+            description,
+            amount,
+            expires_at,
         )
 
         if self._metrics:
@@ -169,7 +181,7 @@ class BountyManager:
         # Public announcement
         await self._client.send_chat(
             channel,
-            f'🎯 {winner} claimed bounty #{bounty_id}: '
+            f"🎯 {winner} claimed bounty #{bounty_id}: "
             f'"{bounty["description"]}" (+{bounty["amount"]:,} Z)',
         )
 

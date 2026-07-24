@@ -48,8 +48,10 @@ def _make_handler(
 
 @pytest.mark.asyncio
 async def test_purchase_success(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    mock_client: MagicMock, spending_engine: SpendingEngine,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
+    spending_engine: SpendingEngine,
 ):
     """Debits account and calls safe_set_channel_rank(channel, user, 2)."""
     # Associate Producer (100000 lifetime) is the min_rank for purchase
@@ -67,15 +69,19 @@ async def test_purchase_success(
 
 @pytest.mark.asyncio
 async def test_purchase_min_rank_gate(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    mock_client: MagicMock, spending_engine: SpendingEngine,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
+    spending_engine: SpendingEngine,
 ):
     """Below min rank → rejected."""
     # Bob has funds but low lifetime (1000) — only Grip rank, not Associate Producer
     await database.get_or_create_account("Bob", CH)
     await database.credit("Bob", CH, 1000, tx_type="seed", reason="test seed")
     # Give Bob enough raw balance (by directly updating) without adding lifetime
-    import asyncio, sqlite3
+    import asyncio
+    import sqlite3
+
     def _set_balance():
         conn = sqlite3.connect(database._db_path)
         conn.row_factory = sqlite3.Row
@@ -85,6 +91,7 @@ async def test_purchase_min_rank_gate(
         )
         conn.commit()
         conn.close()
+
     await asyncio.get_running_loop().run_in_executor(None, _set_balance)
 
     handler = _make_handler(sample_config, database, mock_client, spending_engine)
@@ -96,8 +103,10 @@ async def test_purchase_min_rank_gate(
 
 @pytest.mark.asyncio
 async def test_purchase_insufficient_funds(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    mock_client: MagicMock, spending_engine: SpendingEngine,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
+    spending_engine: SpendingEngine,
 ):
     """Low balance → rejected."""
     await _seed_account(database, "Alice", 100)
@@ -114,8 +123,10 @@ async def test_purchase_insufficient_funds(
 
 @pytest.mark.asyncio
 async def test_purchase_failure_refund(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    mock_client: MagicMock, spending_engine: SpendingEngine,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
+    spending_engine: SpendingEngine,
 ):
     """safe_set_channel_rank fails → refund."""
     mock_client.safe_set_channel_rank = AsyncMock(
@@ -139,7 +150,8 @@ async def test_purchase_failure_refund(
 
 @pytest.mark.asyncio
 async def test_purchase_disabled(
-    database: EconomyDatabase, mock_client: MagicMock,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Config disabled → rejected."""
     cfg = EconomyConfig(**make_config_dict(cytube_promotion={"enabled": False}))

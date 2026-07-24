@@ -14,13 +14,16 @@ CH = "testchannel"
 
 
 async def _seed_account(
-    db: EconomyDatabase, username: str, balance: int = 5000,
+    db: EconomyDatabase,
+    username: str,
+    balance: int = 5000,
 ) -> None:
     """Create account with generous balance and old enough age."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
 
     import asyncio
+
     loop = asyncio.get_running_loop()
     first_seen = datetime.now(timezone.utc) - timedelta(hours=2)
 
@@ -40,7 +43,8 @@ async def _seed_account(
 
 @pytest.mark.asyncio
 async def test_create_challenge_success(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Valid challenge → pending row created, challenger debited."""
     await _seed_account(database, "Alice")
@@ -56,7 +60,8 @@ async def test_create_challenge_success(
 
 @pytest.mark.asyncio
 async def test_challenge_self_rejected(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Challenge self → error."""
     await _seed_account(database, "Alice")
@@ -67,7 +72,8 @@ async def test_challenge_self_rejected(
 
 @pytest.mark.asyncio
 async def test_challenge_ignored_user_rejected(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Challenge ignored user → error."""
     await _seed_account(database, "Alice")
@@ -79,7 +85,8 @@ async def test_challenge_ignored_user_rejected(
 
 @pytest.mark.asyncio
 async def test_challenge_target_insufficient_balance(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Target can't afford → error."""
     await _seed_account(database, "Alice")
@@ -91,7 +98,8 @@ async def test_challenge_target_insufficient_balance(
 
 @pytest.mark.asyncio
 async def test_challenge_duplicate_rejected(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Existing pending → error."""
     await _seed_account(database, "Alice", balance=10000)
@@ -106,7 +114,8 @@ async def test_challenge_duplicate_rejected(
 
 @pytest.mark.asyncio
 async def test_accept_challenge_success(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Accept → both debited, winner credited (minus rake)."""
     await _seed_account(database, "Alice", balance=10000)
@@ -116,7 +125,8 @@ async def test_accept_challenge_success(
 
     with patch("random.random", return_value=0.2):  # challenger wins (< 0.5)
         target_msg, challenger_msg, public_msg = await gambling_engine.accept_challenge(
-            "Bob", CH,
+            "Bob",
+            CH,
         )
 
     assert target_msg is not None
@@ -127,7 +137,8 @@ async def test_accept_challenge_success(
 
 @pytest.mark.asyncio
 async def test_accept_challenge_expired(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Accept after timeout → 'expired' + refund."""
     await _seed_account(database, "Alice", balance=10000)
@@ -137,6 +148,7 @@ async def test_accept_challenge_expired(
 
     # Expire the challenge directly in DB
     import asyncio
+
     loop = asyncio.get_running_loop()
 
     def _expire():
@@ -159,7 +171,8 @@ async def test_accept_challenge_expired(
 
 @pytest.mark.asyncio
 async def test_decline_challenge_refund(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Decline → challenger refunded, both notified."""
     await _seed_account(database, "Alice", balance=10000)
@@ -180,7 +193,8 @@ async def test_decline_challenge_refund(
 
 @pytest.mark.asyncio
 async def test_challenge_rake_calculated(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """5% of (wager x 2) removed from pool."""
     await _seed_account(database, "Alice", balance=10000)
@@ -211,7 +225,8 @@ async def test_challenge_rake_calculated(
 
 @pytest.mark.asyncio
 async def test_challenge_result_announced(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """announce_public = true → public message returned."""
     await _seed_account(database, "Alice", balance=10000)
@@ -231,7 +246,8 @@ async def test_challenge_result_announced(
 
 @pytest.mark.asyncio
 async def test_challenge_expiry_cleanup(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Expired challenges auto-refund and return info."""
     await _seed_account(database, "Alice", balance=10000)
@@ -242,6 +258,7 @@ async def test_challenge_expiry_cleanup(
 
     # Expire challenge
     import asyncio
+
     loop = asyncio.get_running_loop()
 
     def _expire():
@@ -267,7 +284,8 @@ async def test_challenge_expiry_cleanup(
 
 @pytest.mark.asyncio
 async def test_challenge_no_pending(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Accept with no pending → error."""
     await _seed_account(database, "Bob")
@@ -278,7 +296,8 @@ async def test_challenge_no_pending(
 
 @pytest.mark.asyncio
 async def test_accept_target_insufficient_now(
-    gambling_engine: GamblingEngine, database: EconomyDatabase,
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
 ):
     """Target could afford at creation but not now → error on accept."""
     await _seed_account(database, "Alice", balance=10000)

@@ -8,10 +8,8 @@ Tests:
 
 from __future__ import annotations
 
-import configparser
 from pathlib import Path
 
-import pytest
 import yaml
 
 from kryten_economy.config import load_config
@@ -40,8 +38,14 @@ class TestConfigExample:
             raw = yaml.safe_load(f)
 
         expected_sections = {
-            "nats", "channels", "service", "database", "currency",
-            "presence", "announcements", "admin",
+            "nats",
+            "channels",
+            "service",
+            "database",
+            "currency",
+            "presence",
+            "announcements",
+            "admin",
         }
         for section in expected_sections:
             assert section in raw, f"Missing config section: {section}"

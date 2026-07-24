@@ -13,10 +13,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
@@ -38,8 +37,10 @@ class TestGreetingHandler:
         """User absent > greeting_absence_minutes → greeting posted."""
         # Set up presence tracker with a long-gone departure
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         past = datetime.now(timezone.utc) - timedelta(hours=2)
         presence._last_departure[("alice", "testchannel")] = past
@@ -49,13 +50,16 @@ class TestGreetingHandler:
         await database.set_vanity_item("alice", "testchannel", "custom_greeting", "Hello world!")
 
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
 
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         handler._batch_delay = 0.05  # Speed up for testing
@@ -79,8 +83,10 @@ class TestGreetingHandler:
     ) -> None:
         """WS bounce (absent < greeting_absence_minutes) → no greeting."""
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         # Departed just 5 minutes ago — below 30min threshold
         recent = datetime.now(timezone.utc) - timedelta(minutes=5)
@@ -90,13 +96,16 @@ class TestGreetingHandler:
         await database.set_vanity_item("alice", "testchannel", "custom_greeting", "Hey!")
 
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
 
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         handler._batch_delay = 0.05
@@ -116,8 +125,10 @@ class TestGreetingHandler:
     ) -> None:
         """User has no vanity greeting → no greeting posted."""
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         # Long absence — would qualify
         past = datetime.now(timezone.utc) - timedelta(hours=2)
@@ -127,13 +138,16 @@ class TestGreetingHandler:
         # No vanity item set
 
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
 
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         handler._batch_delay = 0.05
@@ -154,18 +168,23 @@ class TestGreetingHandler:
         sample_config.announcements.custom_greeting = False
 
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
 
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
 
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         handler._batch_delay = 0.05
@@ -184,24 +203,31 @@ class TestGreetingHandler:
     ) -> None:
         """3 joins within batch window → combined greeting."""
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         # All users have long absence
         past = datetime.now(timezone.utc) - timedelta(hours=3)
         for user in ["alice", "bob", "charlie"]:
             presence._last_departure[(user, "testchannel")] = past
             await database.get_or_create_account(user, "testchannel")
-            await database.set_vanity_item(user, "testchannel", "custom_greeting", f"Hi from {user}!")
+            await database.set_vanity_item(
+                user, "testchannel", "custom_greeting", f"Hi from {user}!"
+            )
 
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
 
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         handler._batch_delay = 0.1
@@ -231,8 +257,10 @@ class TestGreetingHandler:
     ) -> None:
         """User with no departure record (first time ever) → treated as long absence."""
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         # No _last_departure entry → was_absent_longer_than returns True
 
@@ -240,13 +268,16 @@ class TestGreetingHandler:
         await database.set_vanity_item("newuser", "testchannel", "custom_greeting", "I'm new!")
 
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
 
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         handler._batch_delay = 0.05
@@ -267,16 +298,21 @@ class TestGreetingHandler:
     ) -> None:
         """update_config swaps the config reference."""
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         new_config = MagicMock()
@@ -292,8 +328,10 @@ class TestGreetingHandler:
     ) -> None:
         """Greeting still fires when join event username casing differs from stored purchase name."""
         presence = PresenceTracker(
-            config=sample_config, database=database,
-            client=mock_client, logger=logging.getLogger("test"),
+            config=sample_config,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         past = datetime.now(timezone.utc) - timedelta(hours=2)
         presence._last_departure[("alice", "testchannel")] = past
@@ -302,12 +340,15 @@ class TestGreetingHandler:
         await database.set_vanity_item("Alice", "testchannel", "custom_greeting", "Case works!")
 
         announcer = EventAnnouncer(
-            config=sample_config, client=mock_client,
+            config=sample_config,
+            client=mock_client,
             logger=logging.getLogger("test"),
         )
         handler = GreetingHandler(
-            config=sample_config, database=database,
-            presence_tracker=presence, announcer=announcer,
+            config=sample_config,
+            database=database,
+            presence_tracker=presence,
+            announcer=announcer,
             logger=logging.getLogger("test"),
         )
         handler._batch_delay = 0.05

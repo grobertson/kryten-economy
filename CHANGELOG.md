@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.14.0] - 2026-07-24
+
+### Added
+- **Shadow-mute filtering in chat and PM.** Messages from CyTube shadow-muted users
+  (`event.shadow = True`) are now silently discarded in both the `chatmsg` and `pm`
+  handlers — they no longer trigger earning, game actions, or PM command dispatch.
+  Requires `kryten-py>=0.17.2`, which also propagates `meta.shadow` for PM events.
+
+### Changed
+
+- **Minimum Python is now 3.12** (was 3.11). This unblocks PEP 701 f-string syntax already present in the codebase and aligns `requires-python`, tool `target-version`, and trove classifiers.
+- **Tooling aligned to the ecosystem standard.** Formatting is now black/ruff at `line-length = 100` (was ruff-only at 120, with no `[tool.black]` config); added a `[tool.black]` section and `ignore = ["E501"]` under `[tool.ruff.lint]`. The codebase was reformatted accordingly.
+- **Eight racers per race.** The grid grew from 6 cars to **8** (added Brown 🟤 and White ⚪) across all built-in odds profiles, with re-tuned win chances/speeds (each profile's chances still sum to 1.0).
+
+### Fixed
+
+- **Lint clean-up.** Removed dead assignments and unused locals flagged by ruff (`F841`) and renamed ambiguous loop variables (`E741`); no behavior change.
+- **Winner missing from the race finish announcement.** The chat finish line (and the web commentary winner call) now always names the winning car, even when commentary is LLM-authored or a custom/misconfigured template omits the `{racer}` placeholder — previously such a template could leave the winner's name blank. The announcement falls back to a deterministic `«🏁 <emoji> <Colour> wins the race!»` headline whenever the resolved line doesn't mention the winner.
+
+[0.14.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.14.0
+
 ## [0.13.0] - 2026-06-22
 
 ### Added

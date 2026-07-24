@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
-from kryten_economy.earning_engine import EarningEngine
 
 
 CH = "testchannel"
@@ -62,7 +59,6 @@ async def test_laugh_self_excluded(earning_engine, channel_state, database):
 
     # alice's balance should only be from other triggers (first_message, conversation_starter)
     # NOT from laugh_received
-    bal = await database.get_balance("alice", CH)
     # If she got a laugh credit of 2, we'd see that. Check no laugh transaction:
     txns = await database.get_recent_transactions("alice", CH, limit=50)
     laugh_txns = [t for t in txns if t.get("trigger_id") == "chat.laugh_received"]
@@ -101,7 +97,9 @@ async def test_laugh_no_previous_sender(earning_engine, database):
 
 @pytest.mark.asyncio
 async def test_laugh_ignored_user_no_joke_credit(
-    earning_engine, channel_state, database,
+    earning_engine,
+    channel_state,
+    database,
 ):
     """If joke-teller is ignored user → no credit (they can't receive)."""
     # Ignored user tells a joke

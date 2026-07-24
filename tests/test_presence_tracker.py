@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
-from kryten_economy.presence_tracker import PresenceTracker, UserSession
+from kryten_economy.presence_tracker import PresenceTracker
 from kryten_economy.utils import now_utc
 
 
 @pytest.fixture
-def tracker(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> PresenceTracker:
+def tracker(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> PresenceTracker:
     """Create a PresenceTracker with test config and mock client."""
     return PresenceTracker(
         config=sample_config,
@@ -104,6 +105,7 @@ class TestDebounce:
         await tracker.handle_user_join("Alice", "testchannel")
         # Simulate departure
         from kryten_economy.utils import now_utc
+
         tracker._last_departure[("alice", "testchannel")] = now_utc()
         del tracker._sessions[("alice", "testchannel")]
 
@@ -116,6 +118,7 @@ class TestDebounce:
         await tracker.handle_user_join("Alice", "testchannel")
         # Simulate departure long ago
         from kryten_economy.utils import now_utc
+
         old_time = now_utc() - timedelta(minutes=10)
         tracker._last_departure[("alice", "testchannel")] = old_time
         del tracker._sessions[("alice", "testchannel")]
@@ -127,13 +130,17 @@ class TestDebounce:
 class TestWelcomeWallet:
     """Welcome wallet on first join."""
 
-    async def test_welcome_wallet_on_first_join(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_welcome_wallet_on_first_join(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """New user should receive welcome wallet."""
         await tracker.handle_user_join("NewUser", "testchannel")
         balance = await database.get_balance("NewUser", "testchannel")
         assert balance == 100  # From onboarding.welcome_wallet
 
-    async def test_no_double_welcome_wallet(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_no_double_welcome_wallet(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Welcome wallet should not be given twice."""
         await tracker.handle_user_join("NewUser", "testchannel")
         first_balance = await database.get_balance("NewUser", "testchannel")
@@ -159,7 +166,9 @@ class TestStartStop:
         await tracker.stop()
         assert tracker._running is False
 
-    async def test_stop_updates_last_seen(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_stop_updates_last_seen(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """stop() should update last_seen for all active sessions."""
         await tracker.handle_user_join("Alice", "testchannel")
         await tracker.stop()
@@ -172,7 +181,9 @@ class TestCumulativeMinutesRestoration:
     """cumulative_minutes_today should be restored from DB on session creation."""
 
     async def test_seed_restores_cumulative_minutes(
-        self, tracker: PresenceTracker, database: EconomyDatabase,
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
     ):
         """seed_initial_users should restore cumulative_minutes_today from daily_activity."""
         today = now_utc().strftime("%Y-%m-%d")
@@ -188,7 +199,9 @@ class TestCumulativeMinutesRestoration:
         assert session.cumulative_minutes_today == 45
 
     async def test_seed_zero_minutes_when_no_activity(
-        self, tracker: PresenceTracker, database: EconomyDatabase,
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
     ):
         """seed should default to 0 cumulative minutes if no daily_activity row exists."""
         users = [{"name": "NewUser", "rank": 0}]
@@ -197,14 +210,18 @@ class TestCumulativeMinutesRestoration:
         assert session.cumulative_minutes_today == 0
 
     async def test_seed_sets_streak_flag_when_already_evaluated(
-        self, tracker: PresenceTracker, database: EconomyDatabase,
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
     ):
         """If streak was already counted today, seed should set _streak_checked_today."""
         today = now_utc().strftime("%Y-%m-%d")
         min_minutes = tracker._streak_config.daily.min_presence_minutes
 
         await database.get_or_create_account("Alice", "testchannel")
-        await database.increment_daily_minutes_present("Alice", "testchannel", today, min_minutes + 5)
+        await database.increment_daily_minutes_present(
+            "Alice", "testchannel", today, min_minutes + 5
+        )
         # Pre-set streak as evaluated today
         await database.get_or_create_streak("Alice", "testchannel")
         await database.update_streak("Alice", "testchannel", 3, 5, today)
@@ -215,7 +232,9 @@ class TestCumulativeMinutesRestoration:
         assert session._streak_checked_today is True
 
     async def test_seed_no_streak_flag_when_below_threshold(
-        self, tracker: PresenceTracker, database: EconomyDatabase,
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
     ):
         """If cumulative minutes below threshold, _streak_checked_today should be False."""
         today = now_utc().strftime("%Y-%m-%d")
@@ -228,7 +247,9 @@ class TestCumulativeMinutesRestoration:
         assert session._streak_checked_today is False
 
     async def test_genuine_join_restores_cumulative_minutes(
-        self, tracker: PresenceTracker, database: EconomyDatabase,
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
     ):
         """handle_user_join (genuine) should restore cumulative_minutes_today from DB."""
         today = now_utc().strftime("%Y-%m-%d")
@@ -239,6 +260,7 @@ class TestCumulativeMinutesRestoration:
         await database.update_last_seen("Alice", "testchannel")
         # Overwrite last_seen to an old timestamp via raw SQL
         import sqlite3
+
         conn = sqlite3.connect(database._db_path)
         conn.execute(
             "UPDATE accounts SET last_seen = ? WHERE username = ? AND channel = ?",
@@ -253,7 +275,9 @@ class TestCumulativeMinutesRestoration:
         assert session.cumulative_minutes_today == 30
 
     async def test_bounce_join_restores_cumulative_minutes(
-        self, tracker: PresenceTracker, database: EconomyDatabase,
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
     ):
         """handle_user_join (bounce) should restore cumulative_minutes_today from DB."""
         today = now_utc().strftime("%Y-%m-%d")
@@ -275,7 +299,9 @@ class TestStreakCheckOperator:
     """Streak check uses >= (not ==) so restored sessions still trigger."""
 
     async def test_streak_fires_after_restore_past_threshold(
-        self, tracker: PresenceTracker, database: EconomyDatabase,
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
     ):
         """If cumulative_minutes restored above threshold, streak should still fire."""
         today = now_utc().strftime("%Y-%m-%d")
@@ -284,7 +310,10 @@ class TestStreakCheckOperator:
         await database.get_or_create_account("Alice", "testchannel")
         # Simulate: user had min_minutes - 1, service restarted, one more tick needed
         await database.increment_daily_minutes_present(
-            "Alice", "testchannel", today, min_minutes - 1,
+            "Alice",
+            "testchannel",
+            today,
+            min_minutes - 1,
         )
 
         # Seed user (restores cumulative = min_minutes - 1)

@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
-from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.pm_handler import PmHandler
 from kryten_economy.presence_tracker import PresenceTracker
@@ -19,9 +15,11 @@ CH = "testchannel"
 
 # ── econ:stats ─────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_econ_stats_format(
-    pm_handler: PmHandler, database: EconomyDatabase,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
     presence_tracker: PresenceTracker,
 ):
     """Returns formatted stats with all fields."""
@@ -39,6 +37,7 @@ async def test_econ_stats_format(
 
 
 # ── econ:user ──────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_econ_user_found(pm_handler: PmHandler, database: EconomyDatabase):
@@ -74,9 +73,11 @@ async def test_econ_user_banned_flag(pm_handler: PmHandler, database: EconomyDat
 
 # ── econ:health ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_econ_health_inflation(
-    pm_handler: PmHandler, database: EconomyDatabase,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
     presence_tracker: PresenceTracker,
 ):
     """Reports inflationary when earned > spent."""
@@ -94,7 +95,8 @@ async def test_econ_health_inflation(
 
 @pytest.mark.asyncio
 async def test_econ_health_deflation(
-    pm_handler: PmHandler, database: EconomyDatabase,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
     presence_tracker: PresenceTracker,
 ):
     """Reports deflationary when spent > earned after account creation."""
@@ -109,6 +111,7 @@ async def test_econ_health_deflation(
 
 
 # ── econ:triggers ──────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_econ_triggers_hot_and_dead(pm_handler: PmHandler, database: EconomyDatabase):
@@ -134,6 +137,7 @@ async def test_econ_triggers_no_data(pm_handler: PmHandler):
 
 
 # ── econ:gambling ──────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_econ_gambling_stats(pm_handler: PmHandler, database: EconomyDatabase):

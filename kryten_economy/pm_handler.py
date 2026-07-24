@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import random
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -44,6 +43,7 @@ if TYPE_CHECKING:
 # ══════════════════════════════════════════════════════════
 #  Sprint 9: PM Rate Limiter
 # ══════════════════════════════════════════════════════════
+
 
 class PmRateLimiter:
     """Sliding-window rate limiter for PM commands per user."""
@@ -237,6 +237,10 @@ class PmHandler:
         username = event.username
         channel = event.channel
 
+        # Ignore shadow-muted users — treat their PMs the same as their chat messages
+        if event.shadow:
+            return
+
         # Ignore messages from ignored users and self
         if username.lower() in self._ignored_users:
             return
@@ -275,7 +279,9 @@ class PmHandler:
                 await self._send_pm(channel, username, response)
                 return
             else:
-                await self._send_pm(channel, username, f"Invalid selection. Enter 1–{len(results)}.")
+                await self._send_pm(
+                    channel, username, f"Invalid selection. Enter 1–{len(results)}."
+                )
                 return
 
         # Clear stale search selection once user types a non-number command
@@ -312,10 +318,13 @@ class PmHandler:
             await self._send_pm(channel, username, response)
         except Exception:
             self._logger.exception(
-                "Command handler error for %s/%s", username, command,
+                "Command handler error for %s/%s",
+                username,
+                command,
             )
             await self._send_pm(
-                channel, username,
+                channel,
+                username,
                 "❌ Something went wrong processing your command. Please try again.",
             )
 
@@ -324,7 +333,6 @@ class PmHandler:
     # ══════════════════════════════════════════════════════════
 
     async def _cmd_help(self, username: str, channel: str, args: list[str]) -> str:
-        s = self._symbol
         lines = [
             "Economy Bot",
             "━" * 15,
@@ -347,33 +355,41 @@ class PmHandler:
         gambling_cfg = self._config.gambling
         game_lines: list[str] = []
         if gambling_cfg.race.enabled:
-            game_lines.extend([
-                "  race — start a race",
-                "  race <amt> <color> — bet",
-                "  race odds · race stats",
-                "  (or !race <amt> <color> in chat)",
-            ])
+            game_lines.extend(
+                [
+                    "  race — start a race",
+                    "  race <amt> <color> — bet",
+                    "  race odds · race stats",
+                    "  (or !race <amt> <color> in chat)",
+                ]
+            )
         if gambling_cfg.trivia.enabled:
-            game_lines.extend([
-                "  trivia <wager> — start/join",
-                "  (answer A/B/C/D in chat)",
-                "  trivia stats",
-            ])
+            game_lines.extend(
+                [
+                    "  trivia <wager> — start/join",
+                    "  (answer A/B/C/D in chat)",
+                    "  trivia stats",
+                ]
+            )
         if gambling_cfg.blackjack.enabled:
-            game_lines.extend([
-                "  blackjack <wager> · bj <wager>",
-                "  hit · stand · double",
-                "  blackjack stats",
-            ])
+            game_lines.extend(
+                [
+                    "  blackjack <wager> · bj <wager>",
+                    "  hit · stand · double",
+                    "  blackjack stats",
+                ]
+            )
         if game_lines:
             lines.append("")
             lines.append("🎲 Spectacle Games")
             lines.extend(game_lines)
 
-        lines.extend([
-            "",
-            "🎬 Media",
-        ])
+        lines.extend(
+            [
+                "",
+                "🎬 Media",
+            ]
+        )
         if getattr(self._config.mediacms, "web_queue_redirect", False):
             url = (getattr(self._config.mediacms, "web_queue_url", "") or "").strip()
             lines.append("  Queue movies on the web:")
@@ -381,29 +397,31 @@ class PmHandler:
                 lines.append(f"  {url}")
         else:
             lines.append("  search · queue")
-        lines.extend([
-            "",
-            "🛒 Shop & Social",
-            "  shop · tip",
-            "  fortune · shoutout",
-            "",
-            "📊 Progress",
-            "  rank · profile",
-            "  achievements · top",
-            "",
-            "📌 Bounties & Events",
-            "  bounty · bounties",
-            "  events · status",
-            "",
-            "🔕 Notifications",
-            "  quiet · unquiet",
-            "",
-            "ℹ️ Info",
-            "  about",
-            "",
-            "━" * 15,
-            "Discover more as you go 🍿",
-        ])
+        lines.extend(
+            [
+                "",
+                "🛒 Shop & Social",
+                "  shop · tip",
+                "  fortune · shoutout",
+                "",
+                "📊 Progress",
+                "  rank · profile",
+                "  achievements · top",
+                "",
+                "📌 Bounties & Events",
+                "  bounty · bounties",
+                "  events · status",
+                "",
+                "🔕 Notifications",
+                "  quiet · unquiet",
+                "",
+                "ℹ️ Info",
+                "  about",
+                "",
+                "━" * 15,
+                "Discover more as you go 🍿",
+            ]
+        )
         return "\n".join(lines)
 
     async def _cmd_about(self, username: str, channel: str, args: list[str]) -> str:
@@ -411,10 +429,7 @@ class PmHandler:
         hours, remainder = divmod(int(uptime), 3600)
         minutes, seconds = divmod(remainder, 60)
         uptime_human = f"{hours}h {minutes}m {seconds}s"
-        return (
-            f"🤖 kryten-economy v{__version__}\n"
-            f"⏱ Uptime: {uptime_human}"
-        )
+        return f"🤖 kryten-economy v{__version__}\n" f"⏱ Uptime: {uptime_human}"
 
     async def _cmd_balance(self, username: str, channel: str, args: list[str]) -> str:
         account = await self._db.get_or_create_account(username, channel)
@@ -493,13 +508,9 @@ class PmHandler:
         result = await self._earning_engine.evaluate_like_current(username, channel)
 
         if result.amount > 0:
-            media = (
-                self._channel_state.get_current_media(channel)
-                if self._channel_state
-                else None
-            )
+            media = self._channel_state.get_current_media(channel) if self._channel_state else None
             title = media.title if media else "current media"
-            return f"👍 Liked \"{title}\"! +{result.amount} {self._symbol}"
+            return f'👍 Liked "{title}"! +{result.amount} {self._symbol}'
 
         if result.blocked_by == "cap":
             return "You've already liked this one!"
@@ -584,11 +595,14 @@ class PmHandler:
                 template = getattr(self._config.announcements.templates, "free_spin_win", None)
                 if template:
                     msg = template.format(
-                        user=username, amount=f"{result.payout:,}",
+                        user=username,
+                        amount=f"{result.payout:,}",
                         currency=self._currency_name,
                     )
                 else:
-                    msg = f"🎁 {username} won {result.payout:,} {self._currency_name} on a FREE spin!"
+                    msg = (
+                        f"🎁 {username} won {result.payout:,} {self._currency_name} on a FREE spin!"
+                    )
                 await self._announce_chat(channel, msg)
             return result.message
 
@@ -606,7 +620,9 @@ class PmHandler:
                 channel,
                 f"🎰 JACKPOT! {username} just won {result.payout:,} {self._symbol} on the slots!",
             )
-        elif result.outcome == GambleOutcome.WIN and self._should_announce_gambling_win(channel, result.payout):
+        elif result.outcome == GambleOutcome.WIN and self._should_announce_gambling_win(
+            channel, result.payout
+        ):
             await self._announce_chat(
                 channel,
                 f"🎰 {username} won {result.payout:,} {self._symbol} on the slots!",
@@ -631,12 +647,16 @@ class PmHandler:
             self._metrics.record_gamble("flip", wager, result.payout)
 
         # Throttled public announcement for wins
-        if result.outcome == GambleOutcome.WIN and self._should_announce_gambling_win(channel, result.payout):
+        if result.outcome == GambleOutcome.WIN and self._should_announce_gambling_win(
+            channel, result.payout
+        ):
             template = getattr(self._config.announcements.templates, "flip_win", None)
             if template:
                 msg = template.format(
-                    user=username, amount=f"{result.payout:,}",
-                    currency=self._currency_name, wager=f"{result.wager:,}",
+                    user=username,
+                    amount=f"{result.payout:,}",
+                    currency=self._currency_name,
+                    wager=f"{result.wager:,}",
                 )
             else:
                 msg = f"🪙 {username} flipped and won {result.payout:,} {self._currency_name}!"
@@ -659,14 +679,18 @@ class PmHandler:
             return "Usage: challenge @user <wager>"
 
         result = await self._gambling_engine.create_challenge(
-            username, target, channel, wager,
+            username,
+            target,
+            channel,
+            wager,
         )
 
         if result.startswith("challenge_created:"):
             _, challenge_id, target_name = result.split(":", 2)
             cfg = self._config.gambling.challenge
             await self._send_pm(
-                channel, target_name,
+                channel,
+                target_name,
                 f"⚔️ {username} challenges you to a {wager} {self._symbol} duel! "
                 f"Reply 'accept' or 'decline' (expires in {cfg.accept_timeout_seconds}s)",
             )
@@ -682,8 +706,8 @@ class PmHandler:
         challenge = await self._db.get_pending_challenge_for_target(username, channel)
         challenger_name = challenge["challenger"] if challenge else None
 
-        target_msg, challenger_msg, public_msg = (
-            await self._gambling_engine.accept_challenge(username, channel)
+        target_msg, challenger_msg, public_msg = await self._gambling_engine.accept_challenge(
+            username, channel
         )
         if challenger_msg and challenger_name:
             await self._send_pm(channel, challenger_name, challenger_msg)
@@ -700,7 +724,8 @@ class PmHandler:
         challenger_name = challenge["challenger"] if challenge else None
 
         target_msg, challenger_msg = await self._gambling_engine.decline_challenge(
-            username, channel,
+            username,
+            channel,
         )
         if challenger_msg and challenger_name:
             await self._send_pm(channel, challenger_name, challenger_msg)
@@ -756,7 +781,9 @@ class PmHandler:
             return
         heist = self._gambling_engine.get_active_heist(channel)
         if not heist:
-            self._logger.debug("Heist join ignored for %s — no active heist in %s", username, channel)
+            self._logger.debug(
+                "Heist join ignored for %s — no active heist in %s", username, channel
+            )
             return
         wager = list(heist.participants.values())[0]
         self._logger.debug("Heist join attempt: %s in %s, wager=%d", username, channel, wager)
@@ -773,21 +800,23 @@ class PmHandler:
         elif result == "Insufficient funds.":
             s = self._symbol
             await self._send_pm(
-                channel, username,
+                channel,
+                username,
                 f"🏦 You don't have enough {s} for the buy-in! "
                 f"Need {wager:,} {s} to join this crew. "
                 f"Try 'balance' to check your stash.",
             )
         elif result == "You're already in this heist.":
             await self._send_pm(
-                channel, username,
+                channel,
+                username,
                 "🏦 Easy, hotshot — you're already on the crew. Sit tight.",
             )
         elif result == "The join window has closed.":
             await self._send_pm(
-                channel, username,
-                "🏦 Too late — the crew already rolled out. "
-                "Catch the next one!",
+                channel,
+                username,
+                "🏦 Too late — the crew already rolled out. " "Catch the next one!",
             )
         elif result == "No active heist. Start one with 'heist <wager>'.":
             pass  # No heist running — ignore stray 'join' messages
@@ -796,7 +825,10 @@ class PmHandler:
             await self._send_pm(channel, username, f"🏦 {result}")
 
     async def _cmd_gambling_stats(
-        self, username: str, channel: str, args: list[str],
+        self,
+        username: str,
+        channel: str,
+        args: list[str],
     ) -> str:
         """Show personal gambling statistics."""
         if self._gambling_engine is None:
@@ -867,7 +899,11 @@ class PmHandler:
         return "Usage: race | race <amount> <color> | race stats | race odds"
 
     async def handle_chat_race_bet(
-        self, username: str, channel: str, amount: int, color: str,
+        self,
+        username: str,
+        channel: str,
+        amount: int,
+        color: str,
     ) -> None:
         """Handle !race <amt> <color> from public chat."""
         if self._race_engine is None:
@@ -950,7 +986,10 @@ class PmHandler:
         return result
 
     async def handle_chat_trivia_bet(
-        self, username: str, channel: str, wager: int,
+        self,
+        username: str,
+        channel: str,
+        wager: int,
     ) -> None:
         """Handle !trivia <wager> from public chat (join an existing round)."""
         if self._trivia_engine is None:
@@ -968,7 +1007,10 @@ class PmHandler:
             await self._send_pm(channel, username, f"🧠 {result}")
 
     async def handle_chat_trivia_answer(
-        self, username: str, channel: str, text: str,
+        self,
+        username: str,
+        channel: str,
+        text: str,
     ) -> None:
         """Check if a chat message is a trivia answer."""
         if self._trivia_engine is None:
@@ -981,7 +1023,8 @@ class PmHandler:
             parts = result.split(":")
             letter = parts[3]
             await self._send_pm(
-                channel, username,
+                channel,
+                username,
                 f"🧠 Answer recorded: {letter}. Waiting for the round to end…",
             )
 
@@ -1198,13 +1241,18 @@ class PmHandler:
             duration_str = self._format_duration(item["duration"])
             lines.append(f"{item['title']}")
             lines.append(f"Runtime: {duration_str}")
-            lines.append(f"\"{i}\" to choose.")
+            lines.append(f'"{i}" to choose.')
             lines.append("")
         lines.append("Enter a number to select.")
         return "\n".join(lines)
 
     async def _start_queue_confirm(
-        self, username: str, channel: str, item: dict, *, queue_type: str = "queue",
+        self,
+        username: str,
+        channel: str,
+        item: dict,
+        *,
+        queue_type: str = "queue",
     ) -> str:
         """Show price and ask user to confirm with YES."""
         if not self._spending:
@@ -1270,7 +1318,9 @@ class PmHandler:
 
         # Force-now should remain immediate.
         if queue_type == "forcenow":
-            await self._client.add_media(channel, item["media_type"], item["media_id"], position="next")
+            await self._client.add_media(
+                channel, item["media_type"], item["media_id"], position="next"
+            )
             return
 
         get_playlist = getattr(self._client, "get_state_playlist_items", None)
@@ -1283,7 +1333,9 @@ class PmHandler:
             or not asyncio.iscoroutinefunction(get_playlist)
             or not asyncio.iscoroutinefunction(move_media)
         ):
-            await self._client.add_media(channel, item["media_type"], item["media_id"], position="next")
+            await self._client.add_media(
+                channel, item["media_type"], item["media_id"], position="next"
+            )
             return
 
         before_items = await get_playlist(channel) or []
@@ -1314,9 +1366,7 @@ class PmHandler:
 
         # Drop played/removed entries so backlog reflects queued-but-not-playing items.
         cur_uid_int = int(current_uid) if current_uid is not None else None
-        pending[:] = [
-            uid for uid in pending if uid in uid_to_index and uid != cur_uid_int
-        ]
+        pending[:] = [uid for uid in pending if uid in uid_to_index and uid != cur_uid_int]
 
         # Resolve a move anchor from pending paid queue state.
         anchor_uid: int | None = None
@@ -1356,7 +1406,10 @@ class PmHandler:
         pending.append(new_uid)
 
     async def _execute_confirmed_queue(
-        self, username: str, channel: str, pending: dict,
+        self,
+        username: str,
+        channel: str,
+        pending: dict,
     ) -> str:
         """Execute a queue after YES confirmation."""
         assert self._media is not None
@@ -1364,7 +1417,6 @@ class PmHandler:
 
         item = pending["item"]
         final_cost = pending["cost"]
-        discount = pending["discount"]
         queue_type = pending["queue_type"]
 
         if queue_type != "forcenow":
@@ -1397,8 +1449,11 @@ class PmHandler:
         bill_type = "queue" if queue_type == "playnext" else queue_type
         trigger_id = f"spend.{bill_type}"
         new_balance = await self._db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id=trigger_id,
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id=trigger_id,
             reason=f'Queue: "{item["title"]}"',
         )
         if new_balance is None:
@@ -1414,8 +1469,10 @@ class PmHandler:
         if self._config.announcements.queue_purchase and self._client:
             template = self._config.announcements.templates.queue
             announce_msg = template.format(
-                user=username, title=item["title"],
-                cost=final_cost, currency=self._currency_name,
+                user=username,
+                title=item["title"],
+                cost=final_cost,
+                currency=self._currency_name,
             )
             await self._announce_chat(channel, announce_msg)
 
@@ -1469,7 +1526,11 @@ class PmHandler:
         return await self._queue_media(username, channel, media_id, "forcenow")
 
     async def _queue_media(
-        self, username: str, channel: str, media_id: str, queue_type: str,
+        self,
+        username: str,
+        channel: str,
+        media_id: str,
+        queue_type: str,
     ) -> str:
         """Shared queue/playnext/forcenow logic."""
         assert self._media is not None
@@ -1514,22 +1575,33 @@ class PmHandler:
 
         # Forcenow with admin gate → create approval
         if queue_type == "forcenow" and self._config.spending.force_play_requires_admin:
-            validation = await self._spending.validate_spend(username, channel, final_cost, "forcenow")
+            validation = await self._spending.validate_spend(
+                username, channel, final_cost, "forcenow"
+            )
             if validation:
                 return validation.message
 
             new_balance = await self._db.debit(
-                username, channel, final_cost,
-                tx_type="spend", trigger_id="spend.forcenow",
+                username,
+                channel,
+                final_cost,
+                tx_type="spend",
+                trigger_id="spend.forcenow",
                 reason=f"Force-Play (pending approval): \"{item['title']}\"",
             )
             if new_balance is None:
                 return "Insufficient funds."
 
             approval_id = await self._db.create_pending_approval(
-                username, channel, "force_play",
-                data={"media_id": media_id, "title": item["title"],
-                       "media_type": item["media_type"], "media_ext_id": item["media_id"]},
+                username,
+                channel,
+                "force_play",
+                data={
+                    "media_id": media_id,
+                    "title": item["title"],
+                    "media_type": item["media_type"],
+                    "media_ext_id": item["media_id"],
+                },
                 cost=final_cost,
             )
             return (
@@ -1545,8 +1617,11 @@ class PmHandler:
         bill_type = "queue" if queue_type == "playnext" else queue_type
         trigger_id = f"spend.{bill_type}"
         new_balance = await self._db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id=trigger_id,
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id=trigger_id,
             reason=f"Queue: \"{item['title']}\"",
         )
         if new_balance is None:
@@ -1555,17 +1630,14 @@ class PmHandler:
         # Queue media as next with FIFO ordering among paid queue purchases.
         await self._queue_paid_media(channel, item, queue_type)
 
-        duration_str = self._format_duration(item["duration"])
-        discount_str = ""
-        if discount > 0:
-            discount_str = f" ({int(discount * 100)}% off)"
-
         # Public announcement
         if self._config.announcements.queue_purchase and self._client:
             template = self._config.announcements.templates.queue
             announce_msg = template.format(
-                user=username, title=item["title"],
-                cost=final_cost, currency=self._currency_name,
+                user=username,
+                title=item["title"],
+                cost=final_cost,
+                currency=self._currency_name,
             )
             await self._announce_chat(channel, announce_msg)
 
@@ -1637,8 +1709,11 @@ class PmHandler:
 
         # Debit sender
         new_balance = await self._db.debit(
-            username, channel, amount,
-            tx_type="tip_send", trigger_id="spend.tip",
+            username,
+            channel,
+            amount,
+            tx_type="tip_send",
+            trigger_id="spend.tip",
             reason=f"Tip to {target}",
         )
         if new_balance is None:
@@ -1646,8 +1721,11 @@ class PmHandler:
 
         # Credit receiver
         await self._db.credit(
-            target, channel, amount,
-            tx_type="tip_receive", trigger_id="earn.tip",
+            target,
+            channel,
+            amount,
+            tx_type="tip_receive",
+            trigger_id="earn.tip",
             reason=f"Tip from {username}",
         )
 
@@ -1659,7 +1737,8 @@ class PmHandler:
         # PM to receiver
         if self._client:
             await self._client.send_pm(
-                channel, target,
+                channel,
+                target,
                 f"💸 {username} just tipped you {amount:,} {self._symbol}!",
             )
 
@@ -1749,9 +1828,13 @@ class PmHandler:
             return "Greeting text too long (max 200 characters)."
 
         return await self._complete_vanity_purchase(
-            username, channel, cfg.cost, "custom_greeting", value,
+            username,
+            channel,
+            cfg.cost,
+            "custom_greeting",
+            value,
             "spend.vanity.custom_greeting",
-            f"✅ Custom greeting set! You'll be greeted with:\n  \"{value}\"",
+            f'✅ Custom greeting set! You\'ll be greeted with:\n  "{value}"',
         )
 
     async def _buy_custom_title(self, username: str, channel: str, value: str) -> str:
@@ -1765,9 +1848,13 @@ class PmHandler:
             return "Title text too long (max 100 characters)."
 
         return await self._complete_vanity_purchase(
-            username, channel, cfg.cost, "custom_title", value,
+            username,
+            channel,
+            cfg.cost,
+            "custom_title",
+            value,
             "spend.vanity.custom_title",
-            f"✅ Custom title set to: \"{value}\"",
+            f'✅ Custom title set to: "{value}"',
         )
 
     async def _buy_channel_gif(self, username: str, channel: str, value: str) -> str:
@@ -1790,8 +1877,11 @@ class PmHandler:
             return validation.message
 
         new_balance = await self._db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id="spend.vanity.channel_gif",
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id="spend.vanity.channel_gif",
             reason="Vanity: Channel GIF (pending approval)",
         )
         if new_balance is None:
@@ -1801,7 +1891,9 @@ class PmHandler:
             self._metrics.record_vanity_purchase(final_cost)
 
         approval_id = await self._db.create_pending_approval(
-            username, channel, "channel_gif",
+            username,
+            channel,
+            "channel_gif",
             data={"gif_url": value},
             cost=final_cost,
         )
@@ -1848,8 +1940,11 @@ class PmHandler:
             return validation.message
 
         new_balance = await self._db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id="spend.vanity.shoutout",
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id="spend.vanity.shoutout",
             reason="Vanity: Shoutout",
         )
         if new_balance is None:
@@ -1879,9 +1974,13 @@ class PmHandler:
             return "Currency name can only contain letters, numbers, spaces, hyphens, underscores, and apostrophes."
 
         return await self._complete_vanity_purchase(
-            username, channel, cfg.cost, "personal_currency_name", value,
+            username,
+            channel,
+            cfg.cost,
+            "personal_currency_name",
+            value,
             "spend.vanity.rename_currency",
-            f"✅ Your currency is now called \"{value}\"!",
+            f'✅ Your currency is now called "{value}"!',
         )
 
     async def _complete_vanity_purchase(
@@ -1905,8 +2004,11 @@ class PmHandler:
             return validation.message
 
         new_balance = await self._db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id=trigger_id,
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id=trigger_id,
             reason=f"Vanity: {item_type}",
         )
         if new_balance is None:
@@ -1963,8 +2065,11 @@ class PmHandler:
             return validation.message
 
         new_balance = await self._db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id="spend.vanity.fortune",
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id="spend.vanity.fortune",
             reason="Daily fortune",
         )
         if new_balance is None:
@@ -2089,7 +2194,11 @@ class PmHandler:
 
         if next_tier:
             remaining = next_tier.min_lifetime_earned - lifetime
-            progress = lifetime / next_tier.min_lifetime_earned * 100 if next_tier.min_lifetime_earned > 0 else 100
+            progress = (
+                lifetime / next_tier.min_lifetime_earned * 100
+                if next_tier.min_lifetime_earned > 0
+                else 100
+            )
             bar = self._progress_bar(progress)
             lines.append("")
             lines.append(f"Next: {next_tier.name}")
@@ -2123,9 +2232,13 @@ class PmHandler:
         personal_name = await self._db.get_vanity_item(target, channel, "personal_currency_name")
         currency = personal_name or self._config.currency.name
 
-        tier_index, tier = self._rank_engine.get_rank_for_lifetime(
-            account.get("lifetime_earned", 0),
-        ) if self._rank_engine else (0, None)
+        tier_index, tier = (
+            self._rank_engine.get_rank_for_lifetime(
+                account.get("lifetime_earned", 0),
+            )
+            if self._rank_engine
+            else (0, None)
+        )
         rank_name = tier.name if tier else account.get("rank_name", "Extra")
 
         streak = await self._db.get_or_create_streak(target, channel)
@@ -2206,8 +2319,7 @@ class PmHandler:
 
         # Hint about hidden achievements
         hidden_count = sum(
-            1 for a in self._config.achievements
-            if a.hidden and a.id not in earned_ids
+            1 for a in self._config.achievements if a.hidden and a.id not in earned_ids
         )
         if hidden_count > 0:
             lines.append(f"\n🔒 {hidden_count} hidden achievement(s) remaining...")
@@ -2228,10 +2340,7 @@ class PmHandler:
             case "ranks":
                 return await self._rank_distribution(channel)
             case _:
-                return (
-                    "Usage: top <category>\n"
-                    "Categories: earners, rich, lifetime, ranks"
-                )
+                return "Usage: top <category>\n" "Categories: earners, rich, lifetime, ranks"
 
     # ── Top sub-commands ─────────────────────────────────────
 
@@ -2306,14 +2415,23 @@ class PmHandler:
         else:
             final_cost = cfg.cost
 
-        validation = await self._spending.validate_spend(
-            username, channel, final_cost, "cytube_promotion",
-        ) if self._spending else None
+        validation = (
+            await self._spending.validate_spend(
+                username,
+                channel,
+                final_cost,
+                "cytube_promotion",
+            )
+            if self._spending
+            else None
+        )
         if validation:
             return validation.message
 
         new_balance = await self._db.debit(
-            username, channel, final_cost,
+            username,
+            channel,
+            final_cost,
             tx_type="spend",
             trigger_id="spend.cytube_promotion",
             reason="CyTube Level 2 promotion",
@@ -2333,7 +2451,9 @@ class PmHandler:
         else:
             # Refund on failure
             await self._db.credit(
-                username, channel, final_cost,
+                username,
+                channel,
+                final_cost,
                 tx_type="refund",
                 trigger_id="refund.cytube_promotion_failed",
                 reason="CyTube promotion failed — refund",
@@ -2421,7 +2541,10 @@ class PmHandler:
             return "Description is required."
 
         result = await self._bounty_manager.create_bounty(
-            username, channel, amount, description,
+            username,
+            channel,
+            amount,
+            description,
         )
 
         if result["success"]:
@@ -2451,10 +2574,7 @@ class PmHandler:
             lines.append(f"  by {b['creator']}, {age} ago")
 
         lines.append("")
-        lines.append(
-            f"{len(bounties)} open. "
-            f"Admin: claim_bounty <id> @winner"
-        )
+        lines.append(f"{len(bounties)} open. " f"Admin: claim_bounty <id> @winner")
         return "\n".join(lines)
 
     # ══════════════════════════════════════════════════════════
@@ -2505,7 +2625,10 @@ class PmHandler:
                 return 'Usage: event start <multiplier> <minutes> "<name>" | event stop'
 
     async def _cmd_event_start(
-        self, username: str, channel: str, args: list[str],
+        self,
+        username: str,
+        channel: str,
+        args: list[str],
     ) -> str:
         """Admin: Start an ad-hoc multiplier event."""
         if len(args) < 3:
@@ -2536,19 +2659,26 @@ class PmHandler:
         return f"Event '{name}' started: {multiplier}× for {minutes} min."
 
     async def _cmd_event_stop(
-        self, username: str, channel: str, args: list[str],
+        self,
+        username: str,
+        channel: str,
+        args: list[str],
     ) -> str:
         """Admin: Stop the current ad-hoc event."""
         stopped = self._multiplier_engine.stop_adhoc_event()
         if stopped:
             await self._announce_chat(
-                channel, "⏰ The current event has been stopped.",
+                channel,
+                "⏰ The current event has been stopped.",
             )
             return "Ad-hoc event stopped."
         return "No ad-hoc event is currently active."
 
     async def _cmd_claim_bounty(
-        self, username: str, channel: str, args: list[str],
+        self,
+        username: str,
+        channel: str,
+        args: list[str],
     ) -> str:
         """Admin: Award an open bounty to a user.
 
@@ -2570,7 +2700,10 @@ class PmHandler:
             return "Winner username is required."
 
         return await self._bounty_manager.claim_bounty(
-            bounty_id, channel, winner, username,
+            bounty_id,
+            channel,
+            winner,
+            username,
         )
 
     # ── Sprint 7 Helpers ─────────────────────────────────────
@@ -2622,7 +2755,9 @@ class PmHandler:
 
         await self._db.get_or_create_account(target, channel)
         await self._db.credit(
-            target, channel, amount,
+            target,
+            channel,
+            amount,
             tx_type="admin_grant",
             trigger_id="admin.grant",
             reason=reason,
@@ -2630,7 +2765,8 @@ class PmHandler:
         balance = (await self._db.get_account(target, channel))["balance"]
 
         await self._send_pm(
-            channel, target,
+            channel,
+            target,
             f"💰 You received {amount:,} Z from an admin. Reason: {reason}",
         )
         return f"Granted {amount:,} Z to {target}. New balance: {balance:,} Z"
@@ -2649,7 +2785,9 @@ class PmHandler:
         reason = " ".join(args[2:]) if len(args) > 2 else f"Admin deduction by {username}"
 
         success = await self._db.debit(
-            target, channel, amount,
+            target,
+            channel,
+            amount,
             tx_type="admin_deduct",
             trigger_id="admin.deduct",
             reason=reason,
@@ -2659,7 +2797,8 @@ class PmHandler:
 
         balance = (await self._db.get_account(target, channel))["balance"]
         await self._send_pm(
-            channel, target,
+            channel,
+            target,
             f"💸 {amount:,} Z deducted by an admin. Reason: {reason}",
         )
         return f"Deducted {amount:,} Z from {target}. New balance: {balance:,} Z"
@@ -2699,7 +2838,9 @@ class PmHandler:
 
         for user in present:
             await self._db.credit(
-                user, channel, per_user,
+                user,
+                channel,
+                per_user,
                 tx_type="admin_rain",
                 trigger_id="admin.rain",
                 reason=f"Admin rain by {username}",
@@ -2724,7 +2865,9 @@ class PmHandler:
         diff = amount - old_balance
         await self._db.set_balance(target, channel, amount)
         await self._db.log_transaction(
-            target, channel, amount=diff,
+            target,
+            channel,
+            amount=diff,
             tx_type="admin_set_balance",
             trigger_id="admin.set_balance",
             reason=f"Balance set to {amount:,} by {username} (was {old_balance:,})",
@@ -2745,7 +2888,8 @@ class PmHandler:
         await self._db.get_or_create_account(target, channel)
         await self._db.update_account_rank(target, channel, rank_name)
         await self._send_pm(
-            channel, target,
+            channel,
+            target,
             f"⭐ Your rank has been set to **{rank_name}** by an admin.",
         )
         return f"Set {target}'s rank to {rank_name}."
@@ -2818,7 +2962,9 @@ class PmHandler:
         ]
 
         if gambling and gambling.get("total_games", 0) > 0:
-            lines.append(f"Gambling: {gambling['total_games']} games, net {gambling['net_profit']:+,} Z")
+            lines.append(
+                f"Gambling: {gambling['total_games']} games, net {gambling['net_profit']:+,} Z"
+            )
 
         return "\n".join(lines)
 
@@ -2872,11 +3018,11 @@ class PmHandler:
         lines.append("━" * 15)
 
         for t in sorted_triggers:
-            tid = t['trigger_id']
+            tid = t["trigger_id"]
             # Shorten common prefixes
-            for pfx in ('presence.', 'chat.', 'content.', 'social.'):
+            for pfx in ("presence.", "chat.", "content.", "social."):
                 if tid.startswith(pfx):
-                    tid = tid[len(pfx):]
+                    tid = tid[len(pfx) :]
                     break
             lines.append(
                 f"{tid}\n"
@@ -2900,12 +3046,22 @@ class PmHandler:
         nw = self._config.presence.night_watch
         if nw.enabled:
             ids.add("presence.night_watch")
-        for name in ("long_message", "laugh_received", "kudos_received",
-                     "first_message_of_day", "conversation_starter", "first_after_media_change"):
+        for name in (
+            "long_message",
+            "laugh_received",
+            "kudos_received",
+            "first_message_of_day",
+            "conversation_starter",
+            "first_after_media_change",
+        ):
             if getattr(self._config.chat_triggers, name, None):
                 ids.add(f"chat.{name}")
-        for name in ("comment_during_media", "like_current", "survived_full_media",
-                     "present_at_event_start"):
+        for name in (
+            "comment_during_media",
+            "like_current",
+            "survived_full_media",
+            "present_at_event_start",
+        ):
             if getattr(self._config.content_triggers, name, None):
                 ids.add(f"content.{name}")
         for name in ("greeted_newcomer", "mentioned_by_other", "bot_interaction"):
@@ -2958,7 +3114,8 @@ class PmHandler:
 
         await self._db.resolve_approval(pending["id"], username, True)
         await self._send_pm(
-            channel, target,
+            channel,
+            target,
             f"✅ Your channel GIF has been approved by {username}!",
         )
         return f"Approved GIF for {target}."
@@ -2975,13 +3132,16 @@ class PmHandler:
 
         await self._db.resolve_approval(pending["id"], username, False)
         await self._db.credit(
-            target, channel, pending["cost"],
+            target,
+            channel,
+            pending["cost"],
             tx_type="refund",
             trigger_id="refund.gif_rejected",
             reason=f"Channel GIF rejected by {username}",
         )
         await self._send_pm(
-            channel, target,
+            channel,
+            target,
             f"❌ Your channel GIF was rejected by {username}. "
             f"Your {pending['cost']:,} Z have been refunded.",
         )
@@ -3044,6 +3204,7 @@ class PmHandler:
         """Re-read config.yaml and validate via Pydantic."""
         import yaml
         from .config import EconomyConfig as ConfigModel
+
         config_path = getattr(self, "_config_path", None)
         if not config_path:
             raise RuntimeError("No config_path set for hot-reload.")
@@ -3106,7 +3267,11 @@ class PmHandler:
             try:
                 user_info = await self._client.get_user(channel, username)
                 if user_info:
-                    return user_info.get("rank", 0) if isinstance(user_info, dict) else getattr(user_info, "rank", 0)
+                    return (
+                        user_info.get("rank", 0)
+                        if isinstance(user_info, dict)
+                        else getattr(user_info, "rank", 0)
+                    )
             except Exception:
                 self._logger.debug(
                     "Could not resolve CyTube rank for %s via get_user, "

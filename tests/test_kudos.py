@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
-
-from kryten_economy.earning_engine import EarningEngine
 
 
 CH = "testchannel"

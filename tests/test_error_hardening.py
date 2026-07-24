@@ -12,13 +12,10 @@ Tests:
 from __future__ import annotations
 
 import asyncio
-import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
-from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.pm_handler import PmHandler
 
@@ -77,6 +74,7 @@ class TestMalformedCommands:
         # Force the balance handler to raise — patch through the command map
         async def _raise(*a, **kw):
             raise RuntimeError("boom")
+
         pm_handler._command_map["balance"] = _raise
 
         await pm_handler.handle_pm(event)
@@ -128,7 +126,7 @@ class TestMediaCMSErrorHandling:
         mock_media_client: MagicMock,
     ) -> None:
         """Timeout → returns empty/None, no crash."""
-        import aiohttp
+
         mock_media_client.search = AsyncMock(side_effect=asyncio.TimeoutError)
 
         # Client returns empty on error
@@ -162,10 +160,9 @@ class TestAtomicDebitRace:
         await database.credit("alice", "testchannel", 100, tx_type="admin")
 
         # 5 concurrent debits of 100 each from a balance of 100
-        results = await asyncio.gather(*[
-            database.atomic_debit("alice", "testchannel", 100)
-            for i in range(5)
-        ])
+        results = await asyncio.gather(
+            *[database.atomic_debit("alice", "testchannel", 100) for i in range(5)]
+        )
 
         # Exactly one should succeed
         assert results.count(True) == 1
@@ -200,10 +197,12 @@ class TestSQLiteBusy:
             await database.get_or_create_account(user, "testchannel")
 
         # Concurrent credits
-        await asyncio.gather(*[
-            database.credit(f"user{i}", "testchannel", 100, tx_type="presence")
-            for i in range(10)
-        ])
+        await asyncio.gather(
+            *[
+                database.credit(f"user{i}", "testchannel", 100, tx_type="presence")
+                for i in range(10)
+            ]
+        )
 
         # All should have 100
         for i in range(10):

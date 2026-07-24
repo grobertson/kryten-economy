@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -61,7 +61,9 @@ class TestPmDispatch:
         args = mock_client.send_pm.call_args_list[0]
         assert "Economy Bot" in args[0][2]
 
-    async def test_balance_command(self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase):
+    async def test_balance_command(
+        self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase
+    ):
         """'balance' should show current balance."""
         await database.get_or_create_account("Alice", "testchannel")
         await database.credit("Alice", "testchannel", 500, "earn")
@@ -71,7 +73,9 @@ class TestPmDispatch:
         response = mock_client.send_pm.call_args[0][2]
         assert "500" in response
 
-    async def test_bal_alias(self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase):
+    async def test_bal_alias(
+        self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase
+    ):
         """'bal' should work as alias for 'balance'."""
         await database.get_or_create_account("Alice", "testchannel")
         event = make_pm_event("Alice", "bal")
@@ -136,7 +140,9 @@ class TestPmDispatch:
         assert "Event Status" in response
         assert "Queueing: unavailable" in response
 
-    async def test_balance_shows_rank(self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase):
+    async def test_balance_shows_rank(
+        self, pm_handler: PmHandler, mock_client: MagicMock, database: EconomyDatabase
+    ):
         """Balance response should include rank name."""
         await database.get_or_create_account("Alice", "testchannel")
         event = make_pm_event("Alice", "balance")
@@ -151,7 +157,9 @@ class TestPmDispatch:
         response = "\n".join(call[0][2] for call in mock_client.send_pm.call_args_list)
         assert "events · status" in response
 
-    async def test_help_includes_spectacle_games(self, pm_handler: PmHandler, mock_client: MagicMock):
+    async def test_help_includes_spectacle_games(
+        self, pm_handler: PmHandler, mock_client: MagicMock
+    ):
         """help should list the race, trivia, and blackjack games when enabled."""
         event = make_pm_event("Alice", "help")
         await pm_handler.handle_pm(event)

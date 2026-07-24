@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 
 import pytest
 
@@ -25,7 +24,9 @@ async def _seed_account(
 async def test_create_pending_approval(database: EconomyDatabase):
     """create_pending_approval inserts and returns an ID."""
     aid = await database.create_pending_approval(
-        "Alice", CH, "channel_gif",
+        "Alice",
+        CH,
+        "channel_gif",
         data={"gif_url": "https://example.com/cool.gif"},
         cost=5000,
     )
@@ -37,7 +38,9 @@ async def test_create_pending_approval(database: EconomyDatabase):
 async def test_resolve_approval_approved(database: EconomyDatabase):
     """Resolving as approved returns the record."""
     aid = await database.create_pending_approval(
-        "Alice", CH, "force_play",
+        "Alice",
+        CH,
+        "force_play",
         data={"media_id": "v1", "title": "Test"},
         cost=100000,
     )
@@ -55,7 +58,9 @@ async def test_resolve_approval_approved(database: EconomyDatabase):
 async def test_resolve_approval_rejected(database: EconomyDatabase):
     """Resolving as rejected returns the record."""
     aid = await database.create_pending_approval(
-        "Bob", CH, "channel_gif",
+        "Bob",
+        CH,
+        "channel_gif",
         data={"gif_url": "https://example.com/bad.gif"},
         cost=5000,
     )
@@ -71,7 +76,9 @@ async def test_resolve_approval_rejected(database: EconomyDatabase):
 async def test_resolve_already_resolved(database: EconomyDatabase):
     """Resolving an already-resolved approval returns None."""
     aid = await database.create_pending_approval(
-        "Alice", CH, "force_play",
+        "Alice",
+        CH,
+        "force_play",
         data={"media_id": "v1"},
         cost=100000,
     )
@@ -86,7 +93,9 @@ async def test_list_pending_approvals(database: EconomyDatabase):
     """get_pending_approvals lists only pending items."""
     await database.create_pending_approval("Alice", CH, "channel_gif", data={"url": "a"}, cost=5000)
     await database.create_pending_approval("Bob", CH, "force_play", data={"id": "b"}, cost=100000)
-    aid3 = await database.create_pending_approval("Charlie", CH, "channel_gif", data={"url": "c"}, cost=5000)
+    aid3 = await database.create_pending_approval(
+        "Charlie", CH, "channel_gif", data={"url": "c"}, cost=5000
+    )
 
     # Resolve one
     await database.resolve_approval(aid3, "Admin", approved=True)

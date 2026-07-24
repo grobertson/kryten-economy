@@ -1,4 +1,5 @@
 """One-shot script to write comprehensive config.yaml — delete after use."""
+
 content = """\
 # =====================================================================
 #  kryten-economy -- Channel-Z Dev Config

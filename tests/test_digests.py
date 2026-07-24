@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.admin_scheduler import AdminScheduler
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.presence_tracker import PresenceTracker
-from kryten_economy.rank_engine import RankEngine
 
 CH = "testchannel"
 

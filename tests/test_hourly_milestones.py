@@ -13,9 +13,13 @@ from kryten_economy.presence_tracker import PresenceTracker
 
 
 @pytest.fixture
-def tracker(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> PresenceTracker:
+def tracker(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> PresenceTracker:
     return PresenceTracker(
-        config=sample_config, database=database, client=mock_client,
+        config=sample_config,
+        database=database,
+        client=mock_client,
         logger=logging.getLogger("test.milestones"),
     )
 
@@ -45,14 +49,18 @@ class TestHourlyMilestones:
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 10  # Only once
 
-    async def test_no_milestone_below_threshold(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_no_milestone_below_threshold(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Less than 60 minutes should not trigger any milestone."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._check_hourly_milestones("alice", "testchannel", "2026-01-01", 59)
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 0
 
-    async def test_milestone_pm_sent(self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock):
+    async def test_milestone_pm_sent(
+        self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock
+    ):
         """Milestone should send a PM notification."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._check_hourly_milestones("alice", "testchannel", "2026-01-01", 60)
@@ -60,7 +68,9 @@ class TestHourlyMilestones:
         msg = mock_client.send_pm.call_args[0][2]
         assert "milestone" in msg.lower()
 
-    async def test_different_days_independent(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_different_days_independent(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Milestones on different calendar days should be independent."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._check_hourly_milestones("alice", "testchannel", "2026-01-01", 60)

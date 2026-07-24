@@ -6,13 +6,12 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.bounty_manager import BountyManager
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from conftest import make_config_dict
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 CH = "testchannel"
 
@@ -193,6 +192,7 @@ async def test_expire_refund(database: EconomyDatabase, mock_client: MagicMock):
 
     # Manually set the bounty to have already expired
     import sqlite3
+
     past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     conn = sqlite3.connect(database._db_path)
     conn.execute(
@@ -211,7 +211,8 @@ async def test_expire_refund(database: EconomyDatabase, mock_client: MagicMock):
 
     # PM sent about refund
     pm_calls = [
-        c for c in mock_client.send_pm.call_args_list
+        c
+        for c in mock_client.send_pm.call_args_list
         if "expired" in str(c).lower() or "refund" in str(c).lower()
     ]
     assert len(pm_calls) >= 1
@@ -229,6 +230,7 @@ async def test_expire_no_refund_if_zero_percent(database: EconomyDatabase, mock_
 
     # Force expiry
     import sqlite3
+
     past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     conn = sqlite3.connect(database._db_path)
     conn.execute("UPDATE bounties SET expires_at = ? WHERE id = ?", (past, bid))
@@ -257,7 +259,7 @@ async def test_bounty_list_open_only(database: EconomyDatabase, mock_client: Mag
     await _seed_account(database, "W", 0)
 
     # Create 2, claim 1
-    r1 = await mgr.create_bounty("A", CH, 200, "Open one")
+    await mgr.create_bounty("A", CH, 200, "Open one")
     r2 = await mgr.create_bounty("A", CH, 300, "Claimed one")
     await mgr.claim_bounty(r2["bounty_id"], CH, "W", "Admin")
 

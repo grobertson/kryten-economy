@@ -1,4 +1,5 @@
 """kryten-economy — Channel engagement currency microservice."""
+
 from importlib.metadata import PackageNotFoundError, version
 
 try:

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
 
 import pytest
 
-from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
-from kryten_economy.spending_engine import SpendOutcome, SpendResult, SpendingEngine
+from kryten_economy.spending_engine import SpendResult, SpendingEngine
 
 CH = "testchannel"
 
@@ -26,6 +23,7 @@ async def _seed_account(
         await db.credit(username, CH, balance, tx_type="test", reason="seed")
     if lifetime > 0:
         import asyncio
+
         loop = asyncio.get_running_loop()
 
         def _set():
@@ -128,7 +126,8 @@ async def test_price_tier_movie(spending_engine: SpendingEngine):
 
 @pytest.mark.asyncio
 async def test_validate_spend_no_account(
-    spending_engine: SpendingEngine, database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    database: EconomyDatabase,
 ):
     """User with no account gets insufficient_funds."""
     outcome = await spending_engine.validate_spend("Nobody", CH, 100, "queue")
@@ -138,11 +137,13 @@ async def test_validate_spend_no_account(
 
 @pytest.mark.asyncio
 async def test_validate_spend_banned(
-    spending_engine: SpendingEngine, database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    database: EconomyDatabase,
 ):
     """Banned user gets permission_denied."""
     await _seed_account(database, "Banned", 10000)
     import asyncio
+
     loop = asyncio.get_running_loop()
 
     def _ban():
@@ -165,7 +166,8 @@ async def test_validate_spend_banned(
 
 @pytest.mark.asyncio
 async def test_validate_spend_low_balance(
-    spending_engine: SpendingEngine, database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    database: EconomyDatabase,
 ):
     """Insufficient balance blocked."""
     await _seed_account(database, "Poor", 100)
@@ -176,7 +178,8 @@ async def test_validate_spend_low_balance(
 
 @pytest.mark.asyncio
 async def test_validate_spend_ok(
-    spending_engine: SpendingEngine, database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    database: EconomyDatabase,
 ):
     """Valid spend returns None (all checks pass)."""
     await _seed_account(database, "Rich", 50000)
@@ -191,7 +194,8 @@ async def test_validate_spend_ok(
 
 @pytest.mark.asyncio
 async def test_rank_tier_index_zero(
-    spending_engine: SpendingEngine, database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    database: EconomyDatabase,
 ):
     """New user with 0 lifetime → tier 0."""
     await _seed_account(database, "Newbie", 100, 0)
@@ -201,7 +205,8 @@ async def test_rank_tier_index_zero(
 
 @pytest.mark.asyncio
 async def test_rank_tier_index_mid(
-    spending_engine: SpendingEngine, database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    database: EconomyDatabase,
 ):
     """User at 100000 lifetime → tier 5 (Associate Producer)."""
     await _seed_account(database, "Mid", 100, 100000)

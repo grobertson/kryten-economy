@@ -189,7 +189,8 @@ class RaceEngine:
 
         # Narrator
         self._narrator = RaceNarrator(
-            config.gambling.race.commentary, logger,
+            config.gambling.race.commentary,
+            logger,
         )
 
     def update_config(self, new_config: EconomyConfig) -> None:
@@ -217,7 +218,9 @@ class RaceEngine:
         now = datetime.now(timezone.utc)
 
         ranked = sorted(
-            race.racers.values(), key=lambda r: r.progress, reverse=True,
+            race.racers.values(),
+            key=lambda r: r.progress,
+            reverse=True,
         )
         positions = {r.color: i + 1 for i, r in enumerate(ranked)}
         racers = [
@@ -242,9 +245,7 @@ class RaceEngine:
 
         betting_closes_in = 0
         if race.phase == RacePhase.BETTING:
-            betting_closes_in = max(
-                0, int((race.betting_closes_at - now).total_seconds())
-            )
+            betting_closes_in = max(0, int((race.betting_closes_at - now).total_seconds()))
 
         frame = {
             "race_id": race.race_id,
@@ -376,7 +377,10 @@ class RaceEngine:
 
         self._logger.info(
             "Race %s started in %s by %s (%d racers)",
-            race.race_id, channel, initiator, len(racers),
+            race.race_id,
+            channel,
+            initiator,
+            len(racers),
         )
         return f"race_started:{channel}"
 
@@ -434,8 +438,12 @@ class RaceEngine:
 
         # Account validation (shared across all gambling engines)
         error = await validate_gamble_account(
-            self._db, self._config.gambling, self._symbol,
-            username, channel, amount,
+            self._db,
+            self._config.gambling,
+            self._symbol,
+            username,
+            channel,
+            amount,
         )
         if error:
             return error
@@ -445,12 +453,14 @@ class RaceEngine:
         if not success:
             return "Insufficient funds."
 
-        race.bets.append(RaceBet(
-            username=username,
-            color=color_match,
-            amount=amount,
-            phase=bet_phase,
-        ))
+        race.bets.append(
+            RaceBet(
+                username=username,
+                color=color_match,
+                amount=amount,
+                phase=bet_phase,
+            )
+        )
 
         return f"race_bet:{channel}:{username}:{color_match}:{amount}:{bet_phase}"
 
@@ -525,8 +535,8 @@ class RaceEngine:
 
         # Closeness → how near the also-rans finish to the winner.
         c = cfg.closeness
-        final_lo = 0.70 + 0.18 * c   # 0.70 … 0.88
-        final_hi = 0.90 + 0.09 * c   # 0.90 … 0.99
+        final_lo = 0.70 + 0.18 * c  # 0.70 … 0.88
+        final_hi = 0.90 + 0.09 * c  # 0.90 … 0.99
         targets: dict[str, float] = {}
         for r in racers:
             targets[r.color] = 100.0 if r is winner else 100.0 * random.uniform(final_lo, final_hi)
@@ -583,23 +593,31 @@ class RaceEngine:
                 if len(out) >= MAX_WEB_COMMENTARY_LINES:
                     continue
                 r = race.racers[leaders[i]]
-                out.append({
-                    "t": round(i * dt, 2),
-                    "text": self._narrator.web_lead_change_line(r.color, r.emoji, r.name),
-                })
+                out.append(
+                    {
+                        "t": round(i * dt, 2),
+                        "text": self._narrator.web_lead_change_line(r.color, r.emoji, r.name),
+                    }
+                )
         # A close-finish flourish in the final stretch.
         if len(out) < MAX_WEB_COMMENTARY_LINES:
-            out.append({
-                "t": round(max(0.0, (n - 2)) * dt, 2),
-                "text": self._narrator.web_close_finish_line(),
-            })
+            out.append(
+                {
+                    "t": round(max(0.0, (n - 2)) * dt, 2),
+                    "text": self._narrator.web_close_finish_line(),
+                }
+            )
         # Winner call at the line.
         winner = race.racers.get(race.winner_color or "")
         if winner is not None:
-            out.append({
-                "t": round(n * dt, 2),
-                "text": self._narrator.web_finish_line(race.channel, winner.color, winner.emoji, winner.name),
-            })
+            out.append(
+                {
+                    "t": round(n * dt, 2),
+                    "text": self._narrator.web_finish_line(
+                        race.channel, winner.color, winner.emoji, winner.name
+                    ),
+                }
+            )
         out.sort(key=lambda e: e["t"])
         return out
 
@@ -646,7 +664,6 @@ class RaceEngine:
         elapsed = (datetime.now(timezone.utc) - race.racing_started_at).total_seconds()
         self._apply_playback_positions(race, elapsed)
         return elapsed >= race.duration
-
 
     # ── Simulation tick ───────────────────────────────────────
 
@@ -733,7 +750,8 @@ class RaceEngine:
     # ── Resolve race ──────────────────────────────────────────
 
     async def resolve_race(
-        self, channel: str,
+        self,
+        channel: str,
     ) -> tuple[list[str], list[RaceBet], dict[str, str]] | None:
         """Resolve a finished race: determine winner, calculate payouts.
 
@@ -787,20 +805,30 @@ class RaceEngine:
                 else f"Race win: {winner_color} ({odds:.1f}x)"
             )
             await self._db.credit(
-                bet.username, channel, payout,
+                bet.username,
+                channel,
+                payout,
                 tx_type="gamble_win",
                 trigger_id="gambling.race",
                 reason=reason,
             )
             await self._db.update_gambling_stats(
-                bet.username, channel, "race", net=net,
+                bet.username,
+                channel,
+                "race",
+                net=net,
                 biggest_win=max(0, net),
             )
             await self._db.increment_lifetime_gambled(bet.username, channel, bet.amount, payout)
             await self._db.increment_daily_gambled(bet.username, channel, today, bet.amount, payout)
             await self._db.save_race_bet(
-                race.race_id, bet.username, channel,
-                bet.color, bet.amount, payout, bet.phase,
+                race.race_id,
+                bet.username,
+                channel,
+                bet.color,
+                bet.amount,
+                payout,
+                bet.phase,
             )
             suffix = "" if cfg.odds_mode == "pool" else f" at {odds:.1f}x"
             per_user_pm[bet.username] = (
@@ -811,14 +839,22 @@ class RaceEngine:
         # Record losses
         for bet in losing_bets:
             await self._db.update_gambling_stats(
-                bet.username, channel, "race", net=-bet.amount,
+                bet.username,
+                channel,
+                "race",
+                net=-bet.amount,
                 biggest_loss=bet.amount,
             )
             await self._db.increment_lifetime_gambled(bet.username, channel, bet.amount, 0)
             await self._db.increment_daily_gambled(bet.username, channel, today, bet.amount, 0)
             await self._db.save_race_bet(
-                race.race_id, bet.username, channel,
-                bet.color, bet.amount, 0, bet.phase,
+                race.race_id,
+                bet.username,
+                channel,
+                bet.color,
+                bet.amount,
+                0,
+                bet.phase,
             )
             per_user_pm[bet.username] = (
                 f"❌ {winner.emoji} {winner_color} wins — your bet on "
@@ -827,14 +863,23 @@ class RaceEngine:
 
         # Persist race result
         await self._db.save_race_result(
-            race.race_id, channel, winner_color,
-            total_pool, len(race.bets),
+            race.race_id,
+            channel,
+            winner_color,
+            total_pool,
+            len(race.bets),
         )
 
         # ── Build public announcement lines ──────────────────
         # Brief: a headline finish line + one combined summary line, to keep the
         # channel terse (the full play-by-play lives on the web race view).
         finish_line = self._narrator.get_finish_line(channel, winner.color, winner.emoji)
+        # Defensive: commentary (especially LLM-authored, or a misconfigured
+        # template using a foreign placeholder) can drop the winner entirely. The
+        # finish announcement must always name the winning car, so fall back to a
+        # deterministic headline when the winner's colour is missing from it.
+        if winner_color.lower() not in finish_line.lower():
+            finish_line = f"🏁 {winner.emoji} {winner_color} wins the race!"
         lines = [finish_line]
 
         summary_bits: list[str] = []
@@ -844,9 +889,7 @@ class RaceEngine:
             summary_bits.append(f"Winners: {', '.join(winner_strs)}")
         elif race.bets:
             summary_bits.append("💸 Nobody backed the winner — house takes all")
-        summary_bits.append(
-            f"Pool {total_pool:,} {self._symbol} · {len(race.bets)} bettor(s)"
-        )
+        summary_bits.append(f"Pool {total_pool:,} {self._symbol} · {len(race.bets)} bettor(s)")
         lines.append(" | ".join(summary_bits))
 
         # Stash a final web-view frame (winner + payouts) so the race view can
@@ -854,12 +897,16 @@ class RaceEngine:
         final_frame = self._build_frame(race)
         final_frame["phase"] = RacePhase.FINISHED.value
         final_frame["winner"] = {
-            "color": winner_color, "emoji": winner.emoji, "name": winner.name,
+            "color": winner_color,
+            "emoji": winner.emoji,
+            "name": winner.name,
         }
         final_frame["payouts"] = [
             {"username": bet.username, "net": net}
             for bet, _payout, net in sorted(
-                winner_payouts, key=lambda wp: wp[1], reverse=True,
+                winner_payouts,
+                key=lambda wp: wp[1],
+                reverse=True,
             )
         ]
         self._finished_frames[channel] = (
@@ -886,13 +933,12 @@ class RaceEngine:
             return []
 
         cfg = self._config.gambling.race
-        remaining = max(0, int(
-            (race.betting_closes_at - datetime.now(timezone.utc)).total_seconds()
-        ))
+        remaining = max(
+            0, int((race.betting_closes_at - datetime.now(timezone.utc)).total_seconds())
+        )
 
         racers = " · ".join(
-            f"{racer.emoji} {color} {racer.odds_display}"
-            for color, racer in race.racers.items()
+            f"{racer.emoji} {color} {racer.odds_display}" for color, racer in race.racers.items()
         )
         return [
             f"🏁 Race OPEN! Betting closes in {remaining}s — {racers}",
@@ -963,8 +1009,12 @@ class RaceEngine:
             target = random.choice(racers_list)
             target.speed_buff_ticks = SPEED_BOOST_TICKS
             target.speed_buff_multiplier = SPEED_BOOST_MULTIPLIER
-            msg = self._narrator.get_event_line(race.channel, "speed_boost", target.color, target.emoji)
-            return RaceEvent(event_type, target.color, msg or f"⚡ {target.emoji} {target.color} boosts!")
+            msg = self._narrator.get_event_line(
+                race.channel, "speed_boost", target.color, target.emoji
+            )
+            return RaceEvent(
+                event_type, target.color, msg or f"⚡ {target.emoji} {target.color} boosts!"
+            )
 
         elif event_type == _EventType.STUMBLE:
             # Can't stumble Resilient racers
@@ -974,7 +1024,9 @@ class RaceEngine:
             target = random.choice(eligible)
             target.frozen_ticks = STUMBLE_FREEZE_TICKS
             msg = self._narrator.get_event_line(race.channel, "stumble", target.color, target.emoji)
-            return RaceEvent(event_type, target.color, msg or f"💥 {target.emoji} {target.color} stumbles!")
+            return RaceEvent(
+                event_type, target.color, msg or f"💥 {target.emoji} {target.color} stumbles!"
+            )
 
         elif event_type == _EventType.MUDSLIDE:
             # Affects all (except Resilient)
@@ -991,7 +1043,13 @@ class RaceEngine:
             target = sorted_racers[0]  # most behind
             bonus = cfg.finish_distance * SHORTCUT_BONUS_PCT
             target.progress += bonus
-            msg = self._narrator.get_event_line(race.channel, "shortcut", target.color, target.emoji)
-            return RaceEvent(event_type, target.color, msg or f"🎯 {target.emoji} {target.color} finds a shortcut!")
+            msg = self._narrator.get_event_line(
+                race.channel, "shortcut", target.color, target.emoji
+            )
+            return RaceEvent(
+                event_type,
+                target.color,
+                msg or f"🎯 {target.emoji} {target.color} finds a shortcut!",
+            )
 
         return None

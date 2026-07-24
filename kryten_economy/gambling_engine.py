@@ -112,7 +112,8 @@ class GamblingEngine:
 
         # Heist narrator (static / LLM / hybrid text generation)
         self._narrator = HeistNarrator(
-            config.gambling.heist.narrative, logger,
+            config.gambling.heist.narrative,
+            logger,
         )
 
     def update_config(self, new_config) -> None:
@@ -134,14 +135,17 @@ class GamblingEngine:
         cumulative = 0.0
         for p in payouts:
             cumulative += p.probability
-            table.append(PayoutEntry(
-                symbols=p.symbols,
-                multiplier=p.multiplier,
-                cumulative_probability=cumulative,
-            ))
+            table.append(
+                PayoutEntry(
+                    symbols=p.symbols,
+                    multiplier=p.multiplier,
+                    cumulative_probability=cumulative,
+                )
+            )
         if abs(cumulative - 1.0) > 0.01:
             self._logger.warning(
-                "Slot payout probabilities sum to %.4f (expected 1.0)", cumulative,
+                "Slot payout probabilities sum to %.4f (expected 1.0)",
+                cumulative,
             )
         return table
 
@@ -225,12 +229,18 @@ class GamblingEngine:
     # ══════════════════════════════════════════════════════════
 
     async def _get_daily_game_count(
-        self, username: str, channel: str, game_type: str,
+        self,
+        username: str,
+        channel: str,
+        game_type: str,
     ) -> int:
         return await get_daily_game_count(self._db, username, channel, game_type)
 
     async def _increment_daily_game_count(
-        self, username: str, channel: str, game_type: str,
+        self,
+        username: str,
+        channel: str,
+        game_type: str,
     ) -> None:
         await increment_daily_game_count(self._db, username, channel, game_type)
 
@@ -243,20 +253,36 @@ class GamblingEngine:
         cfg = self._config.gambling.spin
 
         error = await self._validate_gamble(
-            username, channel, wager, "spin",
-            cfg.min_wager, cfg.max_wager, cfg.cooldown_seconds, cfg.daily_limit,
+            username,
+            channel,
+            wager,
+            "spin",
+            cfg.min_wager,
+            cfg.max_wager,
+            cfg.cooldown_seconds,
+            cfg.daily_limit,
         )
         if error:
             return GambleResult(
-                outcome=GambleOutcome.LOSS, wager=wager, payout=0, net=0,
-                display="", announce_public=False, message=error,
+                outcome=GambleOutcome.LOSS,
+                wager=wager,
+                payout=0,
+                net=0,
+                display="",
+                announce_public=False,
+                message=error,
             )
 
         success = await self._db.atomic_debit(username, channel, wager)
         if not success:
             return GambleResult(
-                outcome=GambleOutcome.LOSS, wager=wager, payout=0, net=0,
-                display="", announce_public=False, message="Insufficient funds.",
+                outcome=GambleOutcome.LOSS,
+                wager=wager,
+                payout=0,
+                net=0,
+                display="",
+                announce_public=False,
+                message="Insufficient funds.",
             )
 
         roll = random.random()
@@ -267,14 +293,18 @@ class GamblingEngine:
         if payout > 0:
             tx_type = "gamble_win" if net > 0 else "gamble_push"
             await self._db.credit(
-                username, channel, payout,
+                username,
+                channel,
+                payout,
                 tx_type=tx_type,
                 trigger_id="gambling.spin",
                 reason=f"Spin: {result_entry.symbols}",
-                metadata=json.dumps({
-                    "multiplier": result_entry.multiplier,
-                    "roll": round(roll, 4),
-                }),
+                metadata=json.dumps(
+                    {
+                        "multiplier": result_entry.multiplier,
+                        "roll": round(roll, 4),
+                    }
+                ),
             )
 
         if result_entry.multiplier >= 50:
@@ -292,17 +322,18 @@ class GamblingEngine:
             else self._generate_loss_display(result_entry.symbols)
         )
 
-        announce = (
-            cfg.announce_jackpots_public
-            and payout >= cfg.jackpot_announce_threshold
-        )
+        announce = cfg.announce_jackpots_public and payout >= cfg.jackpot_announce_threshold
 
         # Record stats
         now = datetime.now(timezone.utc)
         today = now.strftime("%Y-%m-%d")
         await self._db.update_gambling_stats(
-            username, channel, "spin", net=net,
-            biggest_win=max(0, net), biggest_loss=abs(min(0, net)),
+            username,
+            channel,
+            "spin",
+            net=net,
+            biggest_win=max(0, net),
+            biggest_loss=abs(min(0, net)),
         )
         await self._db.increment_lifetime_gambled(username, channel, wager, payout)
         await self._db.increment_daily_gambled(username, channel, today, wager, payout)
@@ -317,11 +348,18 @@ class GamblingEngine:
         elif net == 0:
             message = f"🎰 {display} — Push. Balance: {balance} {self._symbol}"
         else:
-            message = f"🎰 {display} — Loss. -{wager} {self._symbol}. Balance: {balance} {self._symbol}"
+            message = (
+                f"🎰 {display} — Loss. -{wager} {self._symbol}. Balance: {balance} {self._symbol}"
+            )
 
         return GambleResult(
-            outcome=outcome, wager=wager, payout=payout, net=net,
-            display=display, announce_public=announce, message=message,
+            outcome=outcome,
+            wager=wager,
+            payout=payout,
+            net=net,
+            display=display,
+            announce_public=announce,
+            message=message,
         )
 
     # ══════════════════════════════════════════════════════════
@@ -333,20 +371,36 @@ class GamblingEngine:
         cfg = self._config.gambling.flip
 
         error = await self._validate_gamble(
-            username, channel, wager, "flip",
-            cfg.min_wager, cfg.max_wager, cfg.cooldown_seconds, cfg.daily_limit,
+            username,
+            channel,
+            wager,
+            "flip",
+            cfg.min_wager,
+            cfg.max_wager,
+            cfg.cooldown_seconds,
+            cfg.daily_limit,
         )
         if error:
             return GambleResult(
-                outcome=GambleOutcome.LOSS, wager=wager, payout=0, net=0,
-                display="", announce_public=False, message=error,
+                outcome=GambleOutcome.LOSS,
+                wager=wager,
+                payout=0,
+                net=0,
+                display="",
+                announce_public=False,
+                message=error,
             )
 
         success = await self._db.atomic_debit(username, channel, wager)
         if not success:
             return GambleResult(
-                outcome=GambleOutcome.LOSS, wager=wager, payout=0, net=0,
-                display="", announce_public=False, message="Insufficient funds.",
+                outcome=GambleOutcome.LOSS,
+                wager=wager,
+                payout=0,
+                net=0,
+                display="",
+                announce_public=False,
+                message="Insufficient funds.",
             )
 
         won = random.random() < cfg.win_chance
@@ -356,7 +410,9 @@ class GamblingEngine:
             net = wager
             display = "🪙 Heads!"
             await self._db.credit(
-                username, channel, payout,
+                username,
+                channel,
+                payout,
                 tx_type="gamble_win",
                 trigger_id="gambling.flip",
                 reason=f"Flip win: {payout}",
@@ -371,8 +427,12 @@ class GamblingEngine:
         now = datetime.now(timezone.utc)
         today = now.strftime("%Y-%m-%d")
         await self._db.update_gambling_stats(
-            username, channel, "flip", net=net,
-            biggest_win=max(0, net), biggest_loss=abs(min(0, net)),
+            username,
+            channel,
+            "flip",
+            net=net,
+            biggest_win=max(0, net),
+            biggest_loss=abs(min(0, net)),
         )
         await self._db.increment_lifetime_gambled(username, channel, wager, payout)
         await self._db.increment_daily_gambled(username, channel, today, wager, payout)
@@ -388,8 +448,13 @@ class GamblingEngine:
             message = f"{display} Loss. -{wager} {self._symbol}. Balance: {balance} {self._symbol}"
 
         return GambleResult(
-            outcome=outcome, wager=wager, payout=payout, net=net,
-            display=display, announce_public=False, message=message,
+            outcome=outcome,
+            wager=wager,
+            payout=payout,
+            net=net,
+            display=display,
+            announce_public=False,
+            message=message,
         )
 
     # ══════════════════════════════════════════════════════════
@@ -402,16 +467,25 @@ class GamblingEngine:
 
         if not cfg.enabled:
             return GambleResult(
-                outcome=GambleOutcome.LOSS, wager=0, payout=0, net=0,
-                display="", announce_public=False, message="Free spins are disabled.",
+                outcome=GambleOutcome.LOSS,
+                wager=0,
+                payout=0,
+                net=0,
+                display="",
+                announce_public=False,
+                message="Free spins are disabled.",
             )
 
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         activity = await self._db.get_or_create_daily_activity(username, channel, today)
         if activity.get("free_spin_used"):
             return GambleResult(
-                outcome=GambleOutcome.LOSS, wager=0, payout=0, net=0,
-                display="", announce_public=False,
+                outcome=GambleOutcome.LOSS,
+                wager=0,
+                payout=0,
+                net=0,
+                display="",
+                announce_public=False,
                 message="You've already used your free spin today. Come back tomorrow!",
             )
 
@@ -424,7 +498,9 @@ class GamblingEngine:
 
         if payout > 0:
             await self._db.credit(
-                username, channel, payout,
+                username,
+                channel,
+                payout,
                 tx_type="gamble_win",
                 trigger_id="gambling.free_spin",
                 reason=f"Free spin: {result_entry.symbols}",
@@ -451,8 +527,12 @@ class GamblingEngine:
 
         return GambleResult(
             outcome=GambleOutcome.WIN if payout > 0 else GambleOutcome.LOSS,
-            wager=0, payout=payout, net=payout,
-            display=display, announce_public=announce, message=message,
+            wager=0,
+            payout=payout,
+            net=payout,
+            display=display,
+            announce_public=announce,
+            message=message,
         )
 
     # ══════════════════════════════════════════════════════════
@@ -460,7 +540,11 @@ class GamblingEngine:
     # ══════════════════════════════════════════════════════════
 
     async def create_challenge(
-        self, challenger: str, target: str, channel: str, wager: int,
+        self,
+        challenger: str,
+        target: str,
+        channel: str,
+        wager: int,
     ) -> str:
         """Create a new challenge. Returns PM response for the challenger.
 
@@ -473,8 +557,14 @@ class GamblingEngine:
             return "Challenges are currently disabled."
 
         error = await self._validate_gamble(
-            challenger, channel, wager, "challenge",
-            cfg.min_wager, cfg.max_wager, 0, None,
+            challenger,
+            channel,
+            wager,
+            "challenge",
+            cfg.min_wager,
+            cfg.max_wager,
+            0,
+            None,
         )
         if error:
             return error
@@ -505,13 +595,19 @@ class GamblingEngine:
             seconds=cfg.accept_timeout_seconds,
         )
         challenge_id = await self._db.create_challenge(
-            challenger, target, channel, wager, expires_at,
+            challenger,
+            target,
+            channel,
+            wager,
+            expires_at,
         )
 
         return f"challenge_created:{challenge_id}:{target}"
 
     async def accept_challenge(
-        self, target: str, channel: str,
+        self,
+        target: str,
+        channel: str,
     ) -> tuple[str, str | None, str | None]:
         """Accept a pending challenge.
 
@@ -547,7 +643,9 @@ class GamblingEngine:
             winner, loser = target, challenger
 
         await self._db.credit(
-            winner, channel, prize,
+            winner,
+            channel,
+            prize,
             tx_type="gamble_win",
             trigger_id="gambling.challenge",
             reason=f"Challenge win vs {loser}",
@@ -560,16 +658,25 @@ class GamblingEngine:
         for player, is_winner in [(winner, True), (loser, False)]:
             player_net = prize - wager if is_winner else -wager
             await self._db.update_gambling_stats(
-                player, channel, "challenge",
+                player,
+                channel,
+                "challenge",
                 net=player_net,
                 biggest_win=max(0, player_net),
                 biggest_loss=abs(min(0, player_net)),
             )
             await self._db.increment_lifetime_gambled(
-                player, channel, wager, prize if is_winner else 0,
+                player,
+                channel,
+                wager,
+                prize if is_winner else 0,
             )
             await self._db.increment_daily_gambled(
-                player, channel, today, wager, prize if is_winner else 0,
+                player,
+                channel,
+                today,
+                wager,
+                prize if is_winner else 0,
             )
 
         await self._db.resolve_challenge(challenge_id, "accepted")
@@ -600,7 +707,9 @@ class GamblingEngine:
         return (target_msg, challenger_msg, public_msg)
 
     async def decline_challenge(
-        self, target: str, channel: str,
+        self,
+        target: str,
+        channel: str,
     ) -> tuple[str, str | None]:
         """Decline a pending challenge. Returns ``(pm_to_target, pm_to_challenger)``."""
         challenge = await self._db.get_pending_challenge_for_target(target, channel)
@@ -612,7 +721,9 @@ class GamblingEngine:
         challenge_id = challenge["id"]
 
         await self._db.credit(
-            challenger, channel, wager,
+            challenger,
+            channel,
+            wager,
             tx_type="gamble_win",
             trigger_id="gambling.challenge.refund",
             reason=f"Challenge declined by {target}",
@@ -625,11 +736,17 @@ class GamblingEngine:
         )
 
     async def _expire_challenge(
-        self, challenge_id: int, challenger: str, channel: str, wager: int,
+        self,
+        challenge_id: int,
+        challenger: str,
+        channel: str,
+        wager: int,
     ) -> None:
         """Expire a timed-out challenge and refund the challenger."""
         await self._db.credit(
-            challenger, channel, wager,
+            challenger,
+            channel,
+            wager,
             tx_type="gamble_win",
             trigger_id="gambling.challenge.refund",
             reason="Challenge expired",
@@ -648,7 +765,9 @@ class GamblingEngine:
                 continue
             # Refund challenger
             await self._db.credit(
-                challenge["challenger"], channel, challenge["wager"],
+                challenge["challenger"],
+                channel,
+                challenge["wager"],
                 tx_type="gamble_win",
                 trigger_id="gambling.challenge.refund",
                 reason="Challenge expired",
@@ -710,9 +829,14 @@ class GamblingEngine:
             return f"heist_cooldown:{cooldown_left}:{username}"
 
         error = await self._validate_gamble(
-            username, channel, wager, "heist",
-            cfg.min_wager, cfg.max_wager,
-            0, None,
+            username,
+            channel,
+            wager,
+            "heist",
+            cfg.min_wager,
+            cfg.max_wager,
+            0,
+            None,
         )
         if error:
             return error
@@ -769,7 +893,8 @@ class GamblingEngine:
         return self._narrator.get_scenario(participants)
 
     async def resolve_heist(
-        self, channel: str,
+        self,
+        channel: str,
     ) -> tuple[list[str], list[str], dict[str, str]] | None:
         """Resolve an active heist.
 
@@ -796,7 +921,9 @@ class GamblingEngine:
             per_user_pm: dict[str, str] = {}
             for user, wager in heist.participants.items():
                 await self._db.credit(
-                    user, channel, wager,
+                    user,
+                    channel,
+                    wager,
                     tx_type="gamble_win",
                     trigger_id="gambling.heist.refund",
                     reason="Heist cancelled — not enough participants",
@@ -829,15 +956,21 @@ class GamblingEngine:
             for user, wager in heist.participants.items():
                 payout = int(wager * multiplier)
                 await self._db.credit(
-                    user, channel, payout,
+                    user,
+                    channel,
+                    payout,
                     tx_type="gamble_win",
                     trigger_id="gambling.heist",
                     reason="Heist success!",
                 )
                 net = payout - wager
                 await self._db.update_gambling_stats(
-                    user, channel, "heist", net=net,
-                    biggest_win=max(0, net), biggest_loss=0,
+                    user,
+                    channel,
+                    "heist",
+                    net=net,
+                    biggest_win=max(0, net),
+                    biggest_loss=0,
                 )
                 per_user_pm[user] = (
                     f"✅ Heist succeeded! You received {payout:,} {self._symbol} "
@@ -848,7 +981,9 @@ class GamblingEngine:
             per_user_display = int((total_pot // crew_size) * multiplier)
             random_user = random.choice(participants)
             win_line = self._narrator.get_win_line(
-                payout=f"{per_user_display:,}", symbol=self._symbol, user=random_user,
+                payout=f"{per_user_display:,}",
+                symbol=self._symbol,
+                user=random_user,
             )
             summary = (
                 f"💰 Crew of {crew_size} split {total_payout:,} {self._symbol} "
@@ -864,24 +999,30 @@ class GamblingEngine:
             for user, wager in heist.participants.items():
                 refund = int(wager * (1.0 - fee_pct))
                 await self._db.credit(
-                    user, channel, refund,
+                    user,
+                    channel,
+                    refund,
                     tx_type="gamble_win",
                     trigger_id="gambling.heist.push",
                     reason="Heist push — partial refund",
                 )
                 loss = wager - refund
                 await self._db.update_gambling_stats(
-                    user, channel, "heist", net=-loss,
-                    biggest_win=0, biggest_loss=loss,
+                    user,
+                    channel,
+                    "heist",
+                    net=-loss,
+                    biggest_win=0,
+                    biggest_loss=loss,
                 )
                 per_user_pm[user] = (
-                    f"↩️ Heist pushed. You got back {refund:,} {self._symbol} "
-                    f"(-{loss:,} fee)."
+                    f"↩️ Heist pushed. You got back {refund:,} {self._symbol} " f"(-{loss:,} fee)."
                 )
 
             random_user = random.choice(participants)
             push_line = self._narrator.get_push_line(
-                user=random_user, symbol=self._symbol,
+                user=random_user,
+                symbol=self._symbol,
             )
             self._narrator.consume_cached_story()
             return ([scenario_line, push_line], participants, per_user_pm)
@@ -891,14 +1032,19 @@ class GamblingEngine:
             per_user_pm = {}
             for user, wager in heist.participants.items():
                 await self._db.update_gambling_stats(
-                    user, channel, "heist", net=-wager,
-                    biggest_win=0, biggest_loss=wager,
+                    user,
+                    channel,
+                    "heist",
+                    net=-wager,
+                    biggest_win=0,
+                    biggest_loss=wager,
                 )
                 per_user_pm[user] = f"❌ Heist failed. You lost {wager:,} {self._symbol}."
 
             random_user = random.choice(participants)
             lose_line = self._narrator.get_lose_line(
-                user=random_user, symbol=self._symbol,
+                user=random_user,
+                symbol=self._symbol,
             )
             total_lost = sum(heist.participants.values())
             summary = f"The crew lost {total_lost:,} {self._symbol} total. 💸"

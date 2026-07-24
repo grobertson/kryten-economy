@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
-from kryten_economy.earning_engine import EarningEngine
 
 
 CH = "testchannel"
@@ -17,6 +14,7 @@ NOW = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
 # ═══════════════════════════════════════════════════════════
 #  long_message
 # ═══════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_long_message_qualifies(earning_engine):
@@ -74,6 +72,7 @@ async def test_long_message_cap_resets_after_hour(earning_engine):
 #  first_message_of_day
 # ═══════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
 async def test_first_message_of_day_awarded(earning_engine):
     """First message → 5 Z, flag set."""
@@ -88,7 +87,10 @@ async def test_first_message_of_day_no_double(earning_engine):
     """Second message same day → 0 Z."""
     await earning_engine.evaluate_chat_message("bob", CH, "hello", NOW)
     outcome = await earning_engine.evaluate_chat_message(
-        "bob", CH, "hello again", NOW + timedelta(minutes=1),
+        "bob",
+        CH,
+        "hello again",
+        NOW + timedelta(minutes=1),
     )
     results = [r for r in outcome.results if r.trigger_id == "chat.first_message_of_day"]
     assert results[0].amount == 0
@@ -108,6 +110,7 @@ async def test_first_message_of_day_resets_next_day(earning_engine):
 # ═══════════════════════════════════════════════════════════
 #  conversation_starter
 # ═══════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_conversation_starter_after_silence(earning_engine, channel_state):
@@ -144,7 +147,8 @@ async def test_conversation_starter_first_ever_message(earning_engine):
 
 @pytest.mark.asyncio
 async def test_conversation_starter_ignored_user_no_silence_reset(
-    earning_engine, channel_state,
+    earning_engine,
+    channel_state,
 ):
     """Ignored user's message doesn't update last_message_time."""
     # Old message
@@ -153,7 +157,10 @@ async def test_conversation_starter_ignored_user_no_silence_reset(
 
     # Ignored user sends (but engine rejects & doesn't record)
     await earning_engine.evaluate_chat_message(
-        "IgnoredBot", CH, "beep", NOW - timedelta(minutes=5),
+        "IgnoredBot",
+        CH,
+        "beep",
+        NOW - timedelta(minutes=5),
     )
 
     # Next real user should still see silence

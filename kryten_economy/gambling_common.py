@@ -49,10 +49,7 @@ async def validate_gamble_account(
             age_minutes = (now_utc() - first_seen).total_seconds() / 60
             if age_minutes < min_age:
                 remaining = int(min_age - age_minutes)
-                return (
-                    f"You need to be around for {remaining} more minutes "
-                    f"before gambling."
-                )
+                return f"You need to be around for {remaining} more minutes " f"before gambling."
 
     if account.get("balance", 0) < wager:
         return f"Insufficient funds. Balance: {account['balance']} {symbol}."
@@ -61,7 +58,10 @@ async def validate_gamble_account(
 
 
 async def get_daily_game_count(
-    db: EconomyDatabase, username: str, channel: str, game_type: str,
+    db: EconomyDatabase,
+    username: str,
+    channel: str,
+    game_type: str,
 ) -> int:
     """Return how many times ``game_type`` was played today (UTC)."""
     trigger_id = f"gambling.{game_type}.daily"
@@ -75,7 +75,10 @@ async def get_daily_game_count(
 
 
 async def increment_daily_game_count(
-    db: EconomyDatabase, username: str, channel: str, game_type: str,
+    db: EconomyDatabase,
+    username: str,
+    channel: str,
+    game_type: str,
 ) -> None:
     """Increment the daily play counter for ``game_type`` (UTC window)."""
     trigger_id = f"gambling.{game_type}.daily"

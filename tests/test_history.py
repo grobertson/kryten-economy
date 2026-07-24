@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -42,7 +41,8 @@ def _make_handler(
 
 @pytest.mark.asyncio
 async def test_history_empty(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """No transactions → friendly message."""
     handler = _make_handler(sample_config, database)
@@ -52,7 +52,8 @@ async def test_history_empty(
 
 @pytest.mark.asyncio
 async def test_history_shows_recent(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """History shows recent transactions after earning."""
     await _seed_account(database, "Alice", 5000)
@@ -66,7 +67,8 @@ async def test_history_shows_recent(
 
 @pytest.mark.asyncio
 async def test_history_custom_limit(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Custom limit parameter works."""
     await _seed_account(database, "Alice", 5000)
@@ -76,15 +78,17 @@ async def test_history_custom_limit(
     handler = _make_handler(sample_config, database)
 
     resp = await handler._cmd_history("Alice", CH, ["3"])
-    lines = [l for l in resp.split("\n") if l.strip().startswith("+")] + \
-            [l for l in resp.split("\n") if l.strip().startswith("-")]
+    lines = [ln for ln in resp.split("\n") if ln.strip().startswith("+")] + [
+        ln for ln in resp.split("\n") if ln.strip().startswith("-")
+    ]
     # Should have at most 3 transaction lines
     assert len(lines) <= 3
 
 
 @pytest.mark.asyncio
 async def test_history_max_cap(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Limit is capped at 25."""
     handler = _make_handler(sample_config, database)

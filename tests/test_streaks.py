@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,9 +13,13 @@ from kryten_economy.presence_tracker import PresenceTracker
 
 
 @pytest.fixture
-def tracker(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> PresenceTracker:
+def tracker(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> PresenceTracker:
     return PresenceTracker(
-        config=sample_config, database=database, client=mock_client,
+        config=sample_config,
+        database=database,
+        client=mock_client,
         logger=logging.getLogger("test.streaks"),
     )
 
@@ -76,7 +79,9 @@ class TestDailyStreaks:
         balance = await database.get_balance("alice", "testchannel")
         assert balance > 200  # Must include milestone bonus
 
-    async def test_longest_streak_tracked(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_longest_streak_tracked(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """longest_daily_streak should persist even after reset."""
         await database.get_or_create_account("alice", "testchannel")
         # Build 3-day streak
@@ -90,7 +95,9 @@ class TestDailyStreaks:
         assert streak["current_daily_streak"] == 1
         assert streak["longest_daily_streak"] == 3
 
-    async def test_day_rewards_beyond_config(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_day_rewards_beyond_config(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """For streak days beyond configured rewards, fallback to day-7 reward."""
         await database.get_or_create_account("alice", "testchannel")
         # Build up 8 consecutive days

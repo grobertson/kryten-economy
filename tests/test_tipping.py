@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -71,7 +71,8 @@ def _make_handler(
 
 @pytest.mark.asyncio
 async def test_tip_success(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     mock_client: MagicMock,
 ):
     """Tip deducts from sender, credits receiver, records tip."""
@@ -100,7 +101,8 @@ async def test_tip_success(
 
 @pytest.mark.asyncio
 async def test_tip_self_blocked(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Can't tip yourself."""
     await _seed_account(database, "Alice", 5000)
@@ -112,7 +114,8 @@ async def test_tip_self_blocked(
 
 @pytest.mark.asyncio
 async def test_tip_ignored_user(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Can't tip ignored/bot users."""
     await _seed_account(database, "Alice", 5000)
@@ -124,7 +127,8 @@ async def test_tip_ignored_user(
 
 @pytest.mark.asyncio
 async def test_tip_insufficient_funds(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Tip more than balance → insufficient."""
     await _seed_account(database, "Alice", 100)
@@ -137,7 +141,8 @@ async def test_tip_insufficient_funds(
 
 @pytest.mark.asyncio
 async def test_tip_below_minimum(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Tip less than min_amount → rejected."""
     await _seed_account(database, "Alice", 5000)
@@ -150,7 +155,8 @@ async def test_tip_below_minimum(
 
 @pytest.mark.asyncio
 async def test_tip_daily_cap(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
     mock_client: MagicMock,
 ):
     """Tipping past daily max → blocked."""
@@ -169,7 +175,8 @@ async def test_tip_daily_cap(
 
 @pytest.mark.asyncio
 async def test_tip_new_account(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Accounts < min_account_age_minutes old can't tip."""
     await _seed_account(database, "Newbie", 5000, age_minutes=5)  # Very new
@@ -182,7 +189,8 @@ async def test_tip_new_account(
 
 @pytest.mark.asyncio
 async def test_tip_target_no_account(
-    sample_config: EconomyConfig, database: EconomyDatabase,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
 ):
     """Target without economy account → blocked."""
     await _seed_account(database, "Alice", 5000)
@@ -196,6 +204,7 @@ async def test_tip_target_no_account(
 async def test_tip_disabled(database: EconomyDatabase):
     """Tipping disabled in config → blocked."""
     from conftest import make_config_dict
+
     cfg = EconomyConfig(**make_config_dict(tipping={"enabled": False}))
     handler = _make_handler(cfg, database)
 

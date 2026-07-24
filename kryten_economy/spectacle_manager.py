@@ -67,7 +67,9 @@ class SpectacleManager:
             started_at=datetime.now(timezone.utc),
         )
         self._logger.info(
-            "Spectacle acquired: %s in %s", game_type, channel,
+            "Spectacle acquired: %s in %s",
+            game_type,
+            channel,
         )
         return True
 

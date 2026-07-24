@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.config import EconomyConfig
 from kryten_economy.event_announcer import EventAnnouncer
@@ -44,13 +43,16 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_template_rendering(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """Variables substituted correctly in the template."""
         announcer = _make_announcer(mock_client, sample_config)
 
         await announcer.announce(
-            "testchannel", "rank_up",
+            "testchannel",
+            "rank_up",
             {"user": "alice", "rank": "Grip"},
         )
 
@@ -63,13 +65,16 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_missing_template(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """Missing template key with no fallback → no announcement queued."""
         announcer = _make_announcer(mock_client, sample_config)
 
         await announcer.announce(
-            "testchannel", "nonexistent_template_key_xyz",
+            "testchannel",
+            "nonexistent_template_key_xyz",
             {"user": "alice"},
         )
 
@@ -77,13 +82,16 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_missing_template_with_fallback(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """Missing template key with fallback → fallback used."""
         announcer = _make_announcer(mock_client, sample_config)
 
         await announcer.announce(
-            "testchannel", "nonexistent_key",
+            "testchannel",
+            "nonexistent_key",
             {"user": "alice"},
             fallback="Fallback: {user}",
         )
@@ -94,7 +102,9 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_disabled_announcement(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """Config gate off → announcement suppressed."""
         # Disable custom_greeting
@@ -102,7 +112,8 @@ class TestEventAnnouncer:
         announcer = _make_announcer(mock_client, sample_config)
 
         await announcer.announce(
-            "testchannel", "custom_greeting",
+            "testchannel",
+            "custom_greeting",
             {"greeting": "Hello!"},
         )
 
@@ -110,17 +121,21 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_deduplication(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """Same message within dedup window → only first queued."""
         announcer = _make_announcer(mock_client, sample_config)
 
         await announcer.announce(
-            "testchannel", "rank_up",
+            "testchannel",
+            "rank_up",
             {"user": "alice", "rank": "Grip"},
         )
         await announcer.announce(
-            "testchannel", "rank_up",
+            "testchannel",
+            "rank_up",
             {"user": "alice", "rank": "Grip"},
         )
 
@@ -129,17 +144,21 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_different_messages_not_deduped(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """Different messages are not suppressed by dedup."""
         announcer = _make_announcer(mock_client, sample_config)
 
         await announcer.announce(
-            "testchannel", "rank_up",
+            "testchannel",
+            "rank_up",
             {"user": "alice", "rank": "Grip"},
         )
         await announcer.announce(
-            "testchannel", "rank_up",
+            "testchannel",
+            "rank_up",
             {"user": "bob", "rank": "Gaffer"},
         )
 
@@ -147,7 +166,9 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_rate_limiting(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """15 rapid announcements → max 10 sent via flush loop."""
         announcer = _make_announcer(mock_client, sample_config)
@@ -169,7 +190,9 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_raw_announcement(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """announce_raw bypasses template rendering."""
         announcer = _make_announcer(mock_client, sample_config)
@@ -182,7 +205,9 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_raw_announcement_dedup(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """announce_raw is still subject to dedup."""
         announcer = _make_announcer(mock_client, sample_config)
@@ -194,7 +219,9 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_batch_delay(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """Messages are delayed by the batch window before sending."""
         announcer = _make_announcer(mock_client, sample_config)
@@ -215,7 +242,9 @@ class TestEventAnnouncer:
 
     @pytest.mark.asyncio
     async def test_update_config(
-        self, mock_client: MagicMock, sample_config: EconomyConfig,
+        self,
+        mock_client: MagicMock,
+        sample_config: EconomyConfig,
     ) -> None:
         """update_config swaps the config reference."""
         announcer = _make_announcer(mock_client, sample_config)

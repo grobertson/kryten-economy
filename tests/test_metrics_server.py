@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,7 +15,9 @@ from kryten_economy.presence_tracker import PresenceTracker
 
 
 @pytest.fixture
-def mock_app(sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock) -> MagicMock:
+def mock_app(
+    sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+) -> MagicMock:
     """Mock EconomyApp with real database."""
     app = MagicMock()
     app.config = sample_config
@@ -54,7 +56,9 @@ def metrics_server(mock_app: MagicMock) -> EconomyMetricsServer:
 class TestMetricsServer:
     """Metrics collection tests."""
 
-    async def test_collect_custom_metrics(self, metrics_server: EconomyMetricsServer, database: EconomyDatabase):
+    async def test_collect_custom_metrics(
+        self, metrics_server: EconomyMetricsServer, database: EconomyDatabase
+    ):
         """_collect_custom_metrics should return Prometheus lines."""
         await database.credit("alice", "testchannel", 100, "earn")
         await database.credit("bob", "testchannel", 200, "earn")
@@ -74,11 +78,13 @@ class TestMetricsServer:
         assert "channels_configured" in details
         assert "active_sessions" in details
 
-    async def test_metrics_include_circulation(self, metrics_server: EconomyMetricsServer, database: EconomyDatabase):
+    async def test_metrics_include_circulation(
+        self, metrics_server: EconomyMetricsServer, database: EconomyDatabase
+    ):
         """Circulation metric should reflect actual database state."""
         await database.credit("user1", "testchannel", 500, "earn")
         lines = await metrics_server._collect_custom_metrics()
         # Filter to data lines only (skip HELP/TYPE comments)
-        circ_lines = [l for l in lines if "economy_total_circulation{" in l]
+        circ_lines = [ln for ln in lines if "economy_total_circulation{" in ln]
         assert len(circ_lines) >= 1
         assert "500" in circ_lines[0]

@@ -34,8 +34,19 @@ SUITS = ("♠", "♥", "♦", "♣")
 RANKS = ("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
 
 RANK_VALUES: dict[str, int] = {
-    "A": 11, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
-    "8": 8, "9": 9, "10": 10, "J": 10, "Q": 10, "K": 10,
+    "A": 11,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
+    "J": 10,
+    "Q": 10,
+    "K": 10,
 }
 
 
@@ -186,7 +197,10 @@ class BlackjackEngine:
     # ── Deal ──────────────────────────────────────────────────
 
     async def deal(
-        self, username: str, channel: str, wager: int,
+        self,
+        username: str,
+        channel: str,
+        wager: int,
     ) -> str:
         """Start a new blackjack hand.
 
@@ -214,8 +228,12 @@ class BlackjackEngine:
 
         # Account validation (shared across all gambling engines)
         error = await validate_gamble_account(
-            self._db, self._config.gambling, self._symbol,
-            username, channel, wager,
+            self._db,
+            self._config.gambling,
+            self._symbol,
+            username,
+            channel,
+            wager,
         )
         if error:
             return error
@@ -232,7 +250,10 @@ class BlackjackEngine:
         # Daily limit
         if cfg.daily_limit > 0:
             count_today = await get_daily_game_count(
-                self._db, username, channel, "blackjack",
+                self._db,
+                username,
+                channel,
+                "blackjack",
             )
             if count_today >= cfg.daily_limit:
                 return f"Daily blackjack limit reached ({cfg.daily_limit}/day)."
@@ -397,7 +418,9 @@ class BlackjackEngine:
         if payout > 0:
             tx_type = "gamble_win" if net > 0 else "gamble_push"
             await self._db.credit(
-                game.username, game.channel, payout,
+                game.username,
+                game.channel,
+                payout,
                 tx_type=tx_type,
                 trigger_id="gambling.blackjack",
                 reason=f"Blackjack {outcome.value}: player {player_val} vs dealer {dealer_val}",
@@ -406,14 +429,21 @@ class BlackjackEngine:
         # Record stats
         today = today_str()
         await self._db.update_gambling_stats(
-            game.username, game.channel, "blackjack",
-            net=net, biggest_win=max(0, net), biggest_loss=abs(min(0, net)),
+            game.username,
+            game.channel,
+            "blackjack",
+            net=net,
+            biggest_win=max(0, net),
+            biggest_loss=abs(min(0, net)),
         )
         await self._db.increment_lifetime_gambled(game.username, game.channel, wager, payout)
         await self._db.increment_daily_gambled(game.username, game.channel, today, wager, payout)
         await self._db.update_blackjack_stats(
-            game.username, game.channel,
-            outcome=outcome.value, wagered=wager, won=payout,
+            game.username,
+            game.channel,
+            outcome=outcome.value,
+            wagered=wager,
+            won=payout,
         )
 
         # Clean up session
@@ -462,10 +492,12 @@ class BlackjackEngine:
             elif elapsed >= cfg.timeout_warning_seconds and not game.warned:
                 game.warned = True
                 remaining = cfg.timeout_seconds - int(elapsed)
-                results.append((
-                    game.username,
-                    f"⏰ Your blackjack hand will auto-stand in {remaining}s!",
-                ))
+                results.append(
+                    (
+                        game.username,
+                        f"⏰ Your blackjack hand will auto-stand in {remaining}s!",
+                    )
+                )
 
         for key in expired_keys:
             game = self._games.get(key)

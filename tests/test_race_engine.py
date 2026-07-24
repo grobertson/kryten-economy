@@ -85,7 +85,7 @@ class TestRaceStart:
         race = race_engine.get_active_race(CH)
         assert race is not None
         assert race.phase == RacePhase.BETTING
-        assert len(race.racers) == 6
+        assert len(race.racers) == 8
 
     async def test_start_while_active(self, race_engine: RaceEngine) -> None:
         race_engine.start_race(CH, "Alice")
@@ -101,7 +101,9 @@ class TestRaceStart:
 @pytest.mark.asyncio
 class TestBetting:
     async def test_place_bet(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         race_engine.start_race(CH, "Bob")
@@ -112,7 +114,9 @@ class TestBetting:
         assert len(race.bets) == 1
 
     async def test_invalid_color(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         race_engine.start_race(CH, "Bob")
@@ -120,7 +124,9 @@ class TestBetting:
         assert "Invalid racer" in result
 
     async def test_insufficient_funds(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice", balance=5)
         race_engine.start_race(CH, "Bob")
@@ -130,7 +136,9 @@ class TestBetting:
         assert "Insufficient" in result
 
     async def test_double_bet(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         race_engine.start_race(CH, "Bob")
@@ -168,7 +176,9 @@ class TestSimulation:
 @pytest.mark.asyncio
 class TestResolution:
     async def test_resolve_pool_mode(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await _seed_account(database, "Bob")
@@ -201,7 +211,9 @@ class TestResolution:
         assert race_engine.get_active_race(CH) is None
 
     async def test_winners_line_matches_credit(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         """Regression guard for M4 — the displayed net must equal the credited
         payout minus the stake (single source of truth)."""
@@ -235,7 +247,6 @@ class TestResolution:
 
         # credited == payout; displayed value is net = payout - stake(100)
         assert credited - 100 == displayed_net
-
 
 
 class TestTraits:
@@ -274,7 +285,7 @@ class TestProgressDisplay:
         race = race_engine.get_active_race(CH)
         race.phase = RacePhase.RACING
         lines = race_engine._build_progress_display(race)
-        assert len(lines) == 6
+        assert len(lines) == 8
         for line in lines:
             assert "|" in line
             assert "█" in line or "░" in line
@@ -314,16 +325,18 @@ class TestRaceFrame:
         assert frame["channel"] == CH
         assert frame["winner"] is None
         assert frame["betting_closes_in"] > 0
-        assert len(frame["racers"]) == 6
+        assert len(frame["racers"]) == 8
         # Each racer carries what the browser needs to render it.
         for r in frame["racers"]:
             assert {"color", "emoji", "progress", "pct", "position", "odds"} <= set(r)
             assert 0.0 <= r["pct"] <= 100.0
         # Positions are a 1..N permutation.
-        assert sorted(r["position"] for r in frame["racers"]) == [1, 2, 3, 4, 5, 6]
+        assert sorted(r["position"] for r in frame["racers"]) == [1, 2, 3, 4, 5, 6, 7, 8]
 
     async def test_racing_frame_reflects_progress(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         race_engine.start_race(CH, "Alice")
@@ -344,7 +357,9 @@ class TestRaceFrame:
         assert frame["bets_by_color"][color] == {"amount": 100, "bettors": 1}
 
     async def test_finished_frame_has_winner_and_payouts(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         race_engine.start_race(CH, "Bob")
@@ -364,7 +379,9 @@ class TestRaceFrame:
         assert any(p["username"] == "Alice" for p in frame["payouts"])
 
     async def test_finished_frame_expires(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         from datetime import datetime, timedelta, timezone
 
@@ -380,12 +397,15 @@ class TestRaceFrame:
         # Force the stash to be already-expired.
         frame, _expiry = race_engine._finished_frames[CH]
         race_engine._finished_frames[CH] = (
-            frame, datetime.now(timezone.utc) - timedelta(seconds=1),
+            frame,
+            datetime.now(timezone.utc) - timedelta(seconds=1),
         )
         assert race_engine.get_race_frame(CH) is None
 
     async def test_new_race_clears_finished_frame(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         race_engine.start_race(CH, "Bob")
@@ -462,7 +482,7 @@ class TestPrecomputedTimeline:
         assert wins >= 28  # ~90% expected; allow variance
 
     async def test_racing_frame_has_timeline(self, race_engine, database) -> None:
-        race = await self._start_with_bet(race_engine, database)
+        await self._start_with_bet(race_engine, database)
         race_engine.close_betting(CH)
         frame = race_engine.get_race_frame(CH)
         assert frame["phase"] == "racing"
@@ -475,7 +495,9 @@ class TestPrecomputedTimeline:
         assert tl["commentary"][0]["t"] == 0.0
 
     async def test_advance_playback_finishes_after_duration(
-        self, race_engine, database,
+        self,
+        race_engine,
+        database,
     ) -> None:
         from datetime import timedelta
 
@@ -494,7 +516,9 @@ class TestPrecomputedTimeline:
         )
 
     async def test_resolve_uses_precomputed_winner(
-        self, race_engine, database,
+        self,
+        race_engine,
+        database,
     ) -> None:
         race = await self._start_with_bet(race_engine, database)
         race_engine.close_betting(CH)
@@ -548,7 +572,9 @@ class TestRaceStartLine:
         assert race_engine.get_race_start_line(CH) == "🏁 LLM: AND THEY'RE OFF!"
 
     async def test_resolve_consumes_story(
-        self, race_engine: RaceEngine, database: EconomyDatabase,
+        self,
+        race_engine: RaceEngine,
+        database: EconomyDatabase,
     ) -> None:
         from kryten_economy.race_narrator import RaceStory
 
@@ -559,12 +585,12 @@ class TestRaceStartLine:
         await race_engine.place_bet("Alice", CH, 100, color)
 
         race_engine._narrator._stories[CH] = RaceStory(
-            start="s", lead_change="lc", finish="🏆 {racer} finishes!",
+            start="s",
+            lead_change="lc",
+            finish="🏆 {racer} finishes!",
         )
         race.phase = RacePhase.RACING
         race.racers[color].progress = 25.0
         await race_engine.resolve_race(CH)
         # Story cleared after resolution
         assert not race_engine._narrator.has_story(CH)
-
-

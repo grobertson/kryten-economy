@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 
 import pytest
-import pytest_asyncio
 
 from kryten_economy.database import EconomyDatabase
 

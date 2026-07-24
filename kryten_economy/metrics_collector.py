@@ -127,9 +127,7 @@ class MetricsCollector:
     # Serialisation (for NATS KV persistence)
     # ------------------------------------------------------------------
 
-    _PERSISTED_FIELDS: tuple[str, ...] = tuple(
-        s for s in __slots__  # type: ignore[arg-type]
-    )
+    _PERSISTED_FIELDS: tuple[str, ...] = tuple(s for s in __slots__)  # type: ignore[arg-type]
 
     def to_dict(self) -> dict[str, int]:
         return {f: getattr(self, f) for f in self._PERSISTED_FIELDS}

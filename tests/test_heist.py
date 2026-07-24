@@ -14,13 +14,16 @@ CH = "testchannel"
 
 
 async def _seed_account(
-    db: EconomyDatabase, username: str, balance: int = 5000,
+    db: EconomyDatabase,
+    username: str,
+    balance: int = 5000,
 ) -> None:
     """Create account with generous balance and old enough age."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
 
     import asyncio
+
     loop = asyncio.get_running_loop()
     first_seen = datetime.now(timezone.utc) - timedelta(hours=2)
 
@@ -101,7 +104,9 @@ async def test_join_heist_already_in(gambling_engine: GamblingEngine, database: 
 
 
 @pytest.mark.asyncio
-async def test_join_heist_expired_window(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_join_heist_expired_window(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Join after window → error."""
     gambling_engine._config.gambling.heist.enabled = True
     await _seed_account(database, "Alice")
@@ -136,7 +141,9 @@ async def test_heist_one_per_channel(gambling_engine: GamblingEngine, database: 
 
 
 @pytest.mark.asyncio
-async def test_heist_success_crew_scaled(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_heist_success_crew_scaled(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Win → crew-scaled multiplier applied.  2 players → 1.5 + 0.25 = 1.75x."""
     cfg = gambling_engine._config.gambling.heist
     cfg.enabled = True
@@ -230,7 +237,9 @@ async def test_heist_push(gambling_engine: GamblingEngine, database: EconomyData
 
 
 @pytest.mark.asyncio
-async def test_heist_insufficient_participants(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_heist_insufficient_participants(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """< min_participants → cancelled, everyone refunded."""
     gambling_engine._config.gambling.heist.enabled = True
     # min_participants defaults to 3, only Alice joins
@@ -256,7 +265,9 @@ async def test_heist_insufficient_participants(gambling_engine: GamblingEngine, 
 
 
 @pytest.mark.asyncio
-async def test_heist_cooldown_after_resolve(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_heist_cooldown_after_resolve(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """After heist resolves, cooldown prevents immediate restart."""
     cfg = gambling_engine._config.gambling.heist
     cfg.enabled = True
@@ -298,9 +309,7 @@ async def test_heist_cooldown_expires(gambling_engine: GamblingEngine, database:
             await gambling_engine.resolve_heist(CH)
 
     # Simulate cooldown expiring
-    gambling_engine._heist_cooldowns[CH] = (
-        datetime.now(timezone.utc) - timedelta(seconds=200)
-    )
+    gambling_engine._heist_cooldowns[CH] = datetime.now(timezone.utc) - timedelta(seconds=200)
 
     assert gambling_engine.get_heist_cooldown_remaining(CH) == 0
 
@@ -446,9 +455,13 @@ async def test_narrator_prepare_story_static_mode(gambling_engine: GamblingEngin
 async def test_narrator_consume_cached_story(gambling_engine: GamblingEngine):
     """consume_cached_story clears any cached story."""
     from kryten_economy.heist_narrator import HeistStory
+
     narrator = gambling_engine._narrator
     narrator._cached_story = HeistStory(
-        scenario="Test", win="Win", lose="Lose", push="Push",
+        scenario="Test",
+        win="Win",
+        lose="Lose",
+        push="Push",
     )
     narrator.consume_cached_story()
     assert narrator._cached_story is None

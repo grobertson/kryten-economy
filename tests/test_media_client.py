@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
@@ -20,6 +20,7 @@ def _make_client(**overrides) -> MediaCMSClient:
         **overrides,
     )
     import logging
+
     return MediaCMSClient(cfg, logging.getLogger("test"))
 
 
@@ -46,7 +47,9 @@ async def test_search_returns_results():
     mock_resp = AsyncMock()
     mock_resp.status = 200
     mock_resp.raise_for_status = MagicMock()
-    mock_resp.json = AsyncMock(return_value={"results": [_fake_media(), _fake_media("xyz", "Other", 120)]})
+    mock_resp.json = AsyncMock(
+        return_value={"results": [_fake_media(), _fake_media("xyz", "Other", 120)]}
+    )
     mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
     mock_resp.__aexit__ = AsyncMock(return_value=False)
 
@@ -59,7 +62,10 @@ async def test_search_returns_results():
     assert results[0]["title"] == "Test Video"
     assert results[0]["id"] == "abc123"
     assert results[0]["media_type"] == "cm"
-    assert results[0]["media_id"] == "https://media.test.com/api/v1/media/cytube/abc123.json?format=json"
+    assert (
+        results[0]["media_id"]
+        == "https://media.test.com/api/v1/media/cytube/abc123.json?format=json"
+    )
     assert results[1]["duration"] == 120
 
     # Verify correct API params: 'q' (not 'search'), no page_size
@@ -78,6 +84,7 @@ async def test_search_client_side_limit():
         search_results_limit=3,
     )
     import logging
+
     client = MediaCMSClient(cfg, logging.getLogger("test"))
     items = [_fake_media(f"id{i}", f"Video {i}", 100 + i) for i in range(10)]
     mock_resp = AsyncMock()

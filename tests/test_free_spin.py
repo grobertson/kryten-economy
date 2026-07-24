@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from kryten_economy.database import EconomyDatabase
-from kryten_economy.gambling_engine import GambleOutcome, GamblingEngine
+from kryten_economy.gambling_engine import GamblingEngine
 
 CH = "testchannel"
 
@@ -19,6 +19,7 @@ async def _seed_account(db: EconomyDatabase, username: str = "Alice", balance: i
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
 
     import asyncio
+
     loop = asyncio.get_running_loop()
     first_seen = datetime.now(timezone.utc) - timedelta(hours=2)
 
@@ -96,6 +97,7 @@ async def test_free_spin_resets_daily(gambling_engine: GamblingEngine, database:
 
     # Change the daily_activity record to yesterday
     import asyncio
+
     loop = asyncio.get_running_loop()
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -129,7 +131,9 @@ async def test_free_spin_disabled(gambling_engine: GamblingEngine, database: Eco
 
 
 @pytest.mark.asyncio
-async def test_free_spin_via_spin_command(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_free_spin_via_spin_command(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Free spin followed by paid spin with explicit wager."""
     await _seed_account(database)
 
@@ -146,7 +150,9 @@ async def test_free_spin_via_spin_command(gambling_engine: GamblingEngine, datab
 
 
 @pytest.mark.asyncio
-async def test_spin_without_args_after_free_used(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_without_args_after_free_used(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """After free spin used, daily_free_spin returns 'already used' message."""
     await _seed_account(database)
 

@@ -29,9 +29,8 @@ if TYPE_CHECKING:
 #  Module-level helpers for queue spending
 # ══════════════════════════════════════════════════════════
 
-def _is_blackout_active(
-    windows: list, now_utc: "datetime"
-) -> bool:
+
+def _is_blackout_active(windows: list, now_utc: "datetime") -> bool:
     """Return True if any blackout window covers now_utc.
 
     Each window has `cron` (start schedule) and `duration_hours`.
@@ -44,8 +43,14 @@ def _is_blackout_active(
         return False  # croniter not installed — blackout disabled
 
     for win in windows:
-        cron_expr = getattr(win, "cron", None) or win.get("cron") if isinstance(win, dict) else win.cron
-        duration_h = getattr(win, "duration_hours", None) or win.get("duration_hours") if isinstance(win, dict) else win.duration_hours
+        cron_expr = (
+            getattr(win, "cron", None) or win.get("cron") if isinstance(win, dict) else win.cron
+        )
+        duration_h = (
+            getattr(win, "duration_hours", None) or win.get("duration_hours")
+            if isinstance(win, dict)
+            else win.duration_hours
+        )
         if not cron_expr or not duration_h:
             continue
         it = croniter(cron_expr, now_utc)
@@ -350,8 +355,7 @@ class CommandHandler:
             conn = self._app.db._get_connection()  # noqa: SLF001
             try:
                 rows = conn.execute(
-                    "SELECT * FROM transactions "
-                    "WHERE channel = ? ORDER BY id DESC LIMIT ?",
+                    "SELECT * FROM transactions " "WHERE channel = ? ORDER BY id DESC LIMIT ?",
                     (channel, limit),
                 ).fetchall()
                 return [dict(r) for r in rows]
@@ -369,9 +373,7 @@ class CommandHandler:
     #  Sprint 5: Queue Spending Commands
     # ══════════════════════════════════════════════════════════
 
-    async def _handle_spending_queue_preview(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_spending_queue_preview(self, request: dict[str, Any]) -> dict[str, Any]:
         """Read-only cost estimate. No state changed."""
         username = self._username(request)
         channel = self._channel(request)
@@ -439,9 +441,7 @@ class CommandHandler:
             result["cooldown_remaining_sec"] = cooldown_remaining_sec
         return result
 
-    async def _handle_spending_queue(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_spending_queue(self, request: dict[str, Any]) -> dict[str, Any]:
         """Atomic validate + debit. Idempotent via request_id."""
         username = self._username(request)
         channel = self._channel(request)
@@ -500,7 +500,9 @@ class CommandHandler:
 
         # --- Debit ---
         new_balance = await db.debit(
-            username, channel, final_cost,
+            username,
+            channel,
+            final_cost,
             tx_type="spend",
             reason=f"Queue spend ({tier_label})",
             trigger_id=f"spend.queue.{request_id}",
@@ -527,9 +529,7 @@ class CommandHandler:
             "request_id": request_id,
         }
 
-    async def _handle_spending_queue_refund(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_spending_queue_refund(self, request: dict[str, Any]) -> dict[str, Any]:
         """Compensating credit. Idempotent via request_id."""
         username = self._username(request)
         channel = self._channel(request)
@@ -557,7 +557,9 @@ class CommandHandler:
         # Credit the user back
         cost = existing["cost_z"]
         new_balance = await db.credit(
-            username, channel, cost,
+            username,
+            channel,
+            cost,
             tx_type="refund",
             reason=f"Queue refund: {reason}",
             trigger_id=f"refund.queue.{request_id}",
@@ -727,21 +729,25 @@ class CommandHandler:
 
         sched = self._app.multiplier_engine._scheduled_events.get(channel)  # noqa: SLF001
         if sched and now < sched["end_time"]:
-            active.append({
-                "type": "scheduled",
-                "name": sched["name"],
-                "multiplier": sched["multiplier"],
-                "ends_at": sched["end_time"].isoformat(),
-            })
+            active.append(
+                {
+                    "type": "scheduled",
+                    "name": sched["name"],
+                    "multiplier": sched["multiplier"],
+                    "ends_at": sched["end_time"].isoformat(),
+                }
+            )
 
         adhoc = self._app.multiplier_engine._adhoc_event  # noqa: SLF001
         if adhoc and now < adhoc["end_time"]:
-            active.append({
-                "type": "adhoc",
-                "name": adhoc["name"],
-                "multiplier": adhoc["multiplier"],
-                "ends_at": adhoc["end_time"].isoformat(),
-            })
+            active.append(
+                {
+                    "type": "adhoc",
+                    "name": adhoc["name"],
+                    "multiplier": adhoc["multiplier"],
+                    "ends_at": adhoc["end_time"].isoformat(),
+                }
+            )
 
         return {"channel": channel, "events": active}
 
@@ -761,11 +767,14 @@ class CommandHandler:
         aggregated: dict[str, dict[str, int]] = {}
         for row in rows:
             tid = row["trigger_id"]
-            bucket = aggregated.setdefault(tid, {
-                "hit_count": 0,
-                "unique_users": 0,
-                "total_z_awarded": 0,
-            })
+            bucket = aggregated.setdefault(
+                tid,
+                {
+                    "hit_count": 0,
+                    "unique_users": 0,
+                    "total_z_awarded": 0,
+                },
+            )
             bucket["hit_count"] += int(row.get("hit_count", 0))
             bucket["unique_users"] += int(row.get("unique_users", 0))
             bucket["total_z_awarded"] += int(row.get("total_z_awarded", 0))
@@ -868,10 +877,7 @@ class CommandHandler:
             }
 
         vanity = await self._app.db.get_all_vanity_items(username, channel)
-        currency_name = (
-            vanity.get("personal_currency_name")
-            or config.currency.name
-        )
+        currency_name = vanity.get("personal_currency_name") or config.currency.name
 
         greeting_cfg = config.vanity_shop.custom_greeting
         color_cfg = config.vanity_shop.chat_color
@@ -927,7 +933,10 @@ class CommandHandler:
             rank_tier = spending.get_rank_tier_index(account)
             final_cost, discount = spending.apply_discount(base_cost, rank_tier)
             validation = await spending.validate_spend(
-                username, channel, final_cost, "vanity",
+                username,
+                channel,
+                final_cost,
+                "vanity",
             )
             if validation is not None:
                 raise ValueError(validation.message)
@@ -935,8 +944,11 @@ class CommandHandler:
             final_cost, discount = base_cost, 0.0
 
         new_balance = await self._app.db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id=trigger_id,
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id=trigger_id,
             reason=f"Vanity: {item_type}",
         )
         if new_balance is None:
@@ -970,7 +982,11 @@ class CommandHandler:
             raise ValueError("Greeting text too long (max 200 characters).")
 
         return await self._purchase_vanity(
-            username, channel, cfg.cost, "custom_greeting", value,
+            username,
+            channel,
+            cfg.cost,
+            "custom_greeting",
+            value,
             "spend.vanity.custom_greeting",
         )
 
@@ -991,8 +1007,10 @@ class CommandHandler:
         # allowed through — the dashboard surfaces the warning before purchase.
         if cfg.enforce_contrast:
             verdict = evaluate_color(
-                hex_value, cfg.contrast_bg,
-                min_lc=cfg.min_contrast_lc, warn_lc=cfg.warn_contrast_lc,
+                hex_value,
+                cfg.contrast_bg,
+                min_lc=cfg.min_contrast_lc,
+                warn_lc=cfg.warn_contrast_lc,
             )
             if verdict["level"] == LEVEL_REJECT:
                 raise ValueError(verdict["message"])
@@ -1001,7 +1019,11 @@ class CommandHandler:
         prev_value = await self._app.db.get_vanity_item(username, channel, "chat_color")
 
         result = await self._purchase_vanity(
-            username, channel, cfg.cost, "chat_color", hex_value,
+            username,
+            channel,
+            cfg.cost,
+            "chat_color",
+            hex_value,
             "spend.vanity.chat_color",
         )
 
@@ -1013,8 +1035,12 @@ class CommandHandler:
             # Refund and roll the item back so the user isn't billed for a change
             # that didn't take effect, and so it isn't silently applied later.
             await self._refund_failed_vanity(
-                username, channel, result["charged"], "chat_color",
-                prev_value, "spend.vanity.chat_color",
+                username,
+                channel,
+                result["charged"],
+                "chat_color",
+                prev_value,
+                "spend.vanity.chat_color",
             )
             raise ValueError(
                 "Couldn't update your chat color right now — your Z has been "
@@ -1042,8 +1068,10 @@ class CommandHandler:
                 "message": "Invalid color. Provide a 6-digit hex like #1A2B3C.",
             }
         verdict = evaluate_color(
-            hex_value, cfg.contrast_bg,
-            min_lc=cfg.min_contrast_lc, warn_lc=cfg.warn_contrast_lc,
+            hex_value,
+            cfg.contrast_bg,
+            min_lc=cfg.min_contrast_lc,
+            warn_lc=cfg.warn_contrast_lc,
         )
         # When the guard is disabled, never block — downgrade reject to warn.
         acceptable = verdict["acceptable"] or not cfg.enforce_contrast
@@ -1078,7 +1106,10 @@ class CommandHandler:
         return protected
 
     async def _import_legacy_chat_colors(
-        self, channel: str, existing_css: str, protected: set[str],
+        self,
+        channel: str,
+        existing_css: str,
+        protected: set[str],
     ) -> int:
         """Import per-user colors that live only in the CSS into the database.
 
@@ -1101,7 +1132,9 @@ class CommandHandler:
             # vanity_items is stored case-sensitively. Checking the lowercased
             # name would miss an existing canonical-case row and re-import it.
             existing_db = await self._app.db.get_vanity_item(
-                display, channel, "chat_color",
+                display,
+                channel,
+                "chat_color",
             )
             if existing_db:
                 continue
@@ -1113,7 +1146,8 @@ class CommandHandler:
         if imported:
             self._logger.info(
                 "Imported %d pre-existing chat color(s) from CSS for %s",
-                imported, channel,
+                imported,
+                channel,
             )
         return imported
 
@@ -1189,7 +1223,8 @@ class CommandHandler:
             await self._client.set_channel_css(channel, new_css, domain=domain)
             self._logger.info(
                 "Applied chat-color CSS for %s (%d managed user(s))",
-                channel, len(colors),
+                channel,
+                len(colors),
             )
             return "applied"
         except Exception:
@@ -1211,7 +1246,9 @@ class CommandHandler:
         item when there was none), so a refunded purchase leaves no active trace.
         """
         await self._app.db.refund(
-            username, channel, amount,
+            username,
+            channel,
+            amount,
             trigger_id=f"{trigger_id}.refund",
             reason=f"Refund: {item_type} could not be applied",
         )
@@ -1221,7 +1258,10 @@ class CommandHandler:
             await self._app.db.deactivate_vanity_item(username, channel, item_type)
         self._logger.warning(
             "Refunded %d Z to %s in %s: %s could not be applied (rolled back).",
-            amount, username, channel, item_type,
+            amount,
+            username,
+            channel,
+            item_type,
         )
 
     async def _handle_vanity_resync_colors(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -1238,9 +1278,7 @@ class CommandHandler:
         domain = self._domain_for_channel(channel)
         existing = await self._client.get_state_channel_css(channel, domain=domain)
         if not existing.strip():
-            raise ValueError(
-                "Channel CSS is empty or unavailable; cannot resync colors."
-            )
+            raise ValueError("Channel CSS is empty or unavailable; cannot resync colors.")
 
         protected = self._chat_color_protected_users()
         imported = await self._import_legacy_chat_colors(channel, existing, protected)
@@ -1286,7 +1324,10 @@ class CommandHandler:
             rank_tier = spending.get_rank_tier_index(account)
             final_cost, discount = spending.apply_discount(cfg.cost, rank_tier)
             validation = await spending.validate_spend(
-                username, channel, final_cost, "vanity",
+                username,
+                channel,
+                final_cost,
+                "vanity",
             )
             if validation is not None:
                 raise ValueError(validation.message)
@@ -1294,8 +1335,11 @@ class CommandHandler:
             final_cost, discount = cfg.cost, 0.0
 
         new_balance = await self._app.db.debit(
-            username, channel, final_cost,
-            tx_type="spend", trigger_id="spend.vanity.shoutout",
+            username,
+            channel,
+            final_cost,
+            tx_type="spend",
+            trigger_id="spend.vanity.shoutout",
             reason="Vanity: Shoutout",
         )
         if new_balance is None:
@@ -1413,7 +1457,9 @@ class CommandHandler:
             raise ValueError(f"No pending GIF approval for {username}")
 
         await self._app.db.resolve_approval(int(pending["id"]), admin, True)
-        await self._client.send_pm(channel, username, f"✅ Your channel GIF has been approved by {admin}!")
+        await self._client.send_pm(
+            channel, username, f"✅ Your channel GIF has been approved by {admin}!"
+        )
         return {
             "username": username,
             "channel": channel,

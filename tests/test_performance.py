@@ -9,14 +9,10 @@ Tests:
 
 from __future__ import annotations
 
-import asyncio
-import logging
 import time
 
 import pytest
-import pytest_asyncio
 
-from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 
 
@@ -87,9 +83,9 @@ class TestPresenceTickPerformance:
         elapsed_batch = time.monotonic() - start_batch
 
         # Batch should be faster (or at worst similar)
-        assert elapsed_batch <= elapsed_individual * 2, (
-            f"Batch ({elapsed_batch:.3f}s) unexpectedly slow vs individual ({elapsed_individual:.3f}s)"
-        )
+        assert (
+            elapsed_batch <= elapsed_individual * 2
+        ), f"Batch ({elapsed_batch:.3f}s) unexpectedly slow vs individual ({elapsed_individual:.3f}s)"
 
     @pytest.mark.asyncio
     async def test_command_response_latency(

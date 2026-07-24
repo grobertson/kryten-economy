@@ -67,7 +67,9 @@ class SpendingEngine:
         return self._config.ranks.spend_discount_per_rank * rank_tier_index
 
     def apply_discount(
-        self, base_cost: int, rank_tier_index: int,
+        self,
+        base_cost: int,
+        rank_tier_index: int,
     ) -> tuple[int, float]:
         """Return (final_cost, discount_fraction). Minimum cost is 1."""
         discount = self.get_rank_discount(rank_tier_index)

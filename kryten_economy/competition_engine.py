@@ -36,7 +36,9 @@ class CompetitionEngine:
         self._competitions = new_config.daily_competitions
 
     async def evaluate_daily_competitions(
-        self, channel: str, date: str,
+        self,
+        channel: str,
+        date: str,
     ) -> list[dict]:
         """Run all configured daily competitions.
 
@@ -51,7 +53,9 @@ class CompetitionEngine:
                 all_awards.extend(awards)
             except Exception as e:
                 self._logger.error(
-                    "Competition %s evaluation failed: %s", comp.id, e,
+                    "Competition %s evaluation failed: %s",
+                    comp.id,
+                    e,
                 )
 
         # Credit all awards
@@ -80,7 +84,10 @@ class CompetitionEngine:
         return all_awards
 
     async def _evaluate_one(
-        self, comp: CompetitionConfig, channel: str, date: str,
+        self,
+        comp: CompetitionConfig,
+        channel: str,
+        date: str,
     ) -> list[dict]:
         """Evaluate a single competition. Returns list of awards."""
         awards: list[dict] = []
@@ -88,19 +95,27 @@ class CompetitionEngine:
 
         if ctype == "daily_threshold":
             qualifiers = await self._db.get_daily_threshold_qualifiers(
-                channel, date, comp.condition.field or "", comp.condition.threshold or 0,
+                channel,
+                date,
+                comp.condition.field or "",
+                comp.condition.threshold or 0,
             )
             for username in qualifiers:
-                awards.append({
-                    "competition_id": comp.id,
-                    "username": username,
-                    "reward": comp.reward,
-                    "reason": comp.description,
-                })
+                awards.append(
+                    {
+                        "competition_id": comp.id,
+                        "username": username,
+                        "reward": comp.reward,
+                        "reason": comp.description,
+                    }
+                )
 
         elif ctype == "daily_top":
             top_users = await self._db.get_daily_top(
-                channel, date, comp.condition.field or "", limit=1,
+                channel,
+                date,
+                comp.condition.field or "",
+                limit=1,
             )
             if top_users:
                 winner = top_users[0]
@@ -110,17 +125,21 @@ class CompetitionEngine:
                 else:
                     reward = comp.reward
 
-                awards.append({
-                    "competition_id": comp.id,
-                    "username": winner["username"],
-                    "reward": reward,
-                    "reason": comp.description,
-                })
+                awards.append(
+                    {
+                        "competition_id": comp.id,
+                        "username": winner["username"],
+                        "reward": reward,
+                        "reason": comp.description,
+                    }
+                )
 
         return awards
 
     async def _announce_daily_results(
-        self, channel: str, awards: list[dict],
+        self,
+        channel: str,
+        awards: list[dict],
     ) -> None:
         """Public announcement of daily competition results."""
         by_comp: dict[str, list[dict]] = {}
@@ -130,7 +149,8 @@ class CompetitionEngine:
         lines = ["📊 Daily Competition Results:"]
         for comp_id, comp_awards in by_comp.items():
             comp_cfg = next(
-                (c for c in self._competitions if c.id == comp_id), None,
+                (c for c in self._competitions if c.id == comp_id),
+                None,
             )
             desc = comp_cfg.description if comp_cfg else comp_id
             if len(comp_awards) == 1:

@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
-from kryten_economy.earning_engine import EarningEngine
-
 
 CH = "testchannel"
 

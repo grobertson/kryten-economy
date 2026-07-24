@@ -89,8 +89,8 @@ class RaceNarrator:
         # custom event lines get appended to the "speed_boost" bucket
         if config.custom_event_lines:
             self._event_lines.setdefault("speed_boost", ())
-            self._event_lines["speed_boost"] = (
-                tuple(self._event_lines["speed_boost"]) + tuple(config.custom_event_lines)
+            self._event_lines["speed_boost"] = tuple(self._event_lines["speed_boost"]) + tuple(
+                config.custom_event_lines
             )
 
         self._lead_change_lines = list(race_narratives.LEAD_CHANGE_LINES)
@@ -161,7 +161,8 @@ class RaceNarrator:
         if self._race_ids.get(channel) != race_id:
             self._log.debug(
                 "Discarding stale LLM race story for %s (race %s no longer active)",
-                channel, race_id,
+                channel,
+                race_id,
             )
             return
         if story is not None:
@@ -221,13 +222,17 @@ class RaceNarrator:
                             body = await resp.text()
                             self._log.warning(
                                 "LLM race narrator HTTP %s (attempt %d): %s",
-                                resp.status, attempt + 1, body[:200],
+                                resp.status,
+                                attempt + 1,
+                                body[:200],
                             )
                             continue
                         data = await resp.json()
             except Exception as exc:
                 self._log.warning(
-                    "LLM race narrator error (attempt %d): %s", attempt + 1, exc,
+                    "LLM race narrator error (attempt %d): %s",
+                    attempt + 1,
+                    exc,
                 )
                 continue
 
@@ -255,7 +260,9 @@ class RaceNarrator:
                 self._log.warning("LLM race narrator returned incomplete story")
             except (json.JSONDecodeError, KeyError, IndexError) as exc:
                 self._log.warning(
-                    "LLM race narrator parse error (attempt %d): %s", attempt + 1, exc,
+                    "LLM race narrator parse error (attempt %d): %s",
+                    attempt + 1,
+                    exc,
                 )
                 continue
 
@@ -312,7 +319,9 @@ class RaceNarrator:
         if story and story.lead_change:
             return self._safe_format(story.lead_change, racer=racer, emoji=emoji)
         return self._safe_format(
-            random.choice(self._lead_change_lines), racer=racer, emoji=emoji,
+            random.choice(self._lead_change_lines),
+            racer=racer,
+            emoji=emoji,
         )
 
     def get_event_line(self, channel: str, event_type: str, racer: str, emoji: str) -> str | None:
@@ -339,7 +348,9 @@ class RaceNarrator:
         if story and story.finish:
             return self._safe_format(story.finish, racer=racer, emoji=emoji)
         return self._safe_format(
-            random.choice(self._finish_lines), racer=racer, emoji=emoji,
+            random.choice(self._finish_lines),
+            racer=racer,
+            emoji=emoji,
         )
 
     def get_payout_line(self, user: str, payout: str, symbol: str) -> str:
@@ -358,7 +369,9 @@ class RaceNarrator:
     def web_lead_change_line(self, racer: str, emoji: str, driver: str = "") -> str:
         return self._safe_format(
             random.choice(self._web_lead_change_lines),
-            racer=racer, emoji=emoji, driver=driver,
+            racer=racer,
+            emoji=emoji,
+            driver=driver,
         )
 
     def web_close_finish_line(self) -> str:
@@ -367,7 +380,16 @@ class RaceNarrator:
     def web_finish_line(self, channel: str, racer: str, emoji: str, driver: str = "") -> str:
         story = self._stories.get(channel)
         if story and story.finish:
-            return self._safe_format(story.finish, racer=racer, emoji=emoji, driver=driver)
-        return self._safe_format(
-            random.choice(self._finish_lines), racer=racer, emoji=emoji, driver=driver,
-        )
+            line = self._safe_format(story.finish, racer=racer, emoji=emoji, driver=driver)
+        else:
+            line = self._safe_format(
+                random.choice(self._finish_lines),
+                racer=racer,
+                emoji=emoji,
+                driver=driver,
+            )
+        # Commentary (especially LLM-authored) can drop the winner; always name it.
+        if racer and racer.lower() not in line.lower():
+            who = f"{racer} ({driver})" if driver else racer
+            line = f"🏁 {emoji} {who} takes the checkered flag!"
+        return line

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
-from kryten_economy.earning_engine import EarningEngine
 
 
 CH = "testchannel"
@@ -20,7 +17,10 @@ async def test_messages_sent_incremented(earning_engine, database):
     """Each message → messages_sent += 1."""
     await earning_engine.evaluate_chat_message("alice", CH, "hello", NOW)
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "world", NOW + timedelta(seconds=5),
+        "alice",
+        CH,
+        "world",
+        NOW + timedelta(seconds=5),
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -35,7 +35,10 @@ async def test_long_messages_counted(earning_engine, database):
 
     await earning_engine.evaluate_chat_message("alice", CH, short, NOW)
     await earning_engine.evaluate_chat_message(
-        "alice", CH, long_msg, NOW + timedelta(seconds=5),
+        "alice",
+        CH,
+        long_msg,
+        NOW + timedelta(seconds=5),
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -46,7 +49,10 @@ async def test_long_messages_counted(earning_engine, database):
 async def test_gif_detected(earning_engine, database):
     """Message with .gif URL → gifs_posted += 1."""
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "check this https://example.com/funny.gif out", NOW,
+        "alice",
+        CH,
+        "check this https://example.com/funny.gif out",
+        NOW,
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -57,7 +63,10 @@ async def test_gif_detected(earning_engine, database):
 async def test_non_gif_url_ignored(earning_engine, database):
     """Regular URL → gifs_posted unchanged."""
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "visit https://example.com/page.html", NOW,
+        "alice",
+        CH,
+        "visit https://example.com/page.html",
+        NOW,
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -68,7 +77,10 @@ async def test_non_gif_url_ignored(earning_engine, database):
 async def test_giphy_detected(earning_engine, database):
     """giphy.com link → gifs_posted += 1."""
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "https://media.giphy.com/media/abc123/giphy.gif", NOW,
+        "alice",
+        CH,
+        "https://media.giphy.com/media/abc123/giphy.gif",
+        NOW,
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -79,7 +91,10 @@ async def test_giphy_detected(earning_engine, database):
 async def test_tenor_detected(earning_engine, database):
     """tenor.com link → gifs_posted += 1."""
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "https://tenor.com/view/funny-123", NOW,
+        "alice",
+        CH,
+        "https://tenor.com/view/funny-123",
+        NOW,
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -93,7 +108,10 @@ async def test_unique_emotes_counted(earning_engine, database):
     earning_engine._known_emotes = {"PogChamp", "Kappa", "LUL"}
 
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "PogChamp Kappa LUL", NOW,
+        "alice",
+        CH,
+        "PogChamp Kappa LUL",
+        NOW,
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -106,10 +124,16 @@ async def test_duplicate_emote_not_double_counted(earning_engine, database):
     earning_engine._known_emotes = {"PogChamp"}
 
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "PogChamp", NOW,
+        "alice",
+        CH,
+        "PogChamp",
+        NOW,
     )
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "PogChamp again", NOW + timedelta(seconds=5),
+        "alice",
+        CH,
+        "PogChamp again",
+        NOW + timedelta(seconds=5),
     )
 
     activity = await database.get_or_create_daily_activity("alice", CH, TODAY)
@@ -122,19 +146,27 @@ async def test_emote_set_resets_on_new_day(earning_engine, database):
     earning_engine._known_emotes = {"PogChamp"}
 
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "PogChamp", NOW,
+        "alice",
+        CH,
+        "PogChamp",
+        NOW,
     )
 
     # Next day
     tomorrow = NOW + timedelta(days=1)
     tomorrow_str = tomorrow.strftime("%Y-%m-%d")
     await earning_engine.evaluate_chat_message(
-        "alice", CH, "PogChamp", tomorrow,
+        "alice",
+        CH,
+        "PogChamp",
+        tomorrow,
     )
 
     activity_today = await database.get_or_create_daily_activity("alice", CH, TODAY)
     activity_tomorrow = await database.get_or_create_daily_activity(
-        "alice", CH, tomorrow_str,
+        "alice",
+        CH,
+        tomorrow_str,
     )
     assert activity_today["unique_emotes_used"] == 1
     assert activity_tomorrow["unique_emotes_used"] == 1

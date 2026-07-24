@@ -1,0 +1,371 @@
+/* Last Update 3/27/2026 */
+
+/* Do not duplicate the body tag definition. */
+body {
+  /*
+    Changes here change everything without a specific definition, which is most things.
+    When making changes, isolate to the most specific element possible.
+ */
+  font-family: Gothic, Sans-Serif !important;
+  font-size: 15px;
+  color: #dfdfdf;
+  /* The stary background */
+  background-image: url(https://i.postimg.cc/JnWm31R6/stargif.webp); 
+  background-size: 950px 1000px;
+}
+/* Poll options */ 
+.option {
+    overflow: hidden;
+}
+/* buttons. both poll/emote and the action buttons on playlist items */
+.btn-default {
+  font-size: 15px;
+}
+/* "Name opened a poll" */
+.poll-notify {
+    color: #97CCAA;
+    font-weight: 600;
+    font-size: 10pt;
+    line-height: 2;
+}
+/* Disconnect Message Box */
+.server-msg-disconnect {
+    border: 1px solid #ff0000;
+    font-variant: petite-caps;
+    line-height: 1;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    color: #880000;
+    text-align: center;
+}
+/*Reconnect box */
+.server-msg-reconnect {
+    border: 1px solid #008800;
+    font-variant: petite-caps;
+    line-height: 1;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    color: #008800;
+    text-align: center;
+}
+
+#chatheader {
+  border: 0px;
+}
+#userlist {
+  padding-left: 3px;
+  width: 128px;
+  font-size: 10px;
+  font-variant: petite-caps;
+}
+/* Usernames in the chatbox -- lighten and normalize all "orange" levels*/
+.userlist_founder{
+  color: #CCC597 !important;
+}
+.userlist_owner{
+  color: #CCC597 !important;
+  font-weight: 600 !important;
+}
+.userlist_admin{
+  color: #CCC597 !important;
+}
+.userlist_moderator{
+  color: #CC97B9 !important;
+}
+
+/* This is the queue */
+.queue_entry {
+  font-size: 15px;
+  border-color: #666;
+}
+/* chill with the gray on mention, makes some vanity colors hard to read */
+.nick-hover {
+    background-color: #111
+}
+.nick-highlight {
+    background-color: #222
+}
+/* DIM afk users */
+.userlist_afk {
+    color:#777 !important;
+}
+
+/* regular user names */
+.userlist_item {
+    color: #CCC597;
+}
+/* This is the chatbox */
+#messagebuffer {
+   font-size: 15.75px !important;
+   line-height: 1.37;
+   border: 0px;
+   background: #000;
+}
+/* inline server messages. Hidden by Holls 2/12 */
+/* Re-enabled for testing by Hollis at 6/11/26 */
+.server-whisper {
+    font-style: italic;
+    color: #999;
+    font-size: 9pt;
+    display: none; 
+}
+/*Binds motd to the width of the container. Do not remove.*/
+#motd-img {
+  width: 100%;
+}
+
+/* playbox header */
+#videowrap-header {
+  border: 0px;
+}
+
+/* movie title text */
+#currenttitle{
+  font-size: 18px;
+  color: #888;
+}
+
+/* Channel Emote images a bit more visible without being too tall */
+.channel-emote {
+    max-width: 100%;
+    max-height: 280px;
+    display: flex;
+    flex-direction: column;  /* Stack vertically */
+    align-items: center;     /* Center horizontally */
+}
+
+/* ==== WEEKEND PLAYLIST BODY SECTION ==== */
+
+.weekend-body {
+    width: 100%;
+    padding: 30px 0;
+    margin-top: 10px;
+
+    /* Background image */
+    background-image: url(https://i.postimg.cc/JnWm31R6/stargif.webp);
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+
+    position: relative;
+}
+
+/* Keep names a neutral color for readability and restore the bold font (was set to 400 weight but not loading a 400 weight version */
+strong.username {
+    color: #e2c49d;
+    font-weight: 600;
+    font-variant: petite-caps;
+}
+
+.timestamp {
+    color: #888;
+}
+
+/* Dark overlay for readability */
+.weekend-body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.0);
+}
+
+/* Content container */
+.weekend-content {
+    position: relative;
+    max-width: 1320px;
+    margin: auto;
+    text-align: center;
+}
+
+/* Section title */
+.weekend-title {
+    color: white;
+    font-size: 26px;
+    margin-bottom: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 8px black;
+}
+
+/* Poster layout */
+.poster-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 200px);
+    gap: 12px;
+    justify-content: center;
+}
+
+/* Poster styling */
+.poster-grid img {
+    width: 200px;
+    height: 300px;
+    object-fit: cover;
+    border: 3px solid black;
+    box-shadow: 0 0 10px black;
+    transition: 0.2s;
+}
+
+/* Hover effect */
+.poster-grid img:hover {
+    transform: scale(1.1);
+    border-color: #6c0dbf;
+}
+/* Weekend MOTD styling ends here */
+
+/* minor coloring to bot messages only */
+.chat-msg-FaxyBrown{
+  color: #ff8a24;
+}
+.chat-msg-VHSOracle {
+  color: #CCC597;
+}
+.chat-msg-ZcoinBank {
+  color: #1cfcfc;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+}
+
+.chat-msg-Hollis {
+  color: #ffa1fa;
+}
+/* ZCoin purchased vanity colors */ 
+.chat-msg-DoodooButtchump {
+  color: #c5b358;
+}
+/* ZCoin purchased vanity colors */ 
+.chat-msg-leathertowel {
+  color: #eecff9;
+}
+/* ZCoin purchased vanity colors */ 
+.chat-msg-cocacolacloaca{
+  color: #00cc99;
+}
+/* ZCoin purchased vanity colors */ 
+.chat-msg-TeenageDraculerX {
+  color: #c5a1f7;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-blastfighter {
+  color: #49b3f5;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-yaboonabi{
+  color: #f04949;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-2kings{
+  color: #ff0f0f;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-hunchback{
+  color: #FCAB04;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-thisismyusername{
+  color: #fe019a;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-Whatd_You_Expect{
+  color: #bd6615;
+}
+}
+
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-pigasshead{
+  color: #58eeb7;
+}
+
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-MaggotStorm{
+  color: #42f59b;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-The_Cinemasochist {
+  color: #FFB700;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-chudsworth {
+  color: #DA70D6;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-GiggityGoop {
+  color: #7BC200;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-visualdisturbances {
+  color: #19e0bc;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-TacoBelmont {
+  color:  #4AEAFF;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-Head_Zionist {
+  color:  #cfe35d;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-agent_loveless {
+  color:  #FFAA38;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-boogienights {
+  color:  #E026CA ;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-YankeeBluejeans{
+  color:  #4682B4;
+}
+
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-arborglyph{
+  color:  #a3ed8e;
+}
+
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-2Queens{
+  color:  #50C878;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-MustardnBiscuits{
+  color:  #f5d742;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-Murtlemuck{
+  color:  #50C878;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-Cheezey_Wheezy{
+  color:  #dfff00;
+}
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-Rat-Bastard{
+  color:  #cf28fd;
+}
+
+
+/* ZCoin purchased vanity colors */ 
+.chat-msg-Keatingfish{
+  color:  #5690BA;
+}

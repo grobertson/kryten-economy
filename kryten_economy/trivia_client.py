@@ -170,13 +170,15 @@ class TriviaClient:
 
         questions: list[TriviaQuestion] = []
         for item in data.get("results", []):
-            questions.append(TriviaQuestion(
-                category=html.unescape(item["category"]),
-                difficulty=item["difficulty"],
-                question=html.unescape(item["question"]),
-                correct_answer=html.unescape(item["correct_answer"]),
-                incorrect_answers=[html.unescape(a) for a in item["incorrect_answers"]],
-            ))
+            questions.append(
+                TriviaQuestion(
+                    category=html.unescape(item["category"]),
+                    difficulty=item["difficulty"],
+                    question=html.unescape(item["question"]),
+                    correct_answer=html.unescape(item["correct_answer"]),
+                    incorrect_answers=[html.unescape(a) for a in item["incorrect_answers"]],
+                )
+            )
 
         return questions
 

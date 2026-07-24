@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-import pytest
 
 from kryten_economy.database import EconomyDatabase
 
@@ -81,9 +80,12 @@ class TestBalanceOperations:
 
     async def test_credit_logs_transaction(self, database: EconomyDatabase):
         """credit() should log a transaction."""
-        await database.credit("alice", "ch1", 100, "earn", reason="presence", trigger_id="presence.base")
+        await database.credit(
+            "alice", "ch1", 100, "earn", reason="presence", trigger_id="presence.base"
+        )
         # Verify via a direct query helper
         import sqlite3
+
         conn = sqlite3.connect(database._db_path)
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM transactions WHERE username = 'alice'").fetchone()
@@ -135,6 +137,7 @@ class TestDailyActivity:
         await database.increment_daily_minutes_present("alice", "ch1", "2026-01-01", 1)
         # Verify
         import sqlite3
+
         conn = sqlite3.connect(database._db_path)
         conn.row_factory = sqlite3.Row
         row = conn.execute(
@@ -148,6 +151,7 @@ class TestDailyActivity:
         await database.increment_daily_z_earned("alice", "ch1", "2026-01-01", 10)
         await database.increment_daily_z_earned("alice", "ch1", "2026-01-01", 5)
         import sqlite3
+
         conn = sqlite3.connect(database._db_path)
         conn.row_factory = sqlite3.Row
         row = conn.execute(
@@ -268,7 +272,11 @@ class TestGamblingStatsMigration:
         # These all previously raised OperationalError on a legacy DB.
         for game in ("blackjack", "race", "trivia"):
             await db.update_gambling_stats(
-                "alice", "ch1", game, net=50, biggest_win=50,
+                "alice",
+                "ch1",
+                game,
+                net=50,
+                biggest_win=50,
             )
 
         stats = await db.get_gambling_stats("alice", "ch1")
@@ -308,7 +316,8 @@ class TestVanityItemCaseSensitivity:
         assert colors == {"TacoBelmont": "#4AEAFF", "DoodooButtchump": "#C5B358"}
 
     async def test_upsert_is_case_insensitive_no_duplicate_row(
-        self, database: EconomyDatabase,
+        self,
+        database: EconomyDatabase,
     ):
         # REGRESSION: a later purchase with different casing must UPDATE the same
         # row, not create a second one. A case-collision (two active rows) made
@@ -323,7 +332,8 @@ class TestVanityItemCaseSensitivity:
         assert await database.get_vanity_item("TeenageDraculerX", "ch", "chat_color") == "#A6FFAA"
 
     async def test_upsert_refreshes_casing_on_existing_row(
-        self, database: EconomyDatabase,
+        self,
+        database: EconomyDatabase,
     ):
         # If the only row was lowercased, a canonical-cased write recases it.
         await database.set_vanity_item("oldname", "ch", "chat_color", "#111111")
@@ -426,12 +436,12 @@ class TestVanityCaseCollisionMigration:
         assert await db2.get_vanity_item("Carol", "ch", "custom_greeting") == "hi there"
 
 
-
 class TestRefund:
     """EconomyDatabase.refund reverses a prior spend."""
 
     async def test_refund_restores_balance_and_reverses_lifetime_spent(
-        self, database: EconomyDatabase,
+        self,
+        database: EconomyDatabase,
     ):
         await database.credit("Alice", "ch", 1000, tx_type="seed")
         await database.debit("Alice", "ch", 300, tx_type="spend")
@@ -527,7 +537,6 @@ class TestVanityCaseMigration:
         assert await db_n.get_vanity_item("KnownUser", "ch", "chat_color") == "#ABCDEF"
         # Unknown user (no account) is left as-is, never dropped.
         assert await db_n.get_vanity_item("ghostuser", "ch", "chat_color") == "#123456"
-
 
     async def test_migration_is_idempotent(self, tmp_db_path: str):
         """Running initialize() repeatedly on an already-migrated DB is a no-op."""

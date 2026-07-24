@@ -83,7 +83,9 @@ async def trivia_engine(database: EconomyDatabase) -> TriviaEngine:
 @pytest.mark.asyncio
 class TestTriviaStart:
     async def test_start_trivia(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         result = await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -94,14 +96,18 @@ class TestTriviaStart:
         assert "Alice" in active.display_names.values()
 
     async def test_start_disabled(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         trivia_engine._config.gambling.trivia.enabled = False
         result = await trivia_engine.start_trivia(CH, "Alice", 100)
         assert "disabled" in result
 
     async def test_start_while_active(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         # Add another question to cache for second attempt
@@ -114,7 +120,9 @@ class TestTriviaStart:
 @pytest.mark.asyncio
 class TestTriviaAnswers:
     async def test_submit_correct_letter(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -123,7 +131,9 @@ class TestTriviaAnswers:
         assert result.startswith("trivia_answer:")
 
     async def test_answer_case_insensitive_username(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         """Regression for review #5 — answer must register even if the username
         casing differs between the bet event and the chat answer event."""
@@ -139,7 +149,9 @@ class TestTriviaAnswers:
         assert "✅" in per_user_pm["Alice"]
 
     async def test_submit_full_text(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -147,7 +159,9 @@ class TestTriviaAnswers:
         assert result is not None
 
     async def test_cannot_answer_without_bet(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -155,7 +169,9 @@ class TestTriviaAnswers:
         assert result is None
 
     async def test_first_answer_only(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -167,7 +183,9 @@ class TestTriviaAnswers:
 @pytest.mark.asyncio
 class TestTriviaResolve:
     async def test_correct_answer_wins(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -184,7 +202,9 @@ class TestTriviaResolve:
         assert stats["total_trivias"] == 1
 
     async def test_wrong_answer_loses(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -195,7 +215,9 @@ class TestTriviaResolve:
         assert "❌" in per_user_pm["Alice"]
 
     async def test_no_answer_loses(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         await _seed_account(database, "Alice")
         await trivia_engine.start_trivia(CH, "Alice", 100)
@@ -212,7 +234,9 @@ class TestTriviaJoinGating:
     """Regression guard for H2 — joining must enforce the account-age gate."""
 
     async def test_join_rejects_new_account(
-        self, trivia_engine: TriviaEngine, database: EconomyDatabase,
+        self,
+        trivia_engine: TriviaEngine,
+        database: EconomyDatabase,
     ) -> None:
         trivia_engine._config.gambling.min_account_age_minutes = 60
         # Aged initiator can start
@@ -224,4 +248,3 @@ class TestTriviaJoinGating:
         await database.credit("Newbie", CH, 5000, tx_type="seed", trigger_id="test")
         result = await trivia_engine.place_bet("Newbie", CH, 50)
         assert "minutes before gambling" in result
-

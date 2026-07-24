@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -52,7 +52,9 @@ def _make_handler(
 
 def _fake_media(mid: str = "abc123") -> dict:
     return {
-        "id": mid, "title": "Test Video", "duration": 600,
+        "id": mid,
+        "title": "Test Video",
+        "duration": 600,
         "media_type": "cm",
         "media_id": f"https://media.test.com/api/v1/media/cytube/{mid}.json?format=json",
     }
@@ -66,14 +68,18 @@ def _fake_media(mid: str = "abc123") -> dict:
 
 @pytest.mark.asyncio
 async def test_queue_no_blackout(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
     mock_client: MagicMock,
 ):
     """Queue works fine with default empty blackout_windows."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media())
     await _seed_account(database, "Alice", 5000)
-    handler = _make_handler(sample_config, database, spending_engine, mock_media_client, mock_client)
+    handler = _make_handler(
+        sample_config, database, spending_engine, mock_media_client, mock_client
+    )
 
     resp = await handler._cmd_queue("Alice", CH, ["abc123"])
     assert "You selected" in resp
@@ -86,8 +92,10 @@ async def test_queue_no_blackout(
 
 @pytest.mark.asyncio
 async def test_queue_block_message_active_window(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """Queue is blocked with friendly message while blackout is active."""
     sample_config.spending.blackout_windows = [
@@ -109,8 +117,10 @@ async def test_queue_block_message_active_window(
 
 @pytest.mark.asyncio
 async def test_queue_block_message_upcoming_window(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """Queue is blocked shortly before blackout begins."""
     sample_config.spending.blackout_windows = [
@@ -133,13 +143,16 @@ async def test_queue_block_message_upcoming_window(
 async def test_blackout_config_loads():
     """BlackoutWindowConfig can be loaded in SpendingConfig."""
     from conftest import make_config_dict
-    cfg = EconomyConfig(**make_config_dict(
-        spending={
-            "blackout_windows": [
-                {"name": "Movie Night", "cron": "0 20 * * 5", "duration_hours": 3},
-            ],
-        },
-    ))
+
+    cfg = EconomyConfig(
+        **make_config_dict(
+            spending={
+                "blackout_windows": [
+                    {"name": "Movie Night", "cron": "0 20 * * 5", "duration_hours": 3},
+                ],
+            },
+        )
+    )
     assert len(cfg.spending.blackout_windows) == 1
     assert cfg.spending.blackout_windows[0].name == "Movie Night"
     assert cfg.spending.blackout_windows[0].duration_hours == 3
@@ -149,21 +162,26 @@ async def test_blackout_config_loads():
 async def test_multiple_blackout_windows():
     """Multiple blackout windows are parsed."""
     from conftest import make_config_dict
-    cfg = EconomyConfig(**make_config_dict(
-        spending={
-            "blackout_windows": [
-                {"name": "Movie Night", "cron": "0 20 * * 5", "duration_hours": 3},
-                {"name": "Event Night", "cron": "0 19 * * 3", "duration_hours": 4},
-            ],
-        },
-    ))
+
+    cfg = EconomyConfig(
+        **make_config_dict(
+            spending={
+                "blackout_windows": [
+                    {"name": "Movie Night", "cron": "0 20 * * 5", "duration_hours": 3},
+                    {"name": "Event Night", "cron": "0 19 * * 3", "duration_hours": 4},
+                ],
+            },
+        )
+    )
     assert len(cfg.spending.blackout_windows) == 2
 
 
 @pytest.mark.asyncio
 async def test_forcenow_bypasses_blackout(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """forcenow should not check blackout (by design)."""
     mock_media_client.get_by_id = AsyncMock(return_value=_fake_media())

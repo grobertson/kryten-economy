@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -28,7 +28,10 @@ async def _seed_account(db: EconomyDatabase, username: str, balance: int = 0) ->
 
 
 async def _set_daily_activity(
-    db: EconomyDatabase, username: str, date: str, **fields,
+    db: EconomyDatabase,
+    username: str,
+    date: str,
+    **fields,
 ) -> None:
     """Set daily_activity fields for a user."""
     loop = asyncio.get_running_loop()
@@ -63,12 +66,16 @@ async def _set_daily_activity(
 @pytest.mark.asyncio
 async def test_threshold_all_qualify(database: EconomyDatabase, mock_client: MagicMock):
     """3 users with gifs >= 5 → all 3 awarded."""
-    cfg = _cfg_with_competitions([{
-        "id": "gif_fan",
-        "description": "GIF Enthusiast",
-        "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 5},
-        "reward": 50,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "gif_fan",
+                "description": "GIF Enthusiast",
+                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 5},
+                "reward": 50,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for name in ["Alice", "Bob", "Charlie"]:
@@ -85,12 +92,16 @@ async def test_threshold_all_qualify(database: EconomyDatabase, mock_client: Mag
 @pytest.mark.asyncio
 async def test_threshold_none_qualify(database: EconomyDatabase, mock_client: MagicMock):
     """No users meet threshold → 0 awards."""
-    cfg = _cfg_with_competitions([{
-        "id": "gif_fan",
-        "description": "GIF Enthusiast",
-        "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 10},
-        "reward": 50,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "gif_fan",
+                "description": "GIF Enthusiast",
+                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 10},
+                "reward": 50,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")
@@ -105,12 +116,16 @@ async def test_threshold_none_qualify(database: EconomyDatabase, mock_client: Ma
 @pytest.mark.asyncio
 async def test_threshold_some_qualify(database: EconomyDatabase, mock_client: MagicMock):
     """1 of 3 meets threshold → 1 awarded."""
-    cfg = _cfg_with_competitions([{
-        "id": "gif_fan",
-        "description": "GIF Enthusiast",
-        "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 5},
-        "reward": 50,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "gif_fan",
+                "description": "GIF Enthusiast",
+                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 5},
+                "reward": 50,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")
@@ -130,12 +145,16 @@ async def test_threshold_some_qualify(database: EconomyDatabase, mock_client: Ma
 @pytest.mark.asyncio
 async def test_daily_top_single_winner(database: EconomyDatabase, mock_client: MagicMock):
     """Top earner gets champion bonus."""
-    cfg = _cfg_with_competitions([{
-        "id": "top_earner",
-        "description": "Daily Champion",
-        "condition": {"type": "daily_top", "field": "z_earned"},
-        "reward": 200,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "top_earner",
+                "description": "Daily Champion",
+                "condition": {"type": "daily_top", "field": "z_earned"},
+                "reward": 200,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")
@@ -154,13 +173,17 @@ async def test_daily_top_single_winner(database: EconomyDatabase, mock_client: M
 @pytest.mark.asyncio
 async def test_daily_top_percent_reward(database: EconomyDatabase, mock_client: MagicMock):
     """Top earner reward = 25% of z_earned."""
-    cfg = _cfg_with_competitions([{
-        "id": "top_earner_pct",
-        "description": "Daily Champion (% reward)",
-        "condition": {"type": "daily_top", "field": "z_earned"},
-        "reward": 0,
-        "reward_percent_of_earnings": 25,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "top_earner_pct",
+                "description": "Daily Champion (% reward)",
+                "condition": {"type": "daily_top", "field": "z_earned"},
+                "reward": 0,
+                "reward_percent_of_earnings": 25,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")
@@ -177,12 +200,16 @@ async def test_daily_top_percent_reward(database: EconomyDatabase, mock_client: 
 @pytest.mark.asyncio
 async def test_daily_top_no_activity(database: EconomyDatabase, mock_client: MagicMock):
     """No daily_activity → no awards."""
-    cfg = _cfg_with_competitions([{
-        "id": "top_earner",
-        "description": "Daily Champion",
-        "condition": {"type": "daily_top", "field": "z_earned"},
-        "reward": 200,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "top_earner",
+                "description": "Daily Champion",
+                "condition": {"type": "daily_top", "field": "z_earned"},
+                "reward": 200,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     engine = CompetitionEngine(cfg, database, mock_client, logging.getLogger("test"))
@@ -194,20 +221,22 @@ async def test_daily_top_no_activity(database: EconomyDatabase, mock_client: Mag
 @pytest.mark.asyncio
 async def test_multiple_competitions(database: EconomyDatabase, mock_client: MagicMock):
     """Multiple competitions evaluated in one call."""
-    cfg = _cfg_with_competitions([
-        {
-            "id": "gif_fan",
-            "description": "GIF Enthusiast",
-            "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 3},
-            "reward": 30,
-        },
-        {
-            "id": "top_earner",
-            "description": "Top Earner",
-            "condition": {"type": "daily_top", "field": "z_earned"},
-            "reward": 100,
-        },
-    ])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "gif_fan",
+                "description": "GIF Enthusiast",
+                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 3},
+                "reward": 30,
+            },
+            {
+                "id": "top_earner",
+                "description": "Top Earner",
+                "condition": {"type": "daily_top", "field": "z_earned"},
+                "reward": 100,
+            },
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")
@@ -225,12 +254,16 @@ async def test_multiple_competitions(database: EconomyDatabase, mock_client: Mag
 @pytest.mark.asyncio
 async def test_pm_sent_per_award(database: EconomyDatabase, mock_client: MagicMock):
     """Each award → PM to winner."""
-    cfg = _cfg_with_competitions([{
-        "id": "gif_fan",
-        "description": "GIF Enthusiast",
-        "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 1},
-        "reward": 10,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "gif_fan",
+                "description": "GIF Enthusiast",
+                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 1},
+                "reward": 10,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")
@@ -246,12 +279,16 @@ async def test_pm_sent_per_award(database: EconomyDatabase, mock_client: MagicMo
 @pytest.mark.asyncio
 async def test_public_announcement(database: EconomyDatabase, mock_client: MagicMock):
     """Results announced in public chat."""
-    cfg = _cfg_with_competitions([{
-        "id": "top_earner",
-        "description": "Daily Champion",
-        "condition": {"type": "daily_top", "field": "z_earned"},
-        "reward": 100,
-    }])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "top_earner",
+                "description": "Daily Champion",
+                "condition": {"type": "daily_top", "field": "z_earned"},
+                "reward": 100,
+            }
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")
@@ -268,20 +305,26 @@ async def test_public_announcement(database: EconomyDatabase, mock_client: Magic
 @pytest.mark.asyncio
 async def test_competition_error_isolated(database: EconomyDatabase, mock_client: MagicMock):
     """One competition error doesn't stop others."""
-    cfg = _cfg_with_competitions([
-        {
-            "id": "bad_comp",
-            "description": "Bad competition",
-            "condition": {"type": "daily_threshold", "field": "totally_bogus_field", "threshold": 1},
-            "reward": 10,
-        },
-        {
-            "id": "good_comp",
-            "description": "Good competition",
-            "condition": {"type": "daily_top", "field": "z_earned"},
-            "reward": 100,
-        },
-    ])
+    cfg = _cfg_with_competitions(
+        [
+            {
+                "id": "bad_comp",
+                "description": "Bad competition",
+                "condition": {
+                    "type": "daily_threshold",
+                    "field": "totally_bogus_field",
+                    "threshold": 1,
+                },
+                "reward": 10,
+            },
+            {
+                "id": "good_comp",
+                "description": "Good competition",
+                "condition": {"type": "daily_top", "field": "z_earned"},
+                "reward": 100,
+            },
+        ]
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     await _seed_account(database, "Alice")

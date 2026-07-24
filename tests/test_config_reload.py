@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import logging
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 import yaml
 
-from kryten_economy.config import EconomyConfig
-from kryten_economy.database import EconomyDatabase
 from kryten_economy.pm_handler import PmHandler
 
 CH = "testchannel"
@@ -21,6 +17,7 @@ CH = "testchannel"
 def _write_config(path: Path, overrides: dict | None = None) -> None:
     """Write a valid config YAML file."""
     from conftest import make_config_dict
+
     cfg = make_config_dict(**(overrides or {}))
     path.write_text(yaml.dump(cfg))
 
@@ -67,7 +64,9 @@ async def test_reload_invalid_values(pm_handler: PmHandler, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_reload_updates_components(
-    pm_handler: PmHandler, sample_config_dict: dict, tmp_path: Path,
+    pm_handler: PmHandler,
+    sample_config_dict: dict,
+    tmp_path: Path,
 ):
     """Each engine's update_config is called on reload."""
     config_path = tmp_path / "config.yaml"
@@ -75,9 +74,15 @@ async def test_reload_updates_components(
     pm_handler._config_path = str(config_path)
 
     # Mock update_config on engines
-    for attr in ("_earning_engine", "_spending", "_gambling_engine",
-                 "_achievement_engine", "_rank_engine", "_multiplier_engine",
-                 "_bounty_manager"):
+    for attr in (
+        "_earning_engine",
+        "_spending",
+        "_gambling_engine",
+        "_achievement_engine",
+        "_rank_engine",
+        "_multiplier_engine",
+        "_bounty_manager",
+    ):
         engine = getattr(pm_handler, attr, None)
         if engine:
             engine.update_config = MagicMock()
@@ -86,9 +91,15 @@ async def test_reload_updates_components(
     assert "successfully" in result.lower()
 
     # Assert update_config was called on each
-    for attr in ("_earning_engine", "_spending", "_gambling_engine",
-                 "_achievement_engine", "_rank_engine", "_multiplier_engine",
-                 "_bounty_manager"):
+    for attr in (
+        "_earning_engine",
+        "_spending",
+        "_gambling_engine",
+        "_achievement_engine",
+        "_rank_engine",
+        "_multiplier_engine",
+        "_bounty_manager",
+    ):
         engine = getattr(pm_handler, attr, None)
         if engine:
             engine.update_config.assert_called_once()
@@ -104,7 +115,10 @@ async def test_reload_no_config_path(pm_handler: PmHandler):
 
 @pytest.mark.asyncio
 async def test_reload_logs_changes(
-    pm_handler: PmHandler, sample_config_dict: dict, tmp_path: Path, caplog,
+    pm_handler: PmHandler,
+    sample_config_dict: dict,
+    tmp_path: Path,
+    caplog,
 ):
     """Significant changes logged."""
     # First write config with normal rate

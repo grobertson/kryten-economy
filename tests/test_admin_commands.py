@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
-from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
 from kryten_economy.earning_engine import EarningEngine
 from kryten_economy.pm_handler import PmHandler
@@ -31,8 +28,11 @@ class FakePmEvent:
 
 # ── grant ──────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_grant_success(pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock):
+async def test_grant_success(
+    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock
+):
     """Admin grant credits target, logs transaction, PMs target."""
     await database.get_or_create_account("alice", CH)
 
@@ -57,7 +57,11 @@ async def test_grant_non_admin(pm_handler: PmHandler, mock_client: MagicMock):
 
     # Should send "admin privileges" rejection
     mock_client.send_pm.assert_called()
-    msg = mock_client.send_pm.call_args[0][2] if len(mock_client.send_pm.call_args[0]) > 2 else str(mock_client.send_pm.call_args)
+    msg = (
+        mock_client.send_pm.call_args[0][2]
+        if len(mock_client.send_pm.call_args[0]) > 2
+        else str(mock_client.send_pm.call_args)
+    )
     assert "admin" in msg.lower() or "privilege" in msg.lower()
 
 
@@ -70,8 +74,11 @@ async def test_grant_missing_args(pm_handler: PmHandler):
 
 # ── deduct ─────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_deduct_success(pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock):
+async def test_deduct_success(
+    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock
+):
     """Admin deduct debits target, logs transaction."""
     await database.get_or_create_account("bob", CH)
     # Bob starts with 0
@@ -94,9 +101,12 @@ async def test_deduct_insufficient(pm_handler: PmHandler, database: EconomyDatab
 
 # ── rain ───────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_rain_distributes(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
     presence_tracker: PresenceTracker,
 ):
     """Splits among present users, PMs each, announces."""
@@ -128,6 +138,7 @@ async def test_rain_no_users(pm_handler: PmHandler):
 
 # ── set_balance ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_set_balance(pm_handler: PmHandler, database: EconomyDatabase):
     """Hard-sets balance, logs diff as transaction."""
@@ -142,9 +153,12 @@ async def test_set_balance(pm_handler: PmHandler, database: EconomyDatabase):
 
 # ── set_rank ───────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_set_rank_valid(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Updates rank_name, PMs target."""
     await database.get_or_create_account("eve", CH)
@@ -168,6 +182,7 @@ async def test_set_rank_invalid(pm_handler: PmHandler, database: EconomyDatabase
 
 # ── announce ───────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_announce_sends_chat(pm_handler: PmHandler, mock_client: MagicMock):
     """Sends message via client.send_chat()."""
@@ -182,9 +197,12 @@ async def test_announce_sends_chat(pm_handler: PmHandler, mock_client: MagicMock
 
 # ── ban / unban ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_ban_user(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Inserts ban, PMs target."""
     await database.get_or_create_account("mallory", CH)
@@ -205,7 +223,9 @@ async def test_ban_already_banned(pm_handler: PmHandler, database: EconomyDataba
 
 @pytest.mark.asyncio
 async def test_unban_user(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Removes ban, PMs target."""
     await database.ban_user("mallory", CH, "admin", "test")
@@ -225,9 +245,12 @@ async def test_unban_not_banned(pm_handler: PmHandler, database: EconomyDatabase
 
 # ── Ban enforcement ────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_banned_user_cannot_command(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Banned user's normal commands return 'suspended'."""
     await database.get_or_create_account("mallory", CH)
@@ -243,7 +266,9 @@ async def test_banned_user_cannot_command(
 
 @pytest.mark.asyncio
 async def test_banned_user_admin_commands_work(
-    pm_handler: PmHandler, database: EconomyDatabase, mock_client: MagicMock,
+    pm_handler: PmHandler,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
 ):
     """Admin can still run admin commands even if banned (they bypass ban check)."""
     await database.get_or_create_account("owner", CH)
@@ -261,9 +286,11 @@ async def test_banned_user_admin_commands_work(
 
 # ── Ban in earning path ────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_banned_user_cannot_earn(
-    earning_engine: EarningEngine, database: EconomyDatabase,
+    earning_engine: EarningEngine,
+    database: EconomyDatabase,
 ):
     """Earning is silently skipped for banned users."""
     await database.get_or_create_account("mallory", CH)
@@ -272,7 +299,9 @@ async def test_banned_user_cannot_earn(
     before = (await database.get_account("mallory", CH))["balance"]
 
     outcome = await earning_engine.evaluate_chat_message(
-        "mallory", CH, "Hello world this is a long message for testing purposes",
+        "mallory",
+        CH,
+        "Hello world this is a long message for testing purposes",
         datetime.now(timezone.utc),
     )
 

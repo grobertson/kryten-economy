@@ -65,7 +65,9 @@ async def _credit_with_multiplier(
     meta_str = json.dumps(meta) if meta else None
 
     await db.credit(
-        username, channel, final_amount,
+        username,
+        channel,
+        final_amount,
         tx_type=tx_type,
         trigger_id=trigger_id,
         reason=reason,
@@ -87,18 +89,24 @@ async def _credit_with_multiplier(
 @pytest.mark.asyncio
 async def test_earn_with_2x_multiplier(database: EconomyDatabase):
     """Base 5 × 2.0 = 10 Z credited."""
-    cfg = _make_config(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    })
+    cfg = _make_config(
+        multipliers={
+            "off_peak": {"enabled": False},
+            "high_population": {"enabled": False},
+            "holidays": {"enabled": False},
+        }
+    )
     mult = _make_engine(cfg)
     # Start an adhoc event with 2×
     mult.start_adhoc_event("Double Time", 2.0, 60)
 
     await _seed_account(database, "Alice", 0)
     final, _meta = await _credit_with_multiplier(
-        database, mult, "Alice", CH, 5,
+        database,
+        mult,
+        "Alice",
+        CH,
+        5,
     )
 
     assert final == 10
@@ -109,17 +117,28 @@ async def test_earn_with_2x_multiplier(database: EconomyDatabase):
 @pytest.mark.asyncio
 async def test_earn_with_stacked_3x(database: EconomyDatabase):
     """Base 5 with 2.0 × 1.5 = 3.0× → 15 Z credited."""
-    cfg = _make_config(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": True, "min_users": 2, "multiplier": 1.5, "hidden": False},
-        "holidays": {"enabled": False},
-    })
+    cfg = _make_config(
+        multipliers={
+            "off_peak": {"enabled": False},
+            "high_population": {
+                "enabled": True,
+                "min_users": 2,
+                "multiplier": 1.5,
+                "hidden": False,
+            },
+            "holidays": {"enabled": False},
+        }
+    )
     mult = _make_engine(cfg, connected_users=5)  # triggers population multiplier
     mult.start_adhoc_event("Double Time", 2.0, 60)
 
     await _seed_account(database, "Alice", 0)
     final, _meta = await _credit_with_multiplier(
-        database, mult, "Alice", CH, 5,
+        database,
+        mult,
+        "Alice",
+        CH,
+        5,
     )
 
     assert final == 15  # 5 × 2.0 × 1.5 = 15
@@ -130,16 +149,22 @@ async def test_earn_with_stacked_3x(database: EconomyDatabase):
 @pytest.mark.asyncio
 async def test_earn_no_multiplier(database: EconomyDatabase):
     """Base 5 × 1.0 = 5 Z credited."""
-    cfg = _make_config(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    })
+    cfg = _make_config(
+        multipliers={
+            "off_peak": {"enabled": False},
+            "high_population": {"enabled": False},
+            "holidays": {"enabled": False},
+        }
+    )
     mult = _make_engine(cfg)
 
     await _seed_account(database, "Alice", 0)
     final, meta = await _credit_with_multiplier(
-        database, mult, "Alice", CH, 5,
+        database,
+        mult,
+        "Alice",
+        CH,
+        5,
     )
 
     assert final == 5
@@ -149,17 +174,23 @@ async def test_earn_no_multiplier(database: EconomyDatabase):
 @pytest.mark.asyncio
 async def test_multiplier_metadata_logged(database: EconomyDatabase):
     """Transaction metadata contains multiplier sources."""
-    cfg = _make_config(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    })
+    cfg = _make_config(
+        multipliers={
+            "off_peak": {"enabled": False},
+            "high_population": {"enabled": False},
+            "holidays": {"enabled": False},
+        }
+    )
     mult = _make_engine(cfg)
     mult.start_adhoc_event("Bonus Night", 2.5, 60)
 
     await _seed_account(database, "Alice", 0)
     final, meta = await _credit_with_multiplier(
-        database, mult, "Alice", CH, 10,
+        database,
+        mult,
+        "Alice",
+        CH,
+        10,
     )
 
     assert final == 25  # 10 × 2.5
@@ -173,17 +204,23 @@ async def test_multiplier_metadata_logged(database: EconomyDatabase):
 @pytest.mark.asyncio
 async def test_daily_z_earned_updated(database: EconomyDatabase):
     """Multiplied amount reflected in daily_activity."""
-    cfg = _make_config(multipliers={
-        "off_peak": {"enabled": False},
-        "high_population": {"enabled": False},
-        "holidays": {"enabled": False},
-    })
+    cfg = _make_config(
+        multipliers={
+            "off_peak": {"enabled": False},
+            "high_population": {"enabled": False},
+            "holidays": {"enabled": False},
+        }
+    )
     mult = _make_engine(cfg)
     mult.start_adhoc_event("Double Night", 2.0, 60)
 
     await _seed_account(database, "Alice", 0)
     final, _meta = await _credit_with_multiplier(
-        database, mult, "Alice", CH, 5,
+        database,
+        mult,
+        "Alice",
+        CH,
+        5,
     )
 
     assert final == 10

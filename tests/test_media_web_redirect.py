@@ -44,8 +44,10 @@ async def test_redirect_enabled_by_default(sample_config: EconomyConfig):
 
 @pytest.mark.asyncio
 async def test_search_redirects_to_web(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """`search` returns the web-queue redirect and never hits MediaCMS."""
     mock_media_client.search = AsyncMock()
@@ -62,8 +64,10 @@ async def test_search_redirects_to_web(
 
 @pytest.mark.asyncio
 async def test_queue_redirects_to_web(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """`queue` returns the web-queue redirect and never debits the account."""
     mock_media_client.get_by_id = AsyncMock()
@@ -78,8 +82,10 @@ async def test_queue_redirects_to_web(
 
 @pytest.mark.asyncio
 async def test_playnext_redirects_to_web(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """`playnext` returns the web-queue redirect."""
     mock_media_client.get_by_id = AsyncMock()
@@ -93,8 +99,10 @@ async def test_playnext_redirects_to_web(
 
 @pytest.mark.asyncio
 async def test_help_points_to_web_queue(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """The help text Media section points at the web queue when redirect is on."""
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
@@ -106,8 +114,10 @@ async def test_help_points_to_web_queue(
 
 @pytest.mark.asyncio
 async def test_redirect_disabled_runs_legacy_search(
-    sample_config: EconomyConfig, database: EconomyDatabase,
-    spending_engine: SpendingEngine, mock_media_client: MagicMock,
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    spending_engine: SpendingEngine,
+    mock_media_client: MagicMock,
 ):
     """With the redirect disabled, the legacy search flow runs again."""
     sample_config.mediacms.web_queue_redirect = False

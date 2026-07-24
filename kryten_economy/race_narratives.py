@@ -191,4 +191,3 @@ WEB_CLOSE_LINES: tuple[str, ...] = (
     "Paper-thin gaps up front — the crowd is on its feet!",
     "This one's going down to the wire!",
 )
-
