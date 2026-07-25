@@ -23,6 +23,7 @@ def _make_event(username: str, channel: str, message: str, rank: int = 0):
     ev.channel = channel
     ev.message = message
     ev.rank = rank
+    ev.shadow = False
     ev.timestamp = datetime.now(timezone.utc)
     return ev
 

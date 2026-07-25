@@ -45,6 +45,7 @@ def make_pm_event(username: str, message: str, channel: str = "testchannel") -> 
     event.domain = "cytu.be"
     event.timestamp = "2026-01-01T00:00:00"
     event.rank = 1
+    event.shadow = False
     event.correlation_id = "test-corr-1"
     return event
 

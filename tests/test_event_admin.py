@@ -28,6 +28,7 @@ def _make_event(username: str, message: str, rank: int = 0) -> MagicMock:
     ev.channel = CH
     ev.message = message
     ev.rank = rank
+    ev.shadow = False
     return ev
 
 

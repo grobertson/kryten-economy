@@ -260,59 +260,47 @@ async def test_heist_insufficient_participants(
 
 
 # ══════════════════════════════════════════════════════════════
-#  Cooldown tests
+#  Post-resolve state tests (private cooldown retired — SpectacleManager owns it)
 # ══════════════════════════════════════════════════════════════
 
 
 @pytest.mark.asyncio
-async def test_heist_cooldown_after_resolve(
+async def test_heist_resolve_clears_active_slot(
     gambling_engine: GamblingEngine, database: EconomyDatabase
 ):
-    """After heist resolves, cooldown prevents immediate restart."""
-    cfg = gambling_engine._config.gambling.heist
-    cfg.enabled = True
-    cfg.min_participants = 2
-    cfg.cooldown_seconds = 180
-
-    await _seed_account(database, "Alice")
-    await _seed_account(database, "Bob")
-
-    await gambling_engine.start_heist("Alice", CH, 100)
-    await gambling_engine.join_heist("Bob", CH, 100)
-
-    with patch("random.random", return_value=0.1):
-        with patch("random.choice", side_effect=lambda seq: seq[0]):
-            await gambling_engine.resolve_heist(CH)
-
-    # Cooldown should be active
-    remaining = gambling_engine.get_heist_cooldown_remaining(CH)
-    assert remaining > 0
-
-    # Trying to start returns cooldown sentinel
-    result = await gambling_engine.start_heist("Alice", CH, 100)
-    assert result.startswith("heist_cooldown:")
-
-
-@pytest.mark.asyncio
-async def test_heist_cooldown_expires(gambling_engine: GamblingEngine, database: EconomyDatabase):
-    """After cooldown expires, heist can start again."""
+    """After heist resolves, get_active_heist returns None."""
     cfg = gambling_engine._config.gambling.heist
     cfg.enabled = True
     cfg.min_participants = 1
-    cfg.cooldown_seconds = 180
 
     await _seed_account(database, "Alice")
-
     await gambling_engine.start_heist("Alice", CH, 100)
-    with patch("random.random", return_value=0.1):
+    assert gambling_engine.get_active_heist(CH) is not None
+
+    with patch("random.random", return_value=0.9):
         with patch("random.choice", side_effect=lambda seq: seq[0]):
             await gambling_engine.resolve_heist(CH)
 
-    # Simulate cooldown expiring
-    gambling_engine._heist_cooldowns[CH] = datetime.now(timezone.utc) - timedelta(seconds=200)
+    assert gambling_engine.get_active_heist(CH) is None
 
-    assert gambling_engine.get_heist_cooldown_remaining(CH) == 0
 
+@pytest.mark.asyncio
+async def test_second_heist_can_start_after_first_resolves(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
+    """GamblingEngine imposes no cooldown — SpectacleManager owns that."""
+    cfg = gambling_engine._config.gambling.heist
+    cfg.enabled = True
+    cfg.min_participants = 1
+
+    await _seed_account(database, "Alice", balance=10_000)
+    await gambling_engine.start_heist("Alice", CH, 100)
+
+    with patch("random.random", return_value=0.9):
+        with patch("random.choice", side_effect=lambda seq: seq[0]):
+            await gambling_engine.resolve_heist(CH)
+
+    # GamblingEngine should allow a second heist immediately (no private cooldown)
     result = await gambling_engine.start_heist("Alice", CH, 100)
     assert result.startswith("heist_started:")
 

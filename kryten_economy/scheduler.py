@@ -275,6 +275,8 @@ class Scheduler:
                         heist_total_wagered = sum(heist.participants.values())
                         heist_participants = list(heist.participants.keys())
                         result = await self._gambling_engine.resolve_heist(channel)
+                        if self._spectacle_manager:
+                            self._spectacle_manager.release(channel)
                         if result:
                             if self._metrics:
                                 # Count one heist per participant

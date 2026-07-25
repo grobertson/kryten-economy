@@ -749,6 +749,10 @@ class PmHandler:
         except ValueError:
             return "Usage: heist <wager>  (say 'join' in chat to join an active heist)"
 
+        # Spectacle mutual exclusion — blocks concurrent games and enforces shared cooldown
+        if self._spectacle_manager and not self._spectacle_manager.try_acquire(channel, "heist"):
+            return self._spectacle_manager.status_text(channel)
+
         result = await self._gambling_engine.start_heist(username, channel, wager)
 
         if result.startswith("heist_started:"):
@@ -762,17 +766,9 @@ class PmHandler:
             )
             return f"Heist started! Waiting {cfg.join_window_seconds}s for others to join… 🕐"
 
-        if result.startswith("heist_cooldown:"):
-            parts = result.split(":", 2)
-            secs = int(parts[1])
-            # Announce publicly too
-            await self._announce_chat(
-                channel,
-                f"👀 {username} is itching for another heist, "
-                f"but it's best to lay low for a minute. Let the heat cool off. 🔥👮",
-            )
-            return f"⏳ The heat is still on! Cooldown: {secs}s. Lay low."
-
+        # Start failed (e.g. validation error) — release the spectacle lock
+        if self._spectacle_manager:
+            self._spectacle_manager.release(channel)
         return result
 
     async def handle_chat_heist_join(self, username: str, channel: str) -> None:

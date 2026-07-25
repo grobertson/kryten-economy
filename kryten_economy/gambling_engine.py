@@ -823,11 +823,6 @@ class GamblingEngine:
         if channel in self._active_heists:
             return "A heist is already in progress! Use 'heist join' to join."
 
-        # Cooldown check — returns sentinel for public + PM messaging
-        cooldown_left = self.get_heist_cooldown_remaining(channel)
-        if cooldown_left > 0:
-            return f"heist_cooldown:{cooldown_left}:{username}"
-
         error = await self._validate_gamble(
             username,
             channel,
@@ -909,9 +904,6 @@ class GamblingEngine:
             return None
 
         heist = self._active_heists.pop(channel)
-
-        # Record cooldown start
-        self._heist_cooldowns[channel] = datetime.now(timezone.utc)
 
         participants = list(heist.participants.keys())
         crew_size = len(participants)

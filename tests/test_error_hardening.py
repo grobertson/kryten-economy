@@ -35,6 +35,7 @@ class TestMalformedCommands:
         event.channel = "testchannel"
         event.message = "tip"  # Missing @user and amount
         event.rank = 0
+        event.shadow = False
 
         await pm_handler.handle_pm(event)
 
@@ -54,6 +55,7 @@ class TestMalformedCommands:
         event.channel = "testchannel"
         event.message = "   "
         event.rank = 0
+        event.shadow = False
 
         await pm_handler.handle_pm(event)
         # No crash, PM may or may not be sent (empty is ignored)
@@ -70,6 +72,7 @@ class TestMalformedCommands:
         event.channel = "testchannel"
         event.message = "balance"
         event.rank = 0
+        event.shadow = False
 
         # Force the balance handler to raise — patch through the command map
         async def _raise(*a, **kw):

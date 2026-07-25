@@ -23,6 +23,7 @@ class FakePmEvent:
         self.message = message
         self.channel = channel
         self.rank = rank
+        self.shadow = False
         self.timestamp = datetime.now(timezone.utc)
 
 

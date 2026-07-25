@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-07-25
+
+### Fixed
+
+- **Heist now participates in the shared spectacle cooldown.** Previously, heist ran its
+  own private cooldown (`GamblingEngine._heist_cooldowns`) that was completely separate from
+  `SpectacleManager`, meaning a heist and a race could start concurrently and each observed
+  its own independent cooldown. Heist now goes through `SpectacleManager.try_acquire()` /
+  `release()` exactly like race and trivia, so all three games share a single mutex and a
+  single cooldown window. The private `_heist_cooldowns` dict in `GamblingEngine` is now
+  dormant (never populated); `get_heist_cooldown_remaining()` always returns 0 and will be
+  removed in a future major release.
+
 ## [0.14.0] - 2026-07-24
 
 ### Added
@@ -26,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Lint clean-up.** Removed dead assignments and unused locals flagged by ruff (`F841`) and renamed ambiguous loop variables (`E741`); no behavior change.
 - **Winner missing from the race finish announcement.** The chat finish line (and the web commentary winner call) now always names the winning car, even when commentary is LLM-authored or a custom/misconfigured template omits the `{racer}` placeholder — previously such a template could leave the winner's name blank. The announcement falls back to a deterministic `«🏁 <emoji> <Colour> wins the race!»` headline whenever the resolved line doesn't mention the winner.
 
+[0.14.1]: https://github.com/grobertson/kryten-economy/releases/tag/v0.14.1
 [0.14.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.14.0
 
 ## [0.13.0] - 2026-06-22
