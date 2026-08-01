@@ -1,0 +1,6 @@
+title = "kryten-economy gitleaks configuration"
+
+# Start from gitleaks' built-in ruleset. No allowlist: any finding here is a real
+# secret to be rotated and removed, never allowlisted.
+[extend]
+useDefault = true
