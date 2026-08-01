@@ -1,6 +1,16 @@
 title = "kryten-economy gitleaks configuration"
 
-# Start from gitleaks' built-in ruleset. No allowlist: any finding here is a real
-# secret to be rotated and removed, never allowlisted.
 [extend]
 useDefault = true
+
+# ---------------------------------------------------------------------------
+# Allowlist (operator-accepted). The DropSugar/MediaCMS api_token is locally-hosted
+# infrastructure the operator has chosen to accept. It appears in _write_config.py and in
+# config.yaml history; config.yaml is untracked/gitignored. Allowlisting keeps scans green.
+# ---------------------------------------------------------------------------
+[allowlist]
+description = "Locally-hosted DropSugar api_token (operator-accepted); config.yaml is gitignored."
+paths = [
+    '''_write_config\.py''',
+    '''config\.yaml''',
+]

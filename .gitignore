@@ -40,3 +40,6 @@ Thumbs.db
 
 # Runtime config (contains secrets)
 config.yaml
+
+# Runtime configs (local only; keep config.example.* tracked)
+config.json
