@@ -275,6 +275,17 @@ class EconomyMetricsServer(BaseMetricsServer):
             except Exception:
                 d["open_bounties"] = None
 
+            # Sprint 10: inflation multiplier
+            try:
+                price_scalers = getattr(self._app, "price_scalers", {})
+                scaler = price_scalers.get(channel) if isinstance(price_scalers, dict) else None
+                if scaler is not None and hasattr(scaler, "multiplier"):
+                    d["inflation_multiplier"] = float(scaler.multiplier)
+                else:
+                    d["inflation_multiplier"] = 1.0
+            except Exception:
+                d["inflation_multiplier"] = 1.0
+
             ch_data.append(d)
 
         # Emit each metric family: HELP → TYPE → all channels → blank line.
@@ -419,6 +430,16 @@ class EconomyMetricsServer(BaseMetricsServer):
         for d in ch_data:
             if d["open_bounties"] is not None:
                 lines.append(_gauge_sample("open_bounties", d["tag"], d["open_bounties"]))
+
+        # -- inflation multiplier (Sprint 10)
+        lines += _gauge_header(
+            "inflation_multiplier",
+            "Current float-tied pricing multiplier (1.0 when governor is disabled or float == anchor).",
+        )
+        for d in ch_data:
+            lines.append(
+                _gauge_sample("inflation_multiplier", d["tag"], d["inflation_multiplier"], ".4f")
+            )
 
         return lines
 

@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 from kryten import KrytenConfig
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from . import __version__
 
@@ -128,6 +128,53 @@ class BalanceMaintenanceConfig(BaseModel):
     mode: str = Field(default="interest", description="'interest', 'decay', or 'none'")
     interest: InterestConfig = Field(default_factory=InterestConfig)
     decay: DecayConfig = Field(default_factory=DecayConfig)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Sprint 10 — Inflation Governor
+# ═══════════════════════════════════════════════════════════════
+
+
+class InflationConfig(BaseModel):
+    """Float-tied pricing: effective_price = base × clamp(float/anchor, min, max)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable float-tied pricing. When False, all prices are at base values.",
+    )
+    anchor_float: int = Field(
+        default=100_000_000,
+        ge=1,
+        description=(
+            "The 'healthy' float level at which inflation_multiplier == 1.0. "
+            "Set this to the target total circulation you consider normal."
+        ),
+    )
+    min_multiplier: float = Field(
+        default=0.25,
+        ge=0.01,
+        le=1.0,
+        description="Floor multiplier. Prices never fall below this fraction of base cost.",
+    )
+    max_multiplier: float = Field(
+        default=8.0,
+        ge=1.0,
+        description="Ceiling multiplier. Prices never exceed this multiple of base cost.",
+    )
+    update_interval_seconds: int = Field(
+        default=3600,
+        ge=60,
+        description="How often FloatPriceScaler refreshes the live float from the DB.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_bounds(self) -> "InflationConfig":
+        if self.min_multiplier > self.max_multiplier:
+            raise ValueError(
+                f"inflation.min_multiplier ({self.min_multiplier}) "
+                f"must not exceed max_multiplier ({self.max_multiplier})"
+            )
+        return self
 
 
 class WelcomeBackConfig(BaseModel):
@@ -1073,7 +1120,16 @@ class EconomyConfig(KrytenConfig):
     streaks: StreaksConfig = Field(default_factory=StreaksConfig)
     rain: RainConfig = Field(default_factory=RainConfig)
     balance_maintenance: BalanceMaintenanceConfig = Field(default_factory=BalanceMaintenanceConfig)
+    inflation: InflationConfig = Field(default_factory=InflationConfig)
     retention: RetentionConfig = Field(default_factory=RetentionConfig)
+
+    @field_validator("inflation", mode="before")
+    @classmethod
+    def _coerce_inflation_none(cls, v):  # noqa: N805
+        """YAML `inflation:` with all sub-keys commented out parses as None."""
+        if v is None:
+            return InflationConfig()
+        return v
 
     # Sprint 3 — Chat Earning Triggers
     chat_triggers: ChatTriggersConfig = Field(default_factory=ChatTriggersConfig)

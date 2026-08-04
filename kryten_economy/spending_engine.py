@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .config import EconomyConfig
     from .database import EconomyDatabase
+    from .float_price_scaler import FloatPriceScaler
     from .media_client import MediaCMSClient
 
 
@@ -48,15 +49,19 @@ class SpendingEngine:
         database: EconomyDatabase,
         media_client: MediaCMSClient | None,
         logger: logging.Logger,
+        price_scaler: FloatPriceScaler | None = None,
     ) -> None:
         self._config = config
         self._db = database
         self._media = media_client
         self._logger = logger
+        self._scaler = price_scaler
 
-    def update_config(self, new_config) -> None:
+    def update_config(self, new_config, price_scaler: FloatPriceScaler | None = None) -> None:
         """Hot-swap the config reference."""
         self._config = new_config
+        if price_scaler is not None:
+            self._scaler = price_scaler
 
     # ══════════════════════════════════════════════════════════
     #  Rank Discount
@@ -89,6 +94,39 @@ class SpendingEngine:
         # Fallback to last tier
         last = self._config.spending.queue_tiers[-1]
         return last.label, last.cost
+
+    # ════════════════════════════════════════════════════════
+    #  Inflation-Adjusted Pricing (Sprint 10)
+    # ════════════════════════════════════════════════════════
+
+    def get_inflated_price(self, base_cost: int) -> int:
+        """Apply inflation multiplier to a base cost.
+
+        Returns ``base_cost`` unchanged if the governor is disabled or not wired.
+        """
+        if self._scaler is None:
+            return base_cost
+        return self._scaler.scale(base_cost)
+
+    def get_effective_price_tier(self, duration_seconds: int) -> tuple[str, int, int]:
+        """Return (label, base_cost, effective_cost) for a video duration.
+
+        ``base_cost`` is the configured value; ``effective_cost`` has inflation applied.
+        """
+        label, base_cost = self.get_price_tier(duration_seconds)
+        return label, base_cost, self.get_inflated_price(base_cost)
+
+    def get_interrupt_play_next_price(self) -> int:
+        """Effective price for interrupt_play_next (inflation-adjusted)."""
+        return self.get_inflated_price(self._config.spending.interrupt_play_next)
+
+    def get_force_play_now_price(self) -> int:
+        """Effective price for force_play_now (inflation-adjusted)."""
+        return self.get_inflated_price(self._config.spending.force_play_now)
+
+    def get_vanity_item_price(self, base_cost: int) -> int:
+        """Effective price for a vanity shop item (inflation-adjusted)."""
+        return self.get_inflated_price(base_cost)
 
     # ══════════════════════════════════════════════════════════
     #  Validation

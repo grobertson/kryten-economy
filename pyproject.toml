@@ -1,6 +1,6 @@
 [project]
 name = "kryten-economy"
-version = "0.14.2"
+version = "0.15.0"
 description = "Channel engagement currency microservice for CyTube channels"
 readme = "README.md"
 requires-python = ">=3.12,<4.0.0"
@@ -57,6 +57,7 @@ Issues = "https://github.com/grobertson/kryten-economy/issues"
 
 [project.scripts]
 kryten-economy = "kryten_economy.__main__:main"
+kryten-economy-prune = "kryten_economy.prune_cli:main"
 
 [build-system]
 requires = ["hatchling"]

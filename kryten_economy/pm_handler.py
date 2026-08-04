@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .blackjack_engine import BlackjackEngine
     from .bounty_manager import BountyManager
     from .channel_state import ChannelStateTracker
+    from .float_price_scaler import FloatPriceScaler
     from .config import EconomyConfig
     from .earning_engine import EarningEngine
     from .gambling_engine import GamblingEngine, GambleOutcome
@@ -140,6 +141,9 @@ class PmHandler:
             max_per_minute=config.commands.rate_limit_per_minute,
         )
 
+        # Sprint 10: per-channel price scalers (wired by EconomyApp after construction)
+        self._price_scalers: dict[str, FloatPriceScaler] = {}
+
         self._start_time: float = time.time()
 
         # PM delivery queue — throttled to 1 message per _PM_SEND_INTERVAL
@@ -230,6 +234,8 @@ class PmHandler:
             "ban": self._cmd_ban,
             "unban": self._cmd_unban,
             "announce": self._cmd_announce,
+            # Sprint 10 — Inflation Governor
+            "inflation": self._cmd_inflation,
         }
 
     async def handle_pm(self, event: ChatMessageEvent) -> None:
@@ -1266,12 +1272,23 @@ class PmHandler:
         else:
             _tier_label, base_cost = self._spending.get_price_tier(item["duration"])
 
-        final_cost, discount = self._spending.apply_discount(base_cost, rank_tier)
+        # Apply inflation before rank discount
+        effective_cost = self._spending.get_inflated_price(base_cost)
+        final_cost, discount = self._spending.apply_discount(effective_cost, rank_tier)
         duration_str = self._format_duration(item["duration"])
 
         discount_str = ""
         if discount > 0:
             discount_str = f" ({int(discount * 100)}% off!)"
+
+        # Inflation annotation
+        inflation_str = ""
+        if self._config.inflation.enabled:
+            scaler = self._price_scalers.get(channel)
+            if scaler is not None:
+                m = scaler.multiplier
+                if abs(m - 1.0) >= 0.01:
+                    inflation_str = f"  (base: {base_cost:,} {self._symbol}, ×{m:.2f})"
 
         # Stash pending confirmation
         ukey = username.lower()
@@ -1293,7 +1310,7 @@ class PmHandler:
             "You selected:",
             item["title"],
             f"Runtime: {duration_str}",
-            f"{action_label} for {final_cost:,} {self._symbol}{discount_str}",
+            f"{action_label} for {final_cost:,} {self._symbol}{discount_str}{inflation_str}",
             "",
             "Enter YES to queue the item.",
             f"{final_cost:,} {self._symbol} will be deducted.",
@@ -1767,11 +1784,13 @@ class PmHandler:
         for item_key, item_cfg, usage in shop_items:
             if not getattr(item_cfg, "enabled", True):
                 continue
-            cost = getattr(item_cfg, "cost", 0)
-            final_cost, discount = self._spending.apply_discount(cost, rank_tier)
-            cost_str = f"{final_cost:,} {symbol}"
+            base_cost = getattr(item_cfg, "cost", 0)
+            effective_cost = self._spending.get_vanity_item_price(base_cost)
+            final_cost, discount = self._spending.apply_discount(effective_cost, rank_tier)
             if discount > 0:
-                cost_str += f" (was {cost:,})"
+                cost_str = f"{final_cost:,} {symbol} (was {effective_cost:,})"
+            else:
+                cost_str = self._format_inflated_price(base_cost, effective_cost, channel)
             lines.append("")
             lines.append(f"  {item_key} — {cost_str}")
             lines.append(f"    → {usage}")
@@ -1786,6 +1805,19 @@ class PmHandler:
                 lines.append(f"  ✅ {item_type}: {display}")
 
         return "\n".join(lines)
+
+    def _format_inflated_price(self, base_cost: int, effective_cost: int, channel: str) -> str:
+        """Return 'N Z' or 'N Z  (base: M Z, ×X.XX)' depending on inflation state."""
+        symbol = self._symbol
+        if not self._config.inflation.enabled:
+            return f"{effective_cost:,} {symbol}"
+        scaler = self._price_scalers.get(channel)
+        if scaler is None:
+            return f"{effective_cost:,} {symbol}"
+        multiplier = scaler.multiplier
+        if abs(multiplier - 1.0) < 0.01:
+            return f"{effective_cost:,} {symbol}"
+        return f"{effective_cost:,} {symbol}  " f"(base: {base_cost:,} {symbol}, ×{multiplier:.2f})"
 
     async def _cmd_buy(self, username: str, channel: str, args: list[str]) -> str:
         """Purchase a vanity item."""
@@ -2898,6 +2930,44 @@ class PmHandler:
         await self._announce_chat(channel, message)
         return f"Announced: {message}"
 
+    async def _cmd_inflation(self, username: str, channel: str, args: list[str]) -> str:
+        """Admin: Show inflation governor status and sample prices."""
+        if not self._config.inflation.enabled:
+            return "📊 Inflation governor is disabled. Set inflation.enabled: true to activate."
+
+        scaler = self._price_scalers.get(channel)
+        if scaler is None:
+            return (
+                "📊 Inflation governor is enabled but scaler is not initialised for this channel."
+            )
+
+        cfg = self._config.inflation
+        m = scaler.multiplier
+
+        lines = [
+            "📊 Inflation Governor Status",
+            f"  Current float : {scaler.current_float:,} Z",
+            f"  Anchor float  : {cfg.anchor_float:,} Z",
+            f"  Multiplier    : {m:.3f}×  (min {cfg.min_multiplier}×, max {cfg.max_multiplier}×)",
+            f"  Refresh every : {cfg.update_interval_seconds // 60} min",
+            "",
+            "Sample prices at current inflation:",
+        ]
+        spending = self._config.spending
+        vanity = self._config.vanity_shop
+        samples = [
+            ("Queue (short video)", spending.queue_tiers[0].cost if spending.queue_tiers else 2500),
+            ("Queue (movie)", spending.queue_tiers[-1].cost if spending.queue_tiers else 10000),
+            ("Skip to next", spending.interrupt_play_next),
+            ("Chat color", vanity.chat_color.cost),
+            ("Shoutout", vanity.shoutout.cost),
+        ]
+        for label, base in samples:
+            effective = scaler.scale(base)
+            lines.append(f"  {label:<22} {base:>10,} Z  →  {effective:>10,} Z")
+
+        return "\n".join(lines)
+
     # ══════════════════════════════════════════════════════════
     #  Sprint 8: Admin Commands — Inspection
     # ══════════════════════════════════════════════════════════
@@ -3235,6 +3305,10 @@ class PmHandler:
             self._competition_engine.update_config(new_config)
         if self._bounty_manager:
             self._bounty_manager.update_config(new_config)
+
+        # Sprint 10: update price scalers
+        for scaler in self._price_scalers.values():
+            scaler.update_config(new_config)
 
         if new_config.presence.base_rate_per_minute != old_config.presence.base_rate_per_minute:
             self._logger.info(

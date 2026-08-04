@@ -33,6 +33,7 @@ class AdminScheduler:
         presence_tracker: PresenceTracker,
         rank_engine: RankEngine | None = None,
         logger: logging.Logger | None = None,
+        price_scalers: dict | None = None,
     ) -> None:
         self._config = config
         self._db = database
@@ -40,6 +41,7 @@ class AdminScheduler:
         self._presence = presence_tracker
         self._rank_engine = rank_engine
         self._logger = logger or logging.getLogger("economy.admin_scheduler")
+        self._price_scalers: dict = price_scalers or {}
         self._tasks: list[asyncio.Task] = []
 
     # ──────────────────────────────────────────────────────────
@@ -96,6 +98,13 @@ class AdminScheduler:
             "median_balance": await self._db.get_median_balance(channel),
             "participation_rate": await self._db.get_participation_rate(channel, present_count),
         }
+
+        # Sprint 10: include inflation multiplier in snapshot
+        scaler = self._price_scalers.get(channel)
+        if scaler is not None and self._config.inflation.enabled:
+            data["inflation_multiplier"] = scaler.multiplier
+        else:
+            data["inflation_multiplier"] = 1.0
 
         await self._db.write_snapshot(channel, data)
         self._logger.debug("Snapshot captured for %s", channel)

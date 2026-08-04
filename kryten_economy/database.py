@@ -19,9 +19,9 @@ from typing import Any
 class EconomyDatabase:
     """SQLite-backed persistence for the economy microservice."""
 
-    def __init__(self, db_path: str, logger: logging.Logger) -> None:
+    def __init__(self, db_path: str, logger: logging.Logger | None = None) -> None:
         self._db_path = db_path
-        self._logger = logger
+        self._logger = logger or logging.getLogger("economy.database")
 
     def _get_connection(self) -> sqlite3.Connection:
         """Create a new SQLite connection with standard settings."""
@@ -545,6 +545,14 @@ class EconomyDatabase:
                 )
             except sqlite3.OperationalError:
                 pass  # tables not ready / nothing to migrate
+
+            # Sprint 10: add inflation_multiplier column to economy_snapshots
+            try:
+                conn.execute(
+                    "ALTER TABLE economy_snapshots ADD COLUMN inflation_multiplier REAL DEFAULT 1.0"
+                )
+            except Exception:
+                pass  # column already exists
 
             conn.commit()
             self._logger.info("Database tables created/verified")
@@ -3203,8 +3211,9 @@ class EconomyDatabase:
                 conn.execute(
                     "INSERT INTO economy_snapshots "
                     "(channel, total_accounts, total_z_circulation, active_economy_users_today, "
-                    "z_earned_today, z_spent_today, z_gambled_net_today, median_balance, participation_rate) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "z_earned_today, z_spent_today, z_gambled_net_today, median_balance, "
+                    "participation_rate, inflation_multiplier) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         channel,
                         data.get("total_accounts", 0),
@@ -3215,6 +3224,7 @@ class EconomyDatabase:
                         data.get("z_gambled_net_today", 0),
                         data.get("median_balance", 0),
                         data.get("participation_rate", 0.0),
+                        data.get("inflation_multiplier", 1.0),
                     ),
                 )
                 conn.commit()
@@ -3728,3 +3738,121 @@ class EconomyDatabase:
                 conn.close()
 
         await loop.run_in_executor(None, _sync)
+
+    # ══════════════════════════════════════════════════════════
+    #  Sprint 11: Account Pruner
+    # ══════════════════════════════════════════════════════════
+
+    async def find_purgeable_accounts(
+        self,
+        channel: str,
+        inactive_days: int,
+        balance_min: int,
+        balance_max: int | None,
+        max_lifetime_earned: int | None,
+    ) -> list[dict]:
+        """Return accounts that match all pruning criteria.
+
+        Criteria (all must match):
+        - channel matches
+        - economy_banned is FALSE (never touch moderation records)
+        - lifetime_spent == 0 (never actually spent anything)
+        - All vanity columns are NULL / empty / 0 (no real purchases)
+        - last_seen is older than inactive_days
+        - balance is between balance_min and balance_max (inclusive)
+        - lifetime_earned is <= max_lifetime_earned if provided
+        """
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> list[dict]:
+            conn = self._get_connection()
+            try:
+                cutoff = f"-{inactive_days} days"
+                params: list[object] = [channel, cutoff]
+                query = """
+                    SELECT username, channel, balance, lifetime_earned, lifetime_spent,
+                           first_seen, last_seen, last_active,
+                           welcome_wallet_claimed, economy_banned
+                    FROM accounts
+                    WHERE channel = ?
+                      AND economy_banned = 0
+                      AND lifetime_spent = 0
+                      AND (custom_greeting IS NULL OR custom_greeting = '')
+                      AND (custom_title IS NULL OR custom_title = '')
+                      AND (chat_color IS NULL OR chat_color = '')
+                      AND (channel_gif_url IS NULL OR channel_gif_url = '')
+                      AND (personal_currency_name IS NULL OR personal_currency_name = '')
+                      AND last_seen < datetime('now', ?)
+                      AND balance >= ?
+                """
+                params.append(balance_min)
+                if balance_max is not None:
+                    query += " AND balance <= ?"
+                    params.append(balance_max)
+                if max_lifetime_earned is not None:
+                    query += " AND lifetime_earned <= ?"
+                    params.append(max_lifetime_earned)
+                query += " ORDER BY last_seen ASC"
+                rows = conn.execute(query, params).fetchall()
+                return [dict(r) for r in rows]
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
+    async def delete_account_and_cascade(self, username: str, channel: str) -> dict:
+        """Delete one account and all its child records atomically.
+
+        Deletes from (in order):
+        - daily_activity
+        - transactions
+        - tip_history (sender or receiver)
+        - vanity_items (if table exists)
+        - accounts
+
+        Returns a dict of row counts per table.
+        """
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> dict:
+            conn = self._get_connection()
+            try:
+                counts: dict[str, int] = {}
+                with conn:
+                    for table in ("daily_activity", "transactions"):
+                        cur = conn.execute(
+                            f"DELETE FROM {table} WHERE username = ? AND channel = ?",
+                            (username, channel),
+                        )
+                        counts[table] = cur.rowcount
+
+                    # tip_history references sender OR receiver
+                    cur = conn.execute(
+                        "DELETE FROM tip_history "
+                        "WHERE channel = ? AND (sender = ? OR receiver = ?)",
+                        (channel, username, username),
+                    )
+                    counts["tip_history"] = cur.rowcount
+
+                    # vanity_items may not exist in all deployments
+                    try:
+                        cur = conn.execute(
+                            "DELETE FROM vanity_items WHERE username = ? AND channel = ?",
+                            (username, channel),
+                        )
+                        counts["vanity_items"] = cur.rowcount
+                    except sqlite3.OperationalError as e:
+                        if "no such table" not in str(e):
+                            raise
+                        counts["vanity_items"] = 0
+
+                    cur = conn.execute(
+                        "DELETE FROM accounts WHERE username = ? AND channel = ?",
+                        (username, channel),
+                    )
+                    counts["accounts"] = cur.rowcount
+                return counts
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)

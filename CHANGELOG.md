@@ -5,7 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.14.2] - 2026-08-04
+## [0.15.0] - 2026-08-04
+
+### Added
+
+- **Sprint 10 — Inflation Governor: Float-Tied Pricing.**
+  All spend-sink prices now self-regulate by tying them to the total coin float.
+  When the float grows above the `anchor_float`, spend-sink prices rise proportionally;
+  when it shrinks back, prices soften — creating a closed-loop regulator requiring no
+  manual intervention.
+  - New `InflationConfig` Pydantic model (`enabled`, `anchor_float`, `min_multiplier`,
+    `max_multiplier`, `update_interval_seconds`). Default `enabled: false` — fully opt-in.
+  - New `FloatPriceScaler` component (`kryten_economy/float_price_scaler.py`): holds the
+    live multiplier, refreshes periodically from the DB, exposes `scale(base_cost) → int`.
+  - `SpendingEngine` extended with `get_inflated_price`, `get_effective_price_tier`,
+    `get_interrupt_play_next_price`, `get_force_play_now_price`, `get_vanity_item_price`.
+    `price_scaler` is an optional constructor parameter for backward compatibility.
+  - `PmHandler._cmd_shop` annotates prices with `(base: N Z, ×X.XX)` when inflation is
+    active and multiplier differs meaningfully from 1.0.
+  - `PmHandler._start_queue_confirm` shows inflation-adjusted cost in the queue
+    confirmation prompt.
+  - New admin PM command `inflation` — shows current multiplier, anchor, live float, and
+    sample spend-sink prices at the current inflation rate.
+  - New NATS command `stats.inflation` — returns `enabled`, `multiplier`, `anchor_float`,
+    `current_float`, `min_multiplier`, `max_multiplier`.
+  - `economy_inflation_multiplier{channel=...}` Prometheus gauge emitted by the metrics
+    server (always 1.0 when governor is disabled).
+  - Economy snapshots now include an `inflation_multiplier` column. A safe `ALTER TABLE`
+    migration runs on startup for existing databases.
+  - `EconomyDatabase.write_snapshot` updated to accept and persist `inflation_multiplier`.
+  - `EconomyApp` wires scalers: constructed after DB init, started after NATS connect,
+    stopped on shutdown, hot-reloaded on `reload` command. `price_scaler_for(channel)`
+    helper exposed for command and PM handler use.
+  - `config.example.yaml` updated with a fully-documented `inflation:` section.
+
+- **Sprint 11 — Account Pruner CLI.**
+  Standalone offline tool (`kryten-economy-prune`) for identifying and removing ghost
+  accounts — users who received the welcome wallet but never engaged — to keep the DB
+  and float lean.
+  - New CLI `kryten_economy/prune_cli.py` registered as `kryten-economy-prune` script.
+  - Dry-run by default; `--execute` required to commit deletions.
+  - Safety rules enforced unconditionally: never deletes economy-banned accounts, accounts
+    with `lifetime_spent > 0`, or accounts with any non-empty vanity column.
+  - Interactive confirmation prompt in execute mode (bypassable with `--yes`).
+  - Writes a timestamped audit CSV for every execute run.
+  - Filters: `--inactive-days`, `--balance-min`, `--balance-max`, `--max-lifetime-earned`.
+  - New `EconomyDatabase.find_purgeable_accounts` method applies all safety filters.
+  - New `EconomyDatabase.delete_account_and_cascade` atomically removes an account and all
+    child rows from `daily_activity`, `transactions`, `tip_history`, `vanity_items`.
+  - `EconomyDatabase` logger parameter is now optional (defaults to `economy.database`),
+    enabling CLI usage without a running service.
+
+### Changed
+
+- `EconomyDatabase.__init__` logger parameter is now optional (`logger: logging.Logger | None = None`).
+  Backward-compatible — all existing callers that pass a logger continue to work.
+
+[0.15.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.15.0
 
 ### Changed
 

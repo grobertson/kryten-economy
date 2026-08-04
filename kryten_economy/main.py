@@ -40,6 +40,7 @@ from .scheduler import Scheduler
 from .spectacle_manager import SpectacleManager
 from .spending_engine import SpendingEngine
 from .trivia_engine import TriviaEngine
+from .float_price_scaler import FloatPriceScaler
 
 
 class EconomyApp:
@@ -82,6 +83,9 @@ class EconomyApp:
         self._start_time: float | None = None
         self._counter_persistence_task: asyncio.Task | None = None
 
+        # Sprint 10: per-channel price scalers
+        self.price_scalers: dict[str, FloatPriceScaler] = {}
+
         # Shared metrics collector (passed to all engines)
         self.metrics = MetricsCollector()
 
@@ -117,6 +121,21 @@ class EconomyApp:
         if self._start_time is None:
             return 0.0
         return time.time() - self._start_time
+
+    # ------------------------------------------------------------------
+    # Sprint 10: Price scaler helpers
+    # ------------------------------------------------------------------
+
+    def price_scaler_for(self, channel: str) -> FloatPriceScaler:
+        """Return the FloatPriceScaler for a channel, creating a disabled scaler if missing."""
+        if channel not in self.price_scalers:
+            # Defensive: return a disabled-effective scaler rather than raising.
+            # config and db are always set by the time this is called at runtime.
+            assert self.config is not None, "price_scaler_for called before config loaded"
+            assert self.db is not None, "price_scaler_for called before db initialized"
+            scaler = FloatPriceScaler(self.config, self.db, channel, self.logger)
+            self.price_scalers[channel] = scaler
+        return self.price_scalers[channel]
 
     # ------------------------------------------------------------------
     # Metrics counter persistence (SQLite)
@@ -235,6 +254,18 @@ class EconomyApp:
         await self.db.initialize()
         self.logger.info("Database initialized: %s", self.config.database.path)
 
+        # Sprint 10: Construct inflation price scalers (before SpendingEngine)
+        if self.config.inflation.enabled:
+            for ch_cfg in self.config.channels:
+                scaler = FloatPriceScaler(
+                    config=self.config,
+                    db=self.db,
+                    channel=ch_cfg.channel,
+                    logger=self.logger.getChild("inflation"),
+                )
+                self.price_scalers[ch_cfg.channel] = scaler
+            self.logger.info("FloatPriceScaler created for %d channel(s)", len(self.price_scalers))
+
         # 3. Initialize domain components
         self.channel_state = ChannelStateTracker(
             config=self.config,
@@ -268,6 +299,9 @@ class EconomyApp:
             database=self.db,
             media_client=self.media_client,
             logger=self.logger,
+            price_scaler=(
+                next(iter(self.price_scalers.values()), None) if self.price_scalers else None
+            ),
         )
         self.achievement_engine = AchievementEngine(
             config=self.config,
@@ -369,6 +403,9 @@ class EconomyApp:
         self.competition_engine._client = self.client
         self.bounty_manager._client = self.client
         self.event_announcer._client = self.client
+
+        # Sprint 10: wire price scalers into PmHandler
+        self.pm_handler._price_scalers = self.price_scalers
 
         # Wire up shared metrics collector
         self.pm_handler._metrics = self.metrics
@@ -639,6 +676,10 @@ class EconomyApp:
             self._counter_persistence_loop(),
         )
 
+        # 6e. Start inflation price scalers (Sprint 10 — after DB is reachable)
+        for scaler in self.price_scalers.values():
+            await scaler.start()
+
         # 7. Subscribe to robot startup for re-initialization
         await self.client.subscribe(
             "kryten.lifecycle.robot.startup",
@@ -696,6 +737,7 @@ class EconomyApp:
             presence_tracker=self.presence_tracker,
             rank_engine=self.rank_engine,
             logger=self.logger,
+            price_scalers=self.price_scalers,
         )
         await self.admin_scheduler.start()
 
@@ -744,6 +786,11 @@ class EconomyApp:
             await self.presence_tracker.stop()
         if self.metrics_server:
             await self.metrics_server.stop()
+
+        # Sprint 10: stop price scalers
+        for scaler in self.price_scalers.values():
+            await scaler.stop()
+
         if self.media_client:
             await self.media_client.stop()
         if self.client:

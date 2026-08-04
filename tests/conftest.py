@@ -623,3 +623,57 @@ async def greeting_handler(
 def rate_limiter() -> PmRateLimiter:
     """PmRateLimiter with default 10/min limit."""
     return PmRateLimiter(max_per_minute=10)
+
+
+# ── Sprint 11: Account Pruner fixture ────────────────────────
+
+
+@pytest_asyncio.fixture
+async def db_with_accounts(tmp_path: Path) -> AsyncGenerator[EconomyDatabase, None]:
+    """SQLite DB pre-populated with a controlled set of accounts for pruner tests.
+
+    All accounts are in channel='test'. Use inactive_days=1 so that only
+    accounts with last_seen in the far past are matched.
+
+    | username     | balance | lifetime_earned | lifetime_spent | banned | chat_color | last_seen   |
+    |---|---|---|---|---|---|---|
+    | ghost_user   | 100     | 100             | 0              | 0      | NULL       | 2020-01-01  |
+    | banned_user  | 100     | 100             | 0              | 1      | NULL       | 2020-01-01  |
+    | active_user  | 100     | 100             | 0              | 0      | NULL       | (today)     |
+    | color_user   | 100     | 100             | 0              | 0      | #ff0000    | 2020-01-01  |
+    | spender_user | 50      | 100             | 50             | 0      | NULL       | 2020-01-01  |
+    """
+    import sqlite3
+    from datetime import datetime, timezone
+
+    db_path = str(tmp_path / "prune_test.db")
+    db = EconomyDatabase(db_path, logging.getLogger("test"))
+    await db.initialize()
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    def _insert(conn: sqlite3.Connection) -> None:
+        rows = [
+            # (username, balance, lifetime_earned, lifetime_spent, banned, chat_color, last_seen)
+            ("ghost_user", 100, 100, 0, 0, None, "2020-01-01 00:00:00"),
+            ("banned_user", 100, 100, 0, 1, None, "2020-01-01 00:00:00"),
+            ("active_user", 100, 100, 0, 0, None, today),
+            ("color_user", 100, 100, 0, 0, "#ff0000", "2020-01-01 00:00:00"),
+            ("spender_user", 50, 100, 50, 0, None, "2020-01-01 00:00:00"),
+        ]
+        for username, balance, earned, spent, banned, color, last_seen in rows:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO accounts
+                    (username, channel, balance, lifetime_earned, lifetime_spent,
+                     economy_banned, chat_color, last_seen)
+                VALUES (?, 'test', ?, ?, ?, ?, ?, ?)
+                """,
+                (username, balance, earned, spent, banned, color, last_seen),
+            )
+        conn.commit()
+
+    loop = __import__("asyncio").get_event_loop()
+    await loop.run_in_executor(None, lambda: _insert(db._get_connection()))
+
+    yield db

@@ -138,6 +138,25 @@ balance_maintenance:
     exempt_below: 50000
     label: "Vault maintenance fee"
 
+# ── Inflation Governor ────────────────────────────────────────
+# Ties all spend-sink prices to the total coin float. When the float
+# exceeds the anchor, prices rise proportionally; when it falls back,
+# prices soften. This prevents the economy from needing periodic manual
+# redenominations.
+#
+# Formula: effective_price = base_price × clamp(float/anchor, min, max)
+# Rank discounts apply AFTER inflation: final = effective × (1 - discount)
+#
+# NOTE: Set anchor_float to your current "healthy" target float level.
+# If you've just done a redenomination (e.g. 800M → 80M), set anchor
+# to 80000000 so prices start at 1.0× and scale up as the float grows.
+inflation:
+  enabled: false                  # Set true to activate float-tied pricing
+  anchor_float: 100000000         # Target float (100M Z) — multiplier = 1.0 here
+  min_multiplier: 0.25            # Floor: prices never drop below 25% of base
+  max_multiplier: 8.0             # Ceiling: prices never exceed 8× base
+  update_interval_seconds: 3600   # Refresh the live float from DB every hour
+
 # ── Retention ────────────────────────────────────────────────
 retention:
   welcome_back:
@@ -285,6 +304,19 @@ gambling:
     success_chance: 0.40
     payout_multiplier: 1.5
     announce_public: true
+    narrative:
+      mode: "static"          # "static", "llm", or "hybrid" (LLM with static fallback)
+      # LLM back-end — used when mode is "llm" or "hybrid". Generates a themed
+      # heist story (scenario + win/lose/push lines) in a single call, so the
+      # resolution feels narratively consistent. Falls back to static on any error.
+      # llm:
+      #   endpoint: "http://localhost:1234/v1/chat/completions"
+      #   api_key: ""           # Bearer token (blank for local / LM Studio)
+      #   model: "llama3"       # any OpenAI-compatible model name
+      #   temperature: 1.0
+      #   max_tokens: 600
+      #   timeout_seconds: 10
+      #   max_retries: 1
 
   # ── Shared cooldown between spectacle games (heist, race, trivia)
   spectacle_cooldown_seconds: 60

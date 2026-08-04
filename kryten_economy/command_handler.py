@@ -585,6 +585,29 @@ class CommandHandler:
             "accounts": accounts,
         }
 
+    async def _handle_stats_inflation(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Return inflation governor state for a channel."""
+        channel = request.get("channel", "")
+        cfg = self._app.config.inflation
+        if not cfg.enabled:
+            return {
+                "enabled": False,
+                "multiplier": 1.0,
+                "anchor_float": cfg.anchor_float,
+                "current_float": 0,
+                "min_multiplier": cfg.min_multiplier,
+                "max_multiplier": cfg.max_multiplier,
+            }
+        scaler = self._app.price_scaler_for(channel)
+        return {
+            "enabled": True,
+            "multiplier": scaler.multiplier,
+            "anchor_float": cfg.anchor_float,
+            "current_float": scaler.current_float,
+            "min_multiplier": cfg.min_multiplier,
+            "max_multiplier": cfg.max_multiplier,
+        }
+
     async def _handle_stats_summary(self, request: dict[str, Any]) -> dict[str, Any]:
         channel = self._channel(request)
         today = self._utc_today()
@@ -1528,6 +1551,7 @@ class CommandHandler:
         "transactions.list": _handle_transactions_list,
         "transactions.recent": _handle_transactions_recent,
         "stats.float": _handle_stats_float,
+        "stats.inflation": _handle_stats_inflation,
         "stats.summary": _handle_stats_summary,
         "stats.health": _handle_stats_health,
         "gambling.stats": _handle_gambling_stats,
