@@ -1,6 +1,6 @@
 [project]
 name = "kryten-economy"
-version = "0.14.1"
+version = "0.14.2"
 description = "Channel engagement currency microservice for CyTube channels"
 readme = "README.md"
 requires-python = ">=3.12,<4.0.0"
@@ -31,7 +31,7 @@ classifiers = [
     "Framework :: AsyncIO",
 ]
 dependencies = [
-    "kryten-py>=0.17.2",
+    "kryten-py>=0.17.3",
     "pyyaml>=6.0,<7.0.0",
     "pydantic>=2.0,<3.0.0",
     "aiohttp>=3.9.0,<4.0.0",

@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.14.2] - 2026-08-04
+
+### Changed
+
+- **Secret scanning gate added.** `.gitleaks.toml` (default ruleset), a `gitleaks` pre-commit
+  hook, and a GitHub Actions CI workflow (`.github/workflows/gitleaks.yml`) have been added
+  so secrets are caught before they reach the repository. An allowlist entry covers the
+  MediaCMS API token that is intentionally checked in to `config.example.yaml`.
+- **Linting enforced in pre-commit.** `ruff` and `black` (line-length 100, matching the
+  ecosystem standard) are now run as pre-commit hooks. `config.json` (live secrets) has been
+  added to `.gitignore`.
+- Bumped minimum `kryten-py` dependency to `>=0.17.3`.
+
+[0.14.2]: https://github.com/grobertson/kryten-economy/releases/tag/v0.14.2
 
 ## [0.14.1] - 2026-07-25
 
