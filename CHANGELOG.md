@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.15.0] - 2026-08-04
+## [0.15.2] - 2026-08-04
 
 ### Added
 
@@ -61,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `EconomyDatabase.__init__` logger parameter is now optional (`logger: logging.Logger | None = None`).
   Backward-compatible — all existing callers that pass a logger continue to work.
 
-[0.15.0]: https://github.com/grobertson/kryten-economy/releases/tag/v0.15.0
+[0.15.2]: https://github.com/grobertson/kryten-economy/releases/tag/v0.15.2
 
 ### Changed
 
