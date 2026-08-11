@@ -386,10 +386,10 @@ class CommandHandler:
         db = self._app.db
 
         # --- Pricing ---
-        tier_label, base_cost = engine.get_price_tier(duration_sec)
+        tier_label, base_cost, inflated_cost = engine.get_effective_price_tier(duration_sec)
         account = await db.get_account(username, channel)
         rank_index = engine.get_rank_tier_index(account) if account else 0
-        final_cost, discount_frac = engine.apply_discount(base_cost, rank_index)
+        final_cost, discount_frac = engine.apply_discount(inflated_cost, rank_index)
         discount_pct = round(discount_frac * 100, 1)
 
         # --- Eligibility checks (in priority order) ---
@@ -470,10 +470,10 @@ class CommandHandler:
             }
 
         # --- Pricing ---
-        tier_label, base_cost = engine.get_price_tier(duration_sec)
+        tier_label, base_cost, inflated_cost = engine.get_effective_price_tier(duration_sec)
         account = await db.get_account(username, channel)
         rank_index = engine.get_rank_tier_index(account) if account else 0
-        final_cost, _ = engine.apply_discount(base_cost, rank_index)
+        final_cost, _ = engine.apply_discount(inflated_cost, rank_index)
 
         # --- Eligibility (same order as preview) ---
         now_utc = datetime.now(timezone.utc)
@@ -924,9 +924,19 @@ class CommandHandler:
                 "custom_color": vanity.get("chat_color"),
             },
             "vanity_costs": {
-                "custom_greeting": greeting_cfg.cost,
-                "custom_color": color_cfg.cost,
-                "shoutout": shoutout_cfg.cost,
+                "custom_greeting": (
+                    spending.get_vanity_item_price(greeting_cfg.cost)
+                    if spending
+                    else greeting_cfg.cost
+                ),
+                "custom_color": (
+                    spending.get_vanity_item_price(color_cfg.cost) if spending else color_cfg.cost
+                ),
+                "shoutout": (
+                    spending.get_vanity_item_price(shoutout_cfg.cost)
+                    if spending
+                    else shoutout_cfg.cost
+                ),
             },
             "vanity_enabled": {
                 "custom_greeting": bool(greeting_cfg.enabled),
@@ -954,7 +964,8 @@ class CommandHandler:
 
         if spending is not None:
             rank_tier = spending.get_rank_tier_index(account)
-            final_cost, discount = spending.apply_discount(base_cost, rank_tier)
+            inflated_cost = spending.get_vanity_item_price(base_cost)
+            final_cost, discount = spending.apply_discount(inflated_cost, rank_tier)
             validation = await spending.validate_spend(
                 username,
                 channel,
@@ -1345,7 +1356,8 @@ class CommandHandler:
         account = await self._app.db.get_or_create_account(username, channel)
         if spending is not None:
             rank_tier = spending.get_rank_tier_index(account)
-            final_cost, discount = spending.apply_discount(cfg.cost, rank_tier)
+            inflated_cost = spending.get_vanity_item_price(cfg.cost)
+            final_cost, discount = spending.apply_discount(inflated_cost, rank_tier)
             validation = await spending.validate_spend(
                 username,
                 channel,

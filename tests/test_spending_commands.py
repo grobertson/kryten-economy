@@ -15,7 +15,17 @@ import pytest
 from kryten_economy.command_handler import CommandHandler
 from kryten_economy.config import EconomyConfig
 from kryten_economy.database import EconomyDatabase
+from kryten_economy.float_price_scaler import FloatPriceScaler
 from kryten_economy.spending_engine import SpendingEngine
+
+
+def _make_scaler(multiplier: float) -> MagicMock:
+    scaler = MagicMock(spec=FloatPriceScaler)
+    scaler.enabled = True
+    scaler.multiplier = multiplier
+    scaler.scale = MagicMock(side_effect=lambda base: max(1, round(base * multiplier)))
+    return scaler
+
 
 CH = "testchannel"
 
@@ -352,3 +362,83 @@ class TestQueueRefund:
         data = result["data"]
         assert data["success"] is False
         assert data["error"] == "unknown_request_id"
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Inflation regression tests
+# ═══════════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def inflated_app(
+    sample_config: EconomyConfig,
+    database: EconomyDatabase,
+    mock_client: MagicMock,
+) -> MagicMock:
+    app = MagicMock()
+    app.config = sample_config
+    app.db = database
+    app.client = mock_client
+    app.logger = logging.getLogger("test.app")
+    app.commands_processed = 0
+    app.uptime_seconds = 1.0
+    app.spending_engine = SpendingEngine(
+        sample_config,
+        database,
+        None,
+        logging.getLogger("test.spending"),
+        price_scaler=_make_scaler(2.0),
+    )
+    return app
+
+
+@pytest.fixture
+def inflated_handler(inflated_app: MagicMock, mock_client: MagicMock) -> CommandHandler:
+    return CommandHandler(inflated_app, mock_client, logging.getLogger("test.cmd.inflated"))
+
+
+class TestInflationReachesHandlers:
+    """Regression: queue and vanity handlers must apply the FloatPriceScaler."""
+
+    async def test_preview_cost_is_inflated(
+        self, inflated_handler: CommandHandler, database: EconomyDatabase
+    ):
+        """cost_z in queue_preview must exceed the base tier cost when inflation is active."""
+        await _seed_account(database, "bob", balance=10_000_000)
+        result = await inflated_handler._handle_command(
+            {
+                "command": "spending.queue_preview",
+                "username": "bob",
+                "channel": CH,
+                "duration_sec": 600,
+            }
+        )
+        assert result["success"] is True
+        engine = inflated_handler._app.spending_engine
+        _label, base_cost = engine.get_price_tier(600)
+        # With multiplier=2 the pre-discount inflated price is 2× base; even after
+        # rank discounts the final cost must strictly exceed the uninflated base.
+        assert result["data"]["cost_z"] > base_cost
+        assert result["data"]["base_cost"] == base_cost
+
+    async def test_queue_spend_debits_inflated_amount(
+        self, inflated_handler: CommandHandler, database: EconomyDatabase
+    ):
+        """spending.queue must debit the inflation-adjusted price."""
+        await _seed_account(database, "carol", balance=10_000_000)
+        result = await inflated_handler._handle_command(
+            {
+                "command": "spending.queue",
+                "username": "carol",
+                "channel": CH,
+                "duration_sec": 600,
+                "tier": "queue",
+                "request_id": "req-inflation-001",
+            }
+        )
+        assert result["success"] is True
+        row = await database.get_queue_spend_request("req-inflation-001")
+        assert row["cost_z"] == result["data"]["cost_z"]
+        # cost must exceed the base tier price (inflation applied)
+        base_label, base_cost = inflated_handler._app.spending_engine.get_price_tier(600)
+        assert result["data"]["cost_z"] > base_cost
