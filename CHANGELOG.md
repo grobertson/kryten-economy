@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.3] - 2026-08-14
+
+### Fixed
+
+- **Queue refunds now restore cooldown and daily limit.**
+  When a queue attempt fails (e.g., trying to queue deleted media), the user is no longer
+  penalized with a cooldown or a reduction in their daily queue limit. The refund operation
+  now decrements the daily queue counter and excludes refunded spends from cooldown checks.
+  - `EconomyDatabase.get_last_queue_time()` now joins with `queue_spend_requests` to
+    exclude refunded transactions from cooldown calculation.
+  - New `EconomyDatabase.decrement_daily_queues_used()` method to roll back the daily
+    queue counter when refunding.
+  - `CommandHandler._handle_spending_queue_refund()` now calls
+    `decrement_daily_queues_used()` to restore the user's daily queue allowance.
+
 ## [0.15.2] - 2026-08-04
 
 ### Added

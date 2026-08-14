@@ -565,8 +565,12 @@ class CommandHandler:
             trigger_id=f"refund.queue.{request_id}",
         )
 
-        # Mark as refunded
+        # Mark as refunded (this clears the cooldown via get_last_queue_time JOIN)
         await db.mark_queue_spend_refunded(request_id)
+
+        # Restore daily queue counter
+        today = self._utc_today()
+        await db.decrement_daily_queues_used(username, channel, today)
 
         return {
             "success": True,

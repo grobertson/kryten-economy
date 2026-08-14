@@ -2471,22 +2471,46 @@ class EconomyDatabase:
         return await loop.run_in_executor(None, _sync)
 
     async def get_last_queue_time(self, username: str, channel: str) -> datetime | None:
-        """Last queue transaction timestamp (for cooldown)."""
+        """Last queue transaction timestamp (for cooldown), excluding refunded spends."""
         loop = asyncio.get_running_loop()
 
         def _sync() -> datetime | None:
             conn = self._get_connection()
             try:
+                # Get the most recent queue spend transaction, excluding refunded ones.
+                # Two patterns:
+                #   1. PM handler: trigger_id = 'spend.queue' (always valid, no refund tracking)
+                #   2. NATS command: trigger_id = 'spend.queue.<request_id>' (exclude if refunded)
+                # Strategy: find 'spend.queue%' transactions, then filter out NATS ones that are refunded
                 row = conn.execute(
-                    "SELECT created_at FROM transactions "
-                    "WHERE username = ? AND channel = ? "
-                    "AND trigger_id LIKE 'spend.queue%' "
-                    "ORDER BY id DESC LIMIT 1",
+                    "SELECT t.created_at, t.trigger_id FROM transactions t "
+                    "WHERE t.username = ? AND t.channel = ? "
+                    "AND t.trigger_id LIKE 'spend.queue%' "
+                    "ORDER BY t.id DESC",
                     (username, channel),
-                ).fetchone()
-                if not row:
-                    return None
-                ts = row["created_at"]
+                ).fetchall()
+                
+                # Find the first non-refunded transaction
+                for r in row:
+                    trigger_id = r["trigger_id"]
+                    # PM handler transactions (exactly "spend.queue") are always valid
+                    if trigger_id == "spend.queue":
+                        ts = r["created_at"]
+                        break
+                    # NATS command transactions: check if refunded
+                    if trigger_id.startswith("spend.queue."):
+                        request_id = trigger_id[12:]  # Skip "spend.queue."
+                        refund_row = conn.execute(
+                            "SELECT refunded FROM queue_spend_requests WHERE request_id = ?",
+                            (request_id,),
+                        ).fetchone()
+                        # Include if not in table or not refunded
+                        if refund_row is None or not refund_row["refunded"]:
+                            ts = r["created_at"]
+                            break
+                else:
+                    return None  # No valid transaction found
+                
                 if isinstance(ts, str):
                     # Parse ISO or SQLite timestamp format
                     for fmt in (
@@ -2619,6 +2643,31 @@ class EconomyDatabase:
                     "VALUES (?, ?, ?, 1) "
                     "ON CONFLICT(username, channel, date) DO UPDATE "
                     "SET queues_used = queues_used + 1",
+                    (username, channel, date),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def decrement_daily_queues_used(
+        self,
+        username: str,
+        channel: str,
+        date: str,
+    ) -> None:
+        """Decrement queues_used in daily_activity (used when refunding failed queue attempts)."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                # Only decrement if the row exists and queues_used > 0
+                conn.execute(
+                    "UPDATE daily_activity "
+                    "SET queues_used = MAX(0, queues_used - 1) "
+                    "WHERE username = ? AND channel = ? AND date = ?",
                     (username, channel, date),
                 )
                 conn.commit()
