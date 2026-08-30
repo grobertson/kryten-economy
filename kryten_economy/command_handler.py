@@ -30,38 +30,6 @@ if TYPE_CHECKING:
 # ══════════════════════════════════════════════════════════
 
 
-def _is_blackout_active(windows: list, now_utc: "datetime") -> bool:
-    """Return True if any blackout window covers now_utc.
-
-    Each window has `cron` (start schedule) and `duration_hours`.
-    Uses croniter to find the most recent trigger and checks if
-    now_utc falls within [trigger, trigger + duration).
-    """
-    try:
-        from croniter import croniter
-    except ImportError:
-        return False  # croniter not installed — blackout disabled
-
-    for win in windows:
-        cron_expr = (
-            getattr(win, "cron", None) or win.get("cron") if isinstance(win, dict) else win.cron
-        )
-        duration_h = (
-            getattr(win, "duration_hours", None) or win.get("duration_hours")
-            if isinstance(win, dict)
-            else win.duration_hours
-        )
-        if not cron_expr or not duration_h:
-            continue
-        it = croniter(cron_expr, now_utc)
-        prev_fire = it.get_prev(datetime)
-        if prev_fire.tzinfo is None:
-            prev_fire = prev_fire.replace(tzinfo=timezone.utc)
-        if prev_fire <= now_utc < prev_fire + timedelta(hours=duration_h):
-            return True
-    return False
-
-
 def _rank_queue_bonus(account: dict | None) -> int:
     """Extra queues per day granted by rank perks.
 
@@ -393,16 +361,15 @@ class CommandHandler:
         discount_pct = round(discount_frac * 100, 1)
 
         # --- Eligibility checks (in priority order) ---
+        # Note: pay-to-play event/blackout locking is owned entirely by
+        # kryten-webqueue (pre-fire + active-schedule locks). Economy only
+        # enforces daily limit, cooldown, and balance here.
         error_code = None
         cooldown_remaining_sec = None
         daily_remaining = cfg.max_queues_per_day
-
-        # 1. Blackout
         now_utc = datetime.now(timezone.utc)
-        if _is_blackout_active(cfg.blackout_windows, now_utc):
-            error_code = "blackout_active"
 
-        # 2. Daily limit
+        # 1. Daily limit
         if error_code is None:
             today = self._utc_today()
             activity = await db.get_or_create_daily_activity(username, channel, today)
@@ -412,7 +379,7 @@ class CommandHandler:
             if queues_used >= max_queues:
                 error_code = "daily_limit_reached"
 
-        # 3. Cooldown
+        # 2. Cooldown
         if error_code is None:
             last_queue_time = await db.get_last_queue_time(username, channel)
             if last_queue_time is not None:
@@ -422,7 +389,7 @@ class CommandHandler:
                     cooldown_remaining_sec = int(cooldown_total - elapsed)
                     error_code = "cooldown_active"
 
-        # 4. Balance
+        # 3. Balance
         if error_code is None:
             outcome = await engine.validate_spend(username, channel, final_cost, "queue")
             if outcome is not None:
@@ -476,9 +443,8 @@ class CommandHandler:
         final_cost, _ = engine.apply_discount(inflated_cost, rank_index)
 
         # --- Eligibility (same order as preview) ---
+        # Event/blackout locking is owned by kryten-webqueue, not economy.
         now_utc = datetime.now(timezone.utc)
-        if _is_blackout_active(cfg.blackout_windows, now_utc):
-            return {"success": False, "cost_z": final_cost, "error_code": "blackout_active"}
 
         today = self._utc_today()
         activity = await db.get_or_create_daily_activity(username, channel, today)

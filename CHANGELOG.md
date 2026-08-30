@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.4] - 2026-08-30
+
+### Fixed
+
+- **Pay-to-play queue locking is no longer enforced by economy.**
+  The `spending.queue_preview` and `spending.queue` commands no longer check
+  `spending.blackout_windows` and never return the `blackout_active` error code.
+  Event/pre-fire locking for the web queue is owned entirely by kryten-webqueue
+  (its `active_schedule` + pre-fire locks), so the economy-side blackout check was
+  a vestigial second lock: it kept the web queue closed past the intended window
+  and made the queue price-preview path fail (HTTP 500 via kryten-api-gate) whenever
+  the economy service was stopped. The unused `_is_blackout_active` helper was removed.
+  - The chat `!queue` flow (`pm_handler`) still honors `spending.blackout_windows`;
+    that surface is unchanged.
+  - No config change required. `spending.blackout_windows` remains a valid key
+    (still consumed by the chat flow) and can be left as-is or cleared.
+
 ## [0.15.3] - 2026-08-14
 
 ### Fixed
