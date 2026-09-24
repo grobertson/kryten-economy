@@ -700,7 +700,9 @@ commands:
   rate_limit_per_minute: 10
 """
 
-with open(r"D:\Devel\Kryten-Ecosystem\kryten-economy\config.yaml", "w", encoding="utf-8") as f:
+with open(
+    r"D:\Devel\Kryten-Ecosystem\kryten-economy\config.yaml", "w", encoding="utf-8"
+) as f:
     f.write(content)
 
 print(f"Written successfully — {content.count(chr(10))} lines")

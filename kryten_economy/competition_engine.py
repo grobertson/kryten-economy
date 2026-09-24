@@ -119,9 +119,14 @@ class CompetitionEngine:
             )
             if top_users:
                 winner = top_users[0]
-                if comp.reward_percent_of_earnings and comp.reward_percent_of_earnings > 0:
+                if (
+                    comp.reward_percent_of_earnings
+                    and comp.reward_percent_of_earnings > 0
+                ):
                     day_earned = winner.get("value", 0)
-                    reward = max(1, int(day_earned * comp.reward_percent_of_earnings / 100))
+                    reward = max(
+                        1, int(day_earned * comp.reward_percent_of_earnings / 100)
+                    )
                 else:
                     reward = comp.reward
 

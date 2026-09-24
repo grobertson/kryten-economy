@@ -103,7 +103,9 @@ class EarningEngine:
         self._fractional: dict[tuple[str, str, str], float] = {}
 
         # Ignored users (lowercase) for fast lookup
-        self._ignored_users: set[str] = {u.lower() for u in (config.ignored_users or [])}
+        self._ignored_users: set[str] = {
+            u.lower() for u in (config.ignored_users or [])
+        }
 
         # Unique emote tracking: (username, channel, date) → set[str]
         self._emote_sets: dict[tuple[str, str, str], set[str]] = {}
@@ -171,7 +173,9 @@ class EarningEngine:
 
         if content_cfg.comment_during_media.enabled:
             outcome.results.append(
-                await self._eval_comment_during_media(username, channel, message, timestamp)
+                await self._eval_comment_during_media(
+                    username, channel, message, timestamp
+                )
             )
 
         # survived_full_media is NOT evaluated per-message
@@ -256,7 +260,9 @@ class EarningEngine:
                         timestamp,
                     )
                     today = timestamp.strftime("%Y-%m-%d")
-                    await self._db.increment_daily_kudos_received(target, channel, today)
+                    await self._db.increment_daily_kudos_received(
+                        target, channel, today
+                    )
                     await self._db.increment_daily_kudos_given(username, channel, today)
 
         # ── Track daily activity ────────────────────────────

@@ -120,7 +120,9 @@ class TestRain:
 
         mock_multiplier = MagicMock()
         mock_multiplier.get_active_multipliers.return_value = [
-            ActiveMultiplier(source="scheduled:Weekend Event", multiplier=3.0, hidden=False),
+            ActiveMultiplier(
+                source="scheduled:Weekend Event", multiplier=3.0, hidden=False
+            ),
         ]
         scheduler = Scheduler(
             config=sample_config,

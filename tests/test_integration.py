@@ -49,7 +49,11 @@ class TestJoinAndBalance:
         # Should have sent a PM back
         mock_client.send_pm.assert_called()
         call_args = mock_client.send_pm.call_args_list[-1]
-        response = call_args[0][2] if len(call_args[0]) > 2 else call_args.kwargs.get("message", "")
+        response = (
+            call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args.kwargs.get("message", "")
+        )
         assert "100" in response or "Z" in response
 
 

@@ -22,7 +22,9 @@ def _cfg_with_achievements(achievements: list[dict]) -> EconomyConfig:
     return EconomyConfig(**make_config_dict(achievements=achievements))
 
 
-async def _seed_account(db: EconomyDatabase, username: str, balance: int = 0, **kwargs) -> None:
+async def _seed_account(
+    db: EconomyDatabase, username: str, balance: int = 0, **kwargs
+) -> None:
     """Create account and set extra fields."""
     await db.get_or_create_account(username, CH)
     if balance > 0:
@@ -64,7 +66,9 @@ async def test_award_first_time(database: EconomyDatabase, mock_client: MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_already_awarded_skipped(database: EconomyDatabase, mock_client: MagicMock):
+async def test_already_awarded_skipped(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Duplicate achievement not re-awarded."""
     cfg = _cfg_with_achievements(
         [
@@ -89,7 +93,9 @@ async def test_already_awarded_skipped(database: EconomyDatabase, mock_client: M
 
 
 @pytest.mark.asyncio
-async def test_condition_lifetime_messages(database: EconomyDatabase, mock_client: MagicMock):
+async def test_condition_lifetime_messages(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Threshold met via lifetime_messages → awarded."""
     cfg = _cfg_with_achievements(
         [
@@ -127,7 +133,9 @@ async def test_condition_lifetime_messages(database: EconomyDatabase, mock_clien
 
 
 @pytest.mark.asyncio
-async def test_condition_lifetime_messages_below(database: EconomyDatabase, mock_client: MagicMock):
+async def test_condition_lifetime_messages_below(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Below threshold → not awarded."""
     cfg = _cfg_with_achievements(
         [
@@ -148,7 +156,9 @@ async def test_condition_lifetime_messages_below(database: EconomyDatabase, mock
 
 
 @pytest.mark.asyncio
-async def test_condition_daily_streak(database: EconomyDatabase, mock_client: MagicMock):
+async def test_condition_daily_streak(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Streak threshold met → awarded."""
     cfg = _cfg_with_achievements(
         [
@@ -186,7 +196,9 @@ async def test_condition_daily_streak(database: EconomyDatabase, mock_client: Ma
 
 
 @pytest.mark.asyncio
-async def test_condition_unique_tip_recipients(database: EconomyDatabase, mock_client: MagicMock):
+async def test_condition_unique_tip_recipients(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Tip count meets threshold."""
     cfg = _cfg_with_achievements(
         [
@@ -212,7 +224,9 @@ async def test_condition_unique_tip_recipients(database: EconomyDatabase, mock_c
 
 
 @pytest.mark.asyncio
-async def test_condition_rank_reached(database: EconomyDatabase, mock_client: MagicMock):
+async def test_condition_rank_reached(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Tier index meets threshold."""
     cfg = _cfg_with_achievements(
         [
@@ -235,7 +249,9 @@ async def test_condition_rank_reached(database: EconomyDatabase, mock_client: Ma
 
 
 @pytest.mark.asyncio
-async def test_hidden_achievement_not_shown(database: EconomyDatabase, mock_client: MagicMock):
+async def test_hidden_achievement_not_shown(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Hidden achievements excluded from the check output description handling is internal.
 
     This test ensures that a hidden achievement CAN still be awarded when condition met.
@@ -291,7 +307,9 @@ async def test_public_announcement(database: EconomyDatabase, mock_client: Magic
 
 
 @pytest.mark.asyncio
-async def test_multiple_achievements_same_event(database: EconomyDatabase, mock_client: MagicMock):
+async def test_multiple_achievements_same_event(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Multiple achievements can trigger in one check."""
     cfg = _cfg_with_achievements(
         [
@@ -323,7 +341,9 @@ async def test_multiple_achievements_same_event(database: EconomyDatabase, mock_
 
 
 @pytest.mark.asyncio
-async def test_unknown_condition_type(database: EconomyDatabase, mock_client: MagicMock):
+async def test_unknown_condition_type(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Unknown condition type logged, not awarded."""
     cfg = _cfg_with_achievements(
         [

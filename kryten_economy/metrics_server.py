@@ -118,10 +118,14 @@ class EconomyMetricsServer(BaseMetricsServer):
             "tips_total", "Total tip transactions (lifetime, persisted).", m.tips_total
         )
         lines += _counter(
-            "tips_z_total", "Total Ƶ transferred via tips (lifetime, persisted).", m.tips_z_total
+            "tips_z_total",
+            "Total Ƶ transferred via tips (lifetime, persisted).",
+            m.tips_z_total,
         )
         lines += _counter(
-            "queues_total", "Total media queue purchases (lifetime, persisted).", m.queues_total
+            "queues_total",
+            "Total media queue purchases (lifetime, persisted).",
+            m.queues_total,
         )
         lines += _counter(
             "vanity_purchases_total",
@@ -134,7 +138,9 @@ class EconomyMetricsServer(BaseMetricsServer):
             m.fortunes_total,
         )
         lines += _counter(
-            "shoutouts_total", "Total shoutout purchases (lifetime, persisted).", m.shoutouts_total
+            "shoutouts_total",
+            "Total shoutout purchases (lifetime, persisted).",
+            m.shoutouts_total,
         )
         lines += _counter(
             "rain_drops_total",
@@ -149,10 +155,14 @@ class EconomyMetricsServer(BaseMetricsServer):
 
         # Gambling
         lines += _counter(
-            "gambling_spins_total", "Total slot-machine spins (lifetime, persisted).", m.spins_total
+            "gambling_spins_total",
+            "Total slot-machine spins (lifetime, persisted).",
+            m.spins_total,
         )
         lines += _counter(
-            "gambling_flips_total", "Total coin flips (lifetime, persisted).", m.flips_total
+            "gambling_flips_total",
+            "Total coin flips (lifetime, persisted).",
+            m.flips_total,
         )
         lines += _counter(
             "gambling_challenges_total",
@@ -244,7 +254,9 @@ class EconomyMetricsServer(BaseMetricsServer):
             )
 
             if self._app.multiplier_engine:
-                combined, _ = self._app.multiplier_engine.get_combined_multiplier(channel)
+                combined, _ = self._app.multiplier_engine.get_combined_multiplier(
+                    channel
+                )
                 d["multiplier"] = combined
             else:
                 d["multiplier"] = 1.0
@@ -260,12 +272,16 @@ class EconomyMetricsServer(BaseMetricsServer):
                 d["daily"] = None
 
             try:
-                d["dau"] = await self._app.db.get_active_economy_users_today(channel, today)
+                d["dau"] = await self._app.db.get_active_economy_users_today(
+                    channel, today
+                )
             except Exception:
                 d["dau"] = None
 
             try:
-                d["gamble_summary"] = await self._app.db.get_gambling_summary_global(channel)
+                d["gamble_summary"] = await self._app.db.get_gambling_summary_global(
+                    channel
+                )
             except Exception:
                 d["gamble_summary"] = None
 
@@ -278,7 +294,11 @@ class EconomyMetricsServer(BaseMetricsServer):
             # Sprint 10: inflation multiplier
             try:
                 price_scalers = getattr(self._app, "price_scalers", {})
-                scaler = price_scalers.get(channel) if isinstance(price_scalers, dict) else None
+                scaler = (
+                    price_scalers.get(channel)
+                    if isinstance(price_scalers, dict)
+                    else None
+                )
                 if scaler is not None and hasattr(scaler, "multiplier"):
                     d["inflation_multiplier"] = float(scaler.multiplier)
                 else:
@@ -298,19 +318,24 @@ class EconomyMetricsServer(BaseMetricsServer):
             lines.append(_gauge_sample("active_users", d["tag"], d["present"]))
 
         # -- total_accounts
-        lines += _gauge_header("total_accounts", "Total economy accounts ever registered.")
+        lines += _gauge_header(
+            "total_accounts", "Total economy accounts ever registered."
+        )
         for d in ch_data:
             lines.append(_gauge_sample("total_accounts", d["tag"], d["count"]))
 
         # -- total_circulation
         lines += _gauge_header(
-            "total_circulation", "Total Ƶ in circulation (sum of all balances, snapshot)."
+            "total_circulation",
+            "Total Ƶ in circulation (sum of all balances, snapshot).",
         )
         for d in ch_data:
             lines.append(_gauge_sample("total_circulation", d["tag"], d["circ"]))
 
         # -- median_balance
-        lines += _gauge_header("median_balance", "Median Ƶ balance across all accounts (snapshot).")
+        lines += _gauge_header(
+            "median_balance", "Median Ƶ balance across all accounts (snapshot)."
+        )
         for d in ch_data:
             lines.append(_gauge_sample("median_balance", d["tag"], d["median"]))
 
@@ -320,37 +345,51 @@ class EconomyMetricsServer(BaseMetricsServer):
             "Percentage of connected users with economy accounts, capped at 100 (snapshot).",
         )
         for d in ch_data:
-            lines.append(_gauge_sample("participation_rate", d["tag"], d["participation"], ".2f"))
+            lines.append(
+                _gauge_sample("participation_rate", d["tag"], d["participation"], ".2f")
+            )
 
         # -- active_multiplier
         lines += _gauge_header(
             "active_multiplier", "Combined active earning multiplier (snapshot)."
         )
         for d in ch_data:
-            lines.append(_gauge_sample("active_multiplier", d["tag"], d["multiplier"], ".2f"))
+            lines.append(
+                _gauge_sample("active_multiplier", d["tag"], d["multiplier"], ".2f")
+            )
 
         # -- rank_distribution
-        lines += _gauge_header("rank_distribution", "Number of users at each rank (snapshot).")
+        lines += _gauge_header(
+            "rank_distribution", "Number of users at each rank (snapshot)."
+        )
         for d in ch_data:
             for rank_name, rcount in d["rank_dist"].items():
                 lines.append(
-                    _gauge_sample("rank_distribution", f'{d["tag"]},rank="{rank_name}"', rcount)
+                    _gauge_sample(
+                        "rank_distribution", f'{d["tag"]},rank="{rank_name}"', rcount
+                    )
                 )
 
         # -- daily z flow
         lines += _gauge_header(
-            "daily_z_earned", "Ƶ earned today across all users (resets at midnight, from DB)."
+            "daily_z_earned",
+            "Ƶ earned today across all users (resets at midnight, from DB).",
         )
         for d in ch_data:
             if d["daily"] is not None:
-                lines.append(_gauge_sample("daily_z_earned", d["tag"], d["daily"]["z_earned"]))
+                lines.append(
+                    _gauge_sample("daily_z_earned", d["tag"], d["daily"]["z_earned"])
+                )
 
         lines += _gauge_header(
-            "daily_z_spent", "Ƶ spent today across all users (resets at midnight, from DB)."
+            "daily_z_spent",
+            "Ƶ spent today across all users (resets at midnight, from DB).",
         )
         for d in ch_data:
             if d["daily"] is not None:
-                lines.append(_gauge_sample("daily_z_spent", d["tag"], d["daily"]["z_spent"]))
+                lines.append(
+                    _gauge_sample("daily_z_spent", d["tag"], d["daily"]["z_spent"])
+                )
 
         lines += _gauge_header(
             "daily_z_gambled_in", "Ƶ wagered today (resets at midnight, from DB)."
@@ -358,16 +397,21 @@ class EconomyMetricsServer(BaseMetricsServer):
         for d in ch_data:
             if d["daily"] is not None:
                 lines.append(
-                    _gauge_sample("daily_z_gambled_in", d["tag"], d["daily"]["z_gambled_in"])
+                    _gauge_sample(
+                        "daily_z_gambled_in", d["tag"], d["daily"]["z_gambled_in"]
+                    )
                 )
 
         lines += _gauge_header(
-            "daily_z_gambled_out", "Ƶ paid out from gambling today (resets at midnight, from DB)."
+            "daily_z_gambled_out",
+            "Ƶ paid out from gambling today (resets at midnight, from DB).",
         )
         for d in ch_data:
             if d["daily"] is not None:
                 lines.append(
-                    _gauge_sample("daily_z_gambled_out", d["tag"], d["daily"]["z_gambled_out"])
+                    _gauge_sample(
+                        "daily_z_gambled_out", d["tag"], d["daily"]["z_gambled_out"]
+                    )
                 )
 
         lines += _gauge_header(
@@ -376,17 +420,22 @@ class EconomyMetricsServer(BaseMetricsServer):
         )
         for d in ch_data:
             if d["dau"] is not None:
-                lines.append(_gauge_sample("daily_active_economy_users", d["tag"], d["dau"]))
+                lines.append(
+                    _gauge_sample("daily_active_economy_users", d["tag"], d["dau"])
+                )
 
         # -- gambling lifetime (from gambling_stats DB table)
         lines += _gauge_header(
-            "gambling_lifetime_wagered", "All-time Ƶ wagered per channel (from gambling_stats DB)."
+            "gambling_lifetime_wagered",
+            "All-time Ƶ wagered per channel (from gambling_stats DB).",
         )
         for d in ch_data:
             if d["gamble_summary"] is not None:
                 lines.append(
                     _gauge_sample(
-                        "gambling_lifetime_wagered", d["tag"], d["gamble_summary"]["total_in"]
+                        "gambling_lifetime_wagered",
+                        d["tag"],
+                        d["gamble_summary"]["total_in"],
                     )
                 )
 
@@ -398,7 +447,9 @@ class EconomyMetricsServer(BaseMetricsServer):
             if d["gamble_summary"] is not None:
                 lines.append(
                     _gauge_sample(
-                        "gambling_lifetime_won", d["tag"], d["gamble_summary"]["total_out"]
+                        "gambling_lifetime_won",
+                        d["tag"],
+                        d["gamble_summary"]["total_out"],
                     )
                 )
 
@@ -410,26 +461,35 @@ class EconomyMetricsServer(BaseMetricsServer):
             if d["gamble_summary"] is not None:
                 lines.append(
                     _gauge_sample(
-                        "gambling_active_gamblers", d["tag"], d["gamble_summary"]["active_gamblers"]
+                        "gambling_active_gamblers",
+                        d["tag"],
+                        d["gamble_summary"]["active_gamblers"],
                     )
                 )
 
         lines += _gauge_header(
-            "gambling_total_games", "Lifetime gambling rounds played (from gambling_stats DB)."
+            "gambling_total_games",
+            "Lifetime gambling rounds played (from gambling_stats DB).",
         )
         for d in ch_data:
             if d["gamble_summary"] is not None:
                 lines.append(
                     _gauge_sample(
-                        "gambling_total_games", d["tag"], d["gamble_summary"]["total_games"]
+                        "gambling_total_games",
+                        d["tag"],
+                        d["gamble_summary"]["total_games"],
                     )
                 )
 
         # -- open bounties
-        lines += _gauge_header("open_bounties", "Unclaimed bounties currently active (snapshot).")
+        lines += _gauge_header(
+            "open_bounties", "Unclaimed bounties currently active (snapshot)."
+        )
         for d in ch_data:
             if d["open_bounties"] is not None:
-                lines.append(_gauge_sample("open_bounties", d["tag"], d["open_bounties"]))
+                lines.append(
+                    _gauge_sample("open_bounties", d["tag"], d["open_bounties"])
+                )
 
         # -- inflation multiplier (Sprint 10)
         lines += _gauge_header(
@@ -438,7 +498,9 @@ class EconomyMetricsServer(BaseMetricsServer):
         )
         for d in ch_data:
             lines.append(
-                _gauge_sample("inflation_multiplier", d["tag"], d["inflation_multiplier"], ".4f")
+                _gauge_sample(
+                    "inflation_multiplier", d["tag"], d["inflation_multiplier"], ".4f"
+                )
             )
 
         return lines

@@ -32,7 +32,16 @@ if TYPE_CHECKING:
 # {color}, …). Map common aliases onto the real fields so a stray alias renders
 # a value instead of leaving literal braces in chat. {driver}/{name} resolve to
 # the driver name (falling back to the colour when no name is set).
-_RACER_ALIASES = ("racer", "color", "colour", "car", "runner", "horse", "winner", "leader")
+_RACER_ALIASES = (
+    "racer",
+    "color",
+    "colour",
+    "car",
+    "runner",
+    "horse",
+    "winner",
+    "leader",
+)
 _DRIVER_ALIASES = ("driver", "name", "racer_name")
 _EMOJI_ALIASES = ("emoji", "icon")
 
@@ -83,15 +92,19 @@ class RaceNarrator:
         self._cfg = config
 
         # Merge built-in + custom pools
-        self._start_lines = list(race_narratives.START_LINES) + list(config.custom_start_lines)
-        self._finish_lines = list(race_narratives.FINISH_LINES) + list(config.custom_finish_lines)
+        self._start_lines = list(race_narratives.START_LINES) + list(
+            config.custom_start_lines
+        )
+        self._finish_lines = list(race_narratives.FINISH_LINES) + list(
+            config.custom_finish_lines
+        )
         self._event_lines = dict(race_narratives.EVENT_LINES)
         # custom event lines get appended to the "speed_boost" bucket
         if config.custom_event_lines:
             self._event_lines.setdefault("speed_boost", ())
-            self._event_lines["speed_boost"] = tuple(self._event_lines["speed_boost"]) + tuple(
-                config.custom_event_lines
-            )
+            self._event_lines["speed_boost"] = tuple(
+                self._event_lines["speed_boost"]
+            ) + tuple(config.custom_event_lines)
 
         self._lead_change_lines = list(race_narratives.LEAD_CHANGE_LINES)
         self._close_finish_lines = list(race_narratives.CLOSE_FINISH_LINES)
@@ -241,7 +254,9 @@ class RaceNarrator:
                 content = data["choices"][0]["message"]["content"].strip()
                 # Strip markdown code fences if present
                 if content.startswith("```"):
-                    content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                    content = (
+                        content.split("\n", 1)[1] if "\n" in content else content[3:]
+                    )
                 if content.endswith("```"):
                     content = content[:-3]
                 content = content.strip()
@@ -278,7 +293,9 @@ class RaceNarrator:
         self._counts[channel] = self._counts.get(channel, 0) + 1
 
     @staticmethod
-    def _safe_format(template: str, *, racer: str = "", emoji: str = "", driver: str = "") -> str:
+    def _safe_format(
+        template: str, *, racer: str = "", emoji: str = "", driver: str = ""
+    ) -> str:
         """Format a (possibly LLM-authored) commentary template, tolerantly.
 
         In llm/hybrid mode the templates are model-authored and sometimes use an
@@ -324,14 +341,18 @@ class RaceNarrator:
             emoji=emoji,
         )
 
-    def get_event_line(self, channel: str, event_type: str, racer: str, emoji: str) -> str | None:
+    def get_event_line(
+        self, channel: str, event_type: str, racer: str, emoji: str
+    ) -> str | None:
         if not self._can_emit(channel):
             return None
         story = self._stories.get(channel)
         if story and story.event:
             self._spend(channel)
             return self._safe_format(story.event, racer=racer, emoji=emoji)
-        pool = self._event_lines.get(event_type, self._event_lines.get("speed_boost", ()))
+        pool = self._event_lines.get(
+            event_type, self._event_lines.get("speed_boost", ())
+        )
         if not pool:
             return None
         self._spend(channel)
@@ -377,10 +398,14 @@ class RaceNarrator:
     def web_close_finish_line(self) -> str:
         return random.choice(self._web_close_lines)
 
-    def web_finish_line(self, channel: str, racer: str, emoji: str, driver: str = "") -> str:
+    def web_finish_line(
+        self, channel: str, racer: str, emoji: str, driver: str = ""
+    ) -> str:
         story = self._stories.get(channel)
         if story and story.finish:
-            line = self._safe_format(story.finish, racer=racer, emoji=emoji, driver=driver)
+            line = self._safe_format(
+                story.finish, racer=racer, emoji=emoji, driver=driver
+            )
         else:
             line = self._safe_format(
                 random.choice(self._finish_lines),

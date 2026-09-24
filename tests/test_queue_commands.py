@@ -95,7 +95,9 @@ async def test_search_no_mediacms(
         config=sample_config,
         database=database,
         client=None,
-        presence_tracker=PresenceTracker(sample_config, database, logging.getLogger("test")),
+        presence_tracker=PresenceTracker(
+            sample_config, database, logging.getLogger("test")
+        ),
         logger=logging.getLogger("test"),
         spending_engine=spending_engine,
         media_client=None,
@@ -138,7 +140,9 @@ async def test_search_shows_discount(
 ):
     """High-rank user sees discount in queue confirmation (not in search results)."""
     mock_media_client.search = AsyncMock(return_value=[_fake_media("v1", "Video", 600)])
-    await _seed_account(database, "Whale", balance=50000, lifetime=100000)  # tier 5 = 10%
+    await _seed_account(
+        database, "Whale", balance=50000, lifetime=100000
+    )  # tier 5 = 10%
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
     # Search shows results — discount shown at confirm stage
@@ -146,7 +150,9 @@ async def test_search_shows_discount(
     assert "Video" in resp
 
     # Simulate selecting item 1 → confirm prompt shows discount
-    confirm_resp = await handler._start_queue_confirm("Whale", CH, handler._last_search["whale"][0])
+    confirm_resp = await handler._start_queue_confirm(
+        "Whale", CH, handler._last_search["whale"][0]
+    )
     assert "off" in confirm_resp.lower()
 
 
@@ -164,7 +170,9 @@ async def test_queue_success(
     mock_client: MagicMock,
 ):
     """Successful queue deducts funds and calls add_media after YES confirmation."""
-    mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Hit Song", 180))
+    mock_media_client.get_by_id = AsyncMock(
+        return_value=_fake_media("v1", "Hit Song", 180)
+    )
     await _seed_account(database, "Alice", 5000)
     handler = _make_handler(
         sample_config, database, spending_engine, mock_media_client, mock_client
@@ -219,7 +227,9 @@ async def test_queue_insufficient_funds(
     mock_media_client: MagicMock,
 ):
     """Queue with too little Z → insufficient funds at confirm stage."""
-    mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Movie", 7200))
+    mock_media_client.get_by_id = AsyncMock(
+        return_value=_fake_media("v1", "Movie", 7200)
+    )
     await _seed_account(database, "Broke", 100)  # only 100 Z, movie costs 1000
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
@@ -230,7 +240,11 @@ async def test_queue_insufficient_funds(
     # But when they confirm, insufficient funds
     pending = handler._pending_confirm.pop("broke")
     resp = await handler._execute_confirmed_queue("Broke", CH, pending)
-    assert "insufficient" in resp.lower() or "funds" in resp.lower() or "don't have" in resp.lower()
+    assert (
+        "insufficient" in resp.lower()
+        or "funds" in resp.lower()
+        or "don't have" in resp.lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -317,7 +331,9 @@ async def test_playnext_uses_position(
     mock_client: MagicMock,
 ):
     """playnext calls add_media with position='next' after YES."""
-    mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Priority", 300))
+    mock_media_client.get_by_id = AsyncMock(
+        return_value=_fake_media("v1", "Priority", 300)
+    )
     await _seed_account(database, "Alice", 500000)
     handler = _make_handler(
         sample_config, database, spending_engine, mock_media_client, mock_client
@@ -400,8 +416,16 @@ async def test_paid_queue_fifo_after_current(
     # Simulated playlist snapshots around each add_media call
     playlist_states = [
         [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
-        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
-        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [
+            {"uid": 100, "media": {}},
+            {"uid": 301, "media": {}},
+            {"uid": 200, "media": {}},
+        ],
+        [
+            {"uid": 100, "media": {}},
+            {"uid": 301, "media": {}},
+            {"uid": 200, "media": {}},
+        ],
         [
             {"uid": 100, "media": {}},
             {"uid": 302, "media": {}},
@@ -468,8 +492,16 @@ async def test_paid_queue_fifo_with_lagged_uid_visibility(
     playlist_states = [
         [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
         [{"uid": 100, "media": {}}, {"uid": 200, "media": {}}],
-        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
-        [{"uid": 100, "media": {}}, {"uid": 301, "media": {}}, {"uid": 200, "media": {}}],
+        [
+            {"uid": 100, "media": {}},
+            {"uid": 301, "media": {}},
+            {"uid": 200, "media": {}},
+        ],
+        [
+            {"uid": 100, "media": {}},
+            {"uid": 301, "media": {}},
+            {"uid": 200, "media": {}},
+        ],
         [
             {"uid": 100, "media": {}},
             {"uid": 302, "media": {}},
@@ -521,7 +553,9 @@ async def test_forcenow_creates_approval(
     mock_media_client: MagicMock,
 ):
     """forcenow with admin gate → creates pending approval."""
-    mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Urgent", 300))
+    mock_media_client.get_by_id = AsyncMock(
+        return_value=_fake_media("v1", "Urgent", 300)
+    )
     await _seed_account(database, "Rich", 2000000)
     handler = _make_handler(sample_config, database, spending_engine, mock_media_client)
 
@@ -546,9 +580,13 @@ async def test_forcenow_without_admin_gate(
 
     cfg_dict = make_config_dict(spending={"force_play_requires_admin": False})
     config = EconomyConfig(**cfg_dict)
-    engine = SpendingEngine(config, database, mock_media_client, logging.getLogger("test"))
+    engine = SpendingEngine(
+        config, database, mock_media_client, logging.getLogger("test")
+    )
 
-    mock_media_client.get_by_id = AsyncMock(return_value=_fake_media("v1", "Direct", 300))
+    mock_media_client.get_by_id = AsyncMock(
+        return_value=_fake_media("v1", "Direct", 300)
+    )
     await _seed_account(database, "Rich", 2000000)
     handler = _make_handler(config, database, engine, mock_media_client, mock_client)
 

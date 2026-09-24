@@ -60,7 +60,9 @@ async def test_create_success(database: EconomyDatabase, mock_client: MagicMock)
 
 
 @pytest.mark.asyncio
-async def test_create_insufficient_funds(database: EconomyDatabase, mock_client: MagicMock):
+async def test_create_insufficient_funds(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Low balance → rejected."""
     cfg = _make_bounty_config()
     mgr = BountyManager(cfg, database, mock_client, logging.getLogger("test"))
@@ -99,7 +101,9 @@ async def test_create_above_max(database: EconomyDatabase, mock_client: MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_create_max_open_reached(database: EconomyDatabase, mock_client: MagicMock):
+async def test_create_max_open_reached(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Already 3 open → rejected."""
     cfg = _make_bounty_config(max_open_per_user=3)
     mgr = BountyManager(cfg, database, mock_client, logging.getLogger("test"))
@@ -219,7 +223,9 @@ async def test_expire_refund(database: EconomyDatabase, mock_client: MagicMock):
 
 
 @pytest.mark.asyncio
-async def test_expire_no_refund_if_zero_percent(database: EconomyDatabase, mock_client: MagicMock):
+async def test_expire_no_refund_if_zero_percent(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Config refund 0% → no credit."""
     cfg = _make_bounty_config(expiry_refund_percent=0)
     mgr = BountyManager(cfg, database, mock_client, logging.getLogger("test"))
@@ -269,7 +275,9 @@ async def test_bounty_list_open_only(database: EconomyDatabase, mock_client: Mag
 
 
 @pytest.mark.asyncio
-async def test_public_announcement_on_create(database: EconomyDatabase, mock_client: MagicMock):
+async def test_public_announcement_on_create(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Chat message on creation (done by PM handler, but verify structure)."""
     # The public announcement on create is done in _cmd_bounty (PM handler),
     # so here we just verify that bounty_manager.create_bounty returns the
@@ -286,7 +294,9 @@ async def test_public_announcement_on_create(database: EconomyDatabase, mock_cli
 
 
 @pytest.mark.asyncio
-async def test_public_announcement_on_claim(database: EconomyDatabase, mock_client: MagicMock):
+async def test_public_announcement_on_claim(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Chat message sent on claim."""
     cfg = _make_bounty_config()
     mgr = BountyManager(cfg, database, mock_client, logging.getLogger("test"))

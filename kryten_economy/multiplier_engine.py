@@ -35,7 +35,9 @@ class MultiplierEngine:
         # Ad-hoc event state (set by admin commands)
         self._adhoc_event: dict | None = None  # {name, multiplier, end_time}
         # Scheduled event state (set by ScheduledEventManager)
-        self._scheduled_events: dict[str, dict] = {}  # channel → {name, multiplier, end_time}
+        self._scheduled_events: dict[str, dict] = (
+            {}
+        )  # channel → {name, multiplier, end_time}
 
     def update_config(self, new_config) -> None:
         """Hot-swap the config reference."""
@@ -165,7 +167,8 @@ class MultiplierEngine:
         self._adhoc_event = {
             "name": name,
             "multiplier": multiplier,
-            "end_time": datetime.now(timezone.utc) + timedelta(minutes=duration_minutes),
+            "end_time": datetime.now(timezone.utc)
+            + timedelta(minutes=duration_minutes),
         }
 
     def stop_adhoc_event(self) -> bool:

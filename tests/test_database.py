@@ -88,7 +88,9 @@ class TestBalanceOperations:
 
         conn = sqlite3.connect(database._db_path)
         conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT * FROM transactions WHERE username = 'alice'").fetchone()
+        row = conn.execute(
+            "SELECT * FROM transactions WHERE username = 'alice'"
+        ).fetchone()
         conn.close()
         assert row is not None
         assert row["amount"] == 100
@@ -297,17 +299,30 @@ class TestVanityItemCaseSensitivity:
     """
 
     async def test_storage_preserves_canonical_case(self, database: EconomyDatabase):
-        await database.set_vanity_item("TeenageDraculerX", "ch", "chat_color", "#C5A1F7")
+        await database.set_vanity_item(
+            "TeenageDraculerX", "ch", "chat_color", "#C5A1F7"
+        )
         # The stored row keeps the exact canonical casing (what CSS rendering reads).
         colors = await database.get_users_with_chat_colors("ch")
         assert colors == {"TeenageDraculerX": "#C5A1F7"}
 
     async def test_lookup_is_case_insensitive(self, database: EconomyDatabase):
         # Identity lookups match regardless of case (greetings/shop rely on this).
-        await database.set_vanity_item("TeenageDraculerX", "ch", "chat_color", "#C5A1F7")
-        assert await database.get_vanity_item("TeenageDraculerX", "ch", "chat_color") == "#C5A1F7"
-        assert await database.get_vanity_item("teenagedraculerx", "ch", "chat_color") == "#C5A1F7"
-        assert await database.get_vanity_item("TEENAGEDRACULERX", "ch", "chat_color") == "#C5A1F7"
+        await database.set_vanity_item(
+            "TeenageDraculerX", "ch", "chat_color", "#C5A1F7"
+        )
+        assert (
+            await database.get_vanity_item("TeenageDraculerX", "ch", "chat_color")
+            == "#C5A1F7"
+        )
+        assert (
+            await database.get_vanity_item("teenagedraculerx", "ch", "chat_color")
+            == "#C5A1F7"
+        )
+        assert (
+            await database.get_vanity_item("TEENAGEDRACULERX", "ch", "chat_color")
+            == "#C5A1F7"
+        )
 
     async def test_managed_colors_keep_canonical_case(self, database: EconomyDatabase):
         await database.set_vanity_item("TacoBelmont", "ch", "chat_color", "#4AEAFF")
@@ -323,13 +338,20 @@ class TestVanityItemCaseSensitivity:
         # row, not create a second one. A case-collision (two active rows) made
         # chat-color changes silently no-op (stale row won the CSS merge) while
         # still charging the user.
-        await database.set_vanity_item("teenagedraculerx", "ch", "chat_color", "#50C878")
-        await database.set_vanity_item("TeenageDraculerX", "ch", "chat_color", "#A6FFAA")
+        await database.set_vanity_item(
+            "teenagedraculerx", "ch", "chat_color", "#50C878"
+        )
+        await database.set_vanity_item(
+            "TeenageDraculerX", "ch", "chat_color", "#A6FFAA"
+        )
 
         colors = await database.get_users_with_chat_colors("ch")
         # Exactly one managed row, canonical casing, newest value.
         assert colors == {"TeenageDraculerX": "#A6FFAA"}
-        assert await database.get_vanity_item("TeenageDraculerX", "ch", "chat_color") == "#A6FFAA"
+        assert (
+            await database.get_vanity_item("TeenageDraculerX", "ch", "chat_color")
+            == "#A6FFAA"
+        )
 
     async def test_upsert_refreshes_casing_on_existing_row(
         self,
@@ -464,7 +486,9 @@ class TestRefund:
         txns = await database.get_recent_transactions("Bob", "ch", limit=10)
         assert any(t["type"] == "refund" and t["amount"] == 200 for t in txns)
 
-    async def test_refund_clamps_lifetime_spent_at_zero(self, database: EconomyDatabase):
+    async def test_refund_clamps_lifetime_spent_at_zero(
+        self, database: EconomyDatabase
+    ):
         # A refund larger than recorded spend must not drive lifetime_spent < 0.
         await database.credit("Cara", "ch", 100, tx_type="seed")
         await database.refund("Cara", "ch", 100, reason="overshoot")

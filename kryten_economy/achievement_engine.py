@@ -126,7 +126,9 @@ class AchievementEngine:
         """Evaluate a single achievement condition."""
         evaluator_name = self._CONDITION_MAP.get(condition.type)
         if not evaluator_name:
-            self._logger.warning("Unknown achievement condition type: %s", condition.type)
+            self._logger.warning(
+                "Unknown achievement condition type: %s", condition.type
+            )
             return False
         evaluator = getattr(self, evaluator_name)
         return await evaluator(username, channel, condition)

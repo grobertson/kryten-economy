@@ -83,13 +83,15 @@ class Scheduler:
         if self._config.rain.enabled:
             self._tasks.append(asyncio.create_task(self._rain_loop()))
             self._logger.info(
-                "Rain drops task started (interval: ~%d min)", self._config.rain.interval_minutes
+                "Rain drops task started (interval: ~%d min)",
+                self._config.rain.interval_minutes,
             )
 
         if self._config.balance_maintenance.mode != "none":
             self._tasks.append(asyncio.create_task(self._daily_maintenance_loop()))
             self._logger.info(
-                "Balance maintenance task started (mode: %s)", self._config.balance_maintenance.mode
+                "Balance maintenance task started (mode: %s)",
+                self._config.balance_maintenance.mode,
             )
 
         # Sprint 4: challenge expiry + heist check
@@ -222,12 +224,17 @@ class Scheduler:
             if mode == "interest":
                 cfg = self._config.balance_maintenance.interest
                 total = await self._db.apply_interest_batch(
-                    channel, cfg.daily_rate, cfg.max_daily_interest, cfg.min_balance_to_earn
+                    channel,
+                    cfg.daily_rate,
+                    cfg.max_daily_interest,
+                    cfg.min_balance_to_earn,
                 )
                 self._logger.info("Interest: %d Z total in %s", total, channel)
             elif mode == "decay":
                 cfg = self._config.balance_maintenance.decay
-                total = await self._db.apply_decay_batch(channel, cfg.daily_rate, cfg.exempt_below)
+                total = await self._db.apply_decay_batch(
+                    channel, cfg.daily_rate, cfg.exempt_below
+                )
                 self._logger.info("Decay: %d Z total in %s", total, channel)
 
     # ══════════════════════════════════════════════════════════
@@ -241,7 +248,9 @@ class Scheduler:
             try:
                 for ch_config in self._config.channels:
                     channel = ch_config.channel
-                    expired = await self._gambling_engine.cleanup_expired_challenges(channel)
+                    expired = await self._gambling_engine.cleanup_expired_challenges(
+                        channel
+                    )
                     for challenge in expired:
                         await self._send_pm(
                             channel,
@@ -282,7 +291,9 @@ class Scheduler:
                                 # Count one heist per participant
                                 for _ in heist_participants:
                                     self._metrics.heists_total += 1
-                                self._metrics.gambling_z_wagered_total += heist_total_wagered
+                                self._metrics.gambling_z_wagered_total += (
+                                    heist_total_wagered
+                                )
                             lines, participants, per_user_pm = result
                             if self._config.gambling.heist.announce_public and lines:
                                 # Send scenario line first

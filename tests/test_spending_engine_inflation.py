@@ -54,7 +54,9 @@ def test_get_inflated_price_disabled_is_passthrough():
 
 def test_get_effective_price_tier_returns_three_tuple():
     engine = make_engine(multiplier=3.0)
-    label, base, effective = engine.get_effective_price_tier(30 * 60)  # 30 min → Movie tier
+    label, base, effective = engine.get_effective_price_tier(
+        30 * 60
+    )  # 30 min → Movie tier
     assert label == "Movie"
     assert base == 100_000
     assert effective == 300_000

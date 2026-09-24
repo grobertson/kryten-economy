@@ -17,7 +17,9 @@ async def _create_pending_gif(database: EconomyDatabase, username: str) -> dict:
     await database.get_or_create_account(username, CH)
     # Debit the cost first
     await database.credit(username, CH, 500, tx_type="earn", trigger_id="test")
-    await database.debit(username, CH, 200, tx_type="spend", trigger_id="vanity.channel_gif")
+    await database.debit(
+        username, CH, 200, tx_type="spend", trigger_id="vanity.channel_gif"
+    )
     # Insert pending approval
     approval_id = await database.create_pending_approval(
         username,

@@ -150,7 +150,11 @@ async def test_tip_below_minimum(
     handler = _make_handler(sample_config, database)
 
     resp = await handler._cmd_tip("Alice", CH, ["Bob", "0"])
-    assert "minimum" in resp.lower() or "whole number" in resp.lower() or "amount" in resp.lower()
+    assert (
+        "minimum" in resp.lower()
+        or "whole number" in resp.lower()
+        or "amount" in resp.lower()
+    )
 
 
 @pytest.mark.asyncio

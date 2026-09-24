@@ -322,7 +322,9 @@ class GamblingEngine:
             else self._generate_loss_display(result_entry.symbols)
         )
 
-        announce = cfg.announce_jackpots_public and payout >= cfg.jackpot_announce_threshold
+        announce = (
+            cfg.announce_jackpots_public and payout >= cfg.jackpot_announce_threshold
+        )
 
         # Record stats
         now = datetime.now(timezone.utc)
@@ -348,9 +350,7 @@ class GamblingEngine:
         elif net == 0:
             message = f"🎰 {display} — Push. Balance: {balance} {self._symbol}"
         else:
-            message = (
-                f"🎰 {display} — Loss. -{wager} {self._symbol}. Balance: {balance} {self._symbol}"
-            )
+            message = f"🎰 {display} — Loss. -{wager} {self._symbol}. Balance: {balance} {self._symbol}"
 
         return GambleResult(
             outcome=outcome,
@@ -681,7 +681,9 @@ class GamblingEngine:
 
         await self._db.resolve_challenge(challenge_id, "accepted")
 
-        winner_bal = (await self._db.get_account(winner, channel) or {}).get("balance", 0)
+        winner_bal = (await self._db.get_account(winner, channel) or {}).get(
+            "balance", 0
+        )
         loser_bal = (await self._db.get_account(loser, channel) or {}).get("balance", 0)
 
         target_msg = (
@@ -1008,7 +1010,8 @@ class GamblingEngine:
                     biggest_loss=loss,
                 )
                 per_user_pm[user] = (
-                    f"↩️ Heist pushed. You got back {refund:,} {self._symbol} " f"(-{loss:,} fee)."
+                    f"↩️ Heist pushed. You got back {refund:,} {self._symbol} "
+                    f"(-{loss:,} fee)."
                 )
 
             random_user = random.choice(participants)
@@ -1031,7 +1034,9 @@ class GamblingEngine:
                     biggest_win=0,
                     biggest_loss=wager,
                 )
-                per_user_pm[user] = f"❌ Heist failed. You lost {wager:,} {self._symbol}."
+                per_user_pm[user] = (
+                    f"❌ Heist failed. You lost {wager:,} {self._symbol}."
+                )
 
             random_user = random.choice(participants)
             lose_line = self._narrator.get_lose_line(

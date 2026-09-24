@@ -86,7 +86,11 @@ def make_config_dict(**overrides) -> dict:
         },
         "balance_maintenance": {
             "mode": "interest",
-            "interest": {"daily_rate": 0.001, "max_daily_interest": 10, "min_balance_to_earn": 100},
+            "interest": {
+                "daily_rate": 0.001,
+                "max_daily_interest": 10,
+                "min_balance_to_earn": 100,
+            },
             "decay": {"enabled": False, "daily_rate": 0.005, "exempt_below": 50000},
         },
         "retention": {
@@ -113,7 +117,12 @@ def make_config_dict(**overrides) -> dict:
                 "self_excluded": True,
                 "hidden": True,
             },
-            "kudos_received": {"enabled": True, "reward": 3, "self_excluded": True, "hidden": True},
+            "kudos_received": {
+                "enabled": True,
+                "reward": 3,
+                "self_excluded": True,
+                "hidden": True,
+            },
             "first_message_of_day": {"enabled": True, "reward": 5, "hidden": True},
             "conversation_starter": {
                 "enabled": True,
@@ -143,7 +152,11 @@ def make_config_dict(**overrides) -> dict:
                 "reward": 5,
                 "hidden": True,
             },
-            "present_at_event_start": {"enabled": True, "default_reward": 100, "hidden": True},
+            "present_at_event_start": {
+                "enabled": True,
+                "default_reward": 100,
+                "hidden": True,
+            },
         },
         "social_triggers": {
             "greeted_newcomer": {
@@ -159,7 +172,12 @@ def make_config_dict(**overrides) -> dict:
                 "max_per_hour_same_user": 5,
                 "hidden": True,
             },
-            "bot_interaction": {"enabled": True, "reward": 2, "max_per_day": 10, "hidden": True},
+            "bot_interaction": {
+                "enabled": True,
+                "reward": 2,
+                "max_per_day": 10,
+                "hidden": True,
+            },
         },
     }
     base.update(overrides)
@@ -537,7 +555,9 @@ class MockKrytenClient:
     ) -> None:
         self._kv_store.setdefault(bucket_name, {})[key] = value
 
-    async def nats_request(self, subject: str, request: Any, timeout: float = 5) -> dict:
+    async def nats_request(
+        self, subject: str, request: Any, timeout: float = 5
+    ) -> dict:
         return {}
 
     async def connect(self) -> None:
@@ -555,11 +575,15 @@ class MockKrytenClient:
     async def subscribe_request_reply(self, subject: str, handler: Any) -> None:
         self._request_reply_handlers[subject] = handler
 
-    async def get_or_create_kv_store(self, bucket_name: str, description: str = "") -> Any:
+    async def get_or_create_kv_store(
+        self, bucket_name: str, description: str = ""
+    ) -> Any:
         self._kv_store.setdefault(bucket_name, {})
         return MagicMock()
 
-    def on(self, event_name: str, channel: str | None = None, domain: str | None = None):
+    def on(
+        self, event_name: str, channel: str | None = None, domain: str | None = None
+    ):
         """Match kryten-py's ``on()`` decorator signature."""
 
         def decorator(func):

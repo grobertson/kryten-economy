@@ -18,13 +18,20 @@ def setup_logging(level: str = "INFO") -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Kryten Economy — Channel Currency Service")
+    parser = argparse.ArgumentParser(
+        description="Kryten Economy — Channel Currency Service"
+    )
     parser.add_argument("--config", type=str, help="Path to config.yaml")
     parser.add_argument(
-        "--log-level", type=str, default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"]
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
     )
     parser.add_argument(
-        "--validate-config", action="store_true", help="Validate config and exit without starting"
+        "--validate-config",
+        action="store_true",
+        help="Validate config and exit without starting",
     )
     return parser.parse_args()
 

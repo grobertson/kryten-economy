@@ -471,8 +471,13 @@ class TestResyncColorsCommand:
         assert result["success"] is True
         assert result["data"]["imported"] == 2
         assert result["data"]["css_reapplied"] is True
-        assert await database.get_vanity_item("Rat-Bastard", CH, "chat_color") == "#CF28FD"
-        assert await database.get_vanity_item("TeenageDraculerX", CH, "chat_color") == "#C5A1F7"
+        assert (
+            await database.get_vanity_item("Rat-Bastard", CH, "chat_color") == "#CF28FD"
+        )
+        assert (
+            await database.get_vanity_item("TeenageDraculerX", CH, "chat_color")
+            == "#C5A1F7"
+        )
 
     async def test_resync_is_idempotent(
         self,
@@ -484,9 +489,13 @@ class TestResyncColorsCommand:
             "body{}\n/* ZCoin purchased vanity colors */\n"
             ".chat-msg-OldTimer { color: #abcdef; }\n"
         )
-        first = await handler._handle_command({"command": "vanity.resync_colors", "channel": CH})
+        first = await handler._handle_command(
+            {"command": "vanity.resync_colors", "channel": CH}
+        )
         assert first["data"]["imported"] == 1
-        second = await handler._handle_command({"command": "vanity.resync_colors", "channel": CH})
+        second = await handler._handle_command(
+            {"command": "vanity.resync_colors", "channel": CH}
+        )
         assert second["data"]["imported"] == 0
 
     async def test_resync_errors_on_empty_css(
@@ -495,7 +504,9 @@ class TestResyncColorsCommand:
         css_client: MagicMock,
     ):
         css_client.get_state_channel_css.return_value = ""
-        result = await handler._handle_command({"command": "vanity.resync_colors", "channel": CH})
+        result = await handler._handle_command(
+            {"command": "vanity.resync_colors", "channel": CH}
+        )
         assert result["success"] is False
         assert "unavailable" in result["error"].lower()
 

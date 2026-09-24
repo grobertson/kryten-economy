@@ -131,7 +131,9 @@ async def test_buy_greeting_success(
     await _seed_account(database, "Alice", 10000)
     handler = _make_handler(sample_config, database, spending_engine)
 
-    resp = await handler._cmd_buy("Alice", CH, ["greeting", "Welcome", "to", "my", "world!"])
+    resp = await handler._cmd_buy(
+        "Alice", CH, ["greeting", "Welcome", "to", "my", "world!"]
+    )
     assert "greeting" in resp.lower() or "set" in resp.lower()
 
     greet = await database.get_vanity_item("Alice", CH, "custom_greeting")

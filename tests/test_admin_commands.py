@@ -261,7 +261,11 @@ async def test_banned_user_cannot_command(
     await pm_handler.handle_pm(event)
 
     mock_client.send_pm.assert_called()
-    msg = mock_client.send_pm.call_args[0][2] if len(mock_client.send_pm.call_args[0]) > 2 else ""
+    msg = (
+        mock_client.send_pm.call_args[0][2]
+        if len(mock_client.send_pm.call_args[0]) > 2
+        else ""
+    )
     assert "suspended" in msg.lower()
 
 
@@ -281,7 +285,11 @@ async def test_banned_user_admin_commands_work(
 
     # Should not get "suspended" response
     mock_client.send_pm.assert_called()
-    msg = mock_client.send_pm.call_args[0][2] if len(mock_client.send_pm.call_args[0]) > 2 else ""
+    msg = (
+        mock_client.send_pm.call_args[0][2]
+        if len(mock_client.send_pm.call_args[0]) > 2
+        else ""
+    )
     assert "suspended" not in msg.lower()
 
 

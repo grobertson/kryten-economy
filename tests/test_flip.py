@@ -13,7 +13,9 @@ from kryten_economy.gambling_engine import GambleOutcome, GamblingEngine
 CH = "testchannel"
 
 
-async def _seed_account(db: EconomyDatabase, username: str = "Alice", balance: int = 5000) -> None:
+async def _seed_account(
+    db: EconomyDatabase, username: str = "Alice", balance: int = 5000
+) -> None:
     """Create account with generous balance and old enough age."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
@@ -62,7 +64,9 @@ async def test_flip_loss(gambling_engine: GamblingEngine, database: EconomyDatab
 
 
 @pytest.mark.asyncio
-async def test_flip_cooldown_enforced(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_flip_cooldown_enforced(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Second flip within 15s → rejected."""
     await _seed_account(database)
 
@@ -73,7 +77,9 @@ async def test_flip_cooldown_enforced(gambling_engine: GamblingEngine, database:
 
 
 @pytest.mark.asyncio
-async def test_flip_daily_limit(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_flip_daily_limit(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """101st flip → rejected."""
     await _seed_account(database, balance=100_000)
 
@@ -89,7 +95,9 @@ async def test_flip_daily_limit(gambling_engine: GamblingEngine, database: Econo
 
 
 @pytest.mark.asyncio
-async def test_flip_balance_updates(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_flip_balance_updates(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Win: +wager. Loss: -wager."""
     await _seed_account(database, balance=1000)
 

@@ -65,7 +65,9 @@ class MediaCMSClient:
 
         try:
             self._logger.debug(
-                "MediaCMS search: q=%r limit=%d", query, self._config.search_results_limit
+                "MediaCMS search: q=%r limit=%d",
+                query,
+                self._config.search_results_limit,
             )
             async with self._session.get(
                 "/api/v1/media",
@@ -77,7 +79,9 @@ class MediaCMSClient:
                 # Server ignores page_size — apply limit client-side
                 results = results[: self._config.search_results_limit]
                 self._logger.debug(
-                    "MediaCMS search returned %d result(s) for '%s'", len(results), query
+                    "MediaCMS search returned %d result(s) for '%s'",
+                    len(results),
+                    query,
                 )
                 self._set_cached(cache_key, results)
                 return results

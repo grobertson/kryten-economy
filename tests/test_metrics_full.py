@@ -56,7 +56,9 @@ class FakeApp:
 
         # Mock multiplier engine
         self.multiplier_engine = MagicMock()
-        self.multiplier_engine.get_combined_multiplier = MagicMock(return_value=(1.5, []))
+        self.multiplier_engine.get_combined_multiplier = MagicMock(
+            return_value=(1.5, [])
+        )
 
         # No pm_handler in minimal fake
         self.pm_handler = None
@@ -130,7 +132,9 @@ async def test_metrics_counters_present(
         "economy_rain_z_distributed_total",
     ]:
         assert f"# HELP {counter_name}" in text, f"missing HELP for {counter_name}"
-        assert f"# TYPE {counter_name} counter" in text, f"missing TYPE for {counter_name}"
+        assert (
+            f"# TYPE {counter_name} counter" in text
+        ), f"missing TYPE for {counter_name}"
 
 
 @pytest.mark.asyncio

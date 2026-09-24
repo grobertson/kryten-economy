@@ -35,7 +35,9 @@ async def test_first_after_media_change_within_window(
     )
 
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "nice", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "content.first_after_media_change"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.first_after_media_change"
+    ]
     assert len(results) == 1
     assert results[0].amount == 3
 
@@ -53,7 +55,9 @@ async def test_first_after_media_change_too_late(earning_engine, channel_state):
     )
 
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "nice", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "content.first_after_media_change"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.first_after_media_change"
+    ]
     assert results[0].amount == 0
 
 
@@ -79,7 +83,9 @@ async def test_first_after_media_change_second_user(earning_engine, channel_stat
         "second!",
         NOW + timedelta(seconds=1),
     )
-    results = [r for r in outcome.results if r.trigger_id == "content.first_after_media_change"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.first_after_media_change"
+    ]
     assert results[0].amount == 0
 
 
@@ -87,7 +93,9 @@ async def test_first_after_media_change_second_user(earning_engine, channel_stat
 async def test_first_after_media_change_no_media(earning_engine, channel_state):
     """No media change recorded → 0 Z."""
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "hello", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "content.first_after_media_change"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.first_after_media_change"
+    ]
     assert results[0].amount == 0
 
 
@@ -109,7 +117,9 @@ async def test_comment_during_media_earns(earning_engine, channel_state):
     )
 
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "nice vid", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "content.comment_during_media"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.comment_during_media"
+    ]
     assert len(results) == 1
     # 0.5 Z → accumulator = 0.5, credit = 0 (fractional)
     assert results[0].amount == 0
@@ -140,7 +150,9 @@ async def test_comment_during_media_fractional(earning_engine, channel_state):
         NOW + timedelta(seconds=5),
     )
 
-    results = [r for r in outcome.results if r.trigger_id == "content.comment_during_media"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.comment_during_media"
+    ]
     assert results[0].amount == 1  # 0.5 + 0.5 = 1.0
 
 
@@ -172,7 +184,9 @@ async def test_comment_during_media_cap(earning_engine, channel_state):
         "msg10",
         NOW + timedelta(seconds=10),
     )
-    results = [r for r in outcome.results if r.trigger_id == "content.comment_during_media"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.comment_during_media"
+    ]
     assert results[0].amount == 0
     assert results[0].blocked_by == "cap"
 
@@ -196,7 +210,9 @@ async def test_comment_during_media_cap_scales(earning_engine, channel_state):
 async def test_comment_during_media_no_media(earning_engine, channel_state):
     """No media playing → 0 Z."""
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "hello", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "content.comment_during_media"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "content.comment_during_media"
+    ]
     assert results[0].amount == 0
     assert results[0].blocked_by == "condition"
 

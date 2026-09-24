@@ -92,7 +92,9 @@ async def test_event_start_valid(database: EconomyDatabase, mock_client: MagicMo
 
 
 @pytest.mark.asyncio
-async def test_event_start_bad_multiplier(database: EconomyDatabase, mock_client: MagicMock):
+async def test_event_start_bad_multiplier(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Multiplier 0.5 → rejected (must be > 1.0)."""
     cfg = _make_config()
     mock_presence = MagicMock()
@@ -117,7 +119,9 @@ async def test_event_start_bad_multiplier(database: EconomyDatabase, mock_client
 
 
 @pytest.mark.asyncio
-async def test_event_start_bad_duration(database: EconomyDatabase, mock_client: MagicMock):
+async def test_event_start_bad_duration(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """9999 minutes → rejected (max 1440)."""
     cfg = _make_config()
     mock_presence = MagicMock()
@@ -163,7 +167,9 @@ async def test_event_stop(database: EconomyDatabase, mock_client: MagicMock):
 
 
 @pytest.mark.asyncio
-async def test_event_stop_none_active(database: EconomyDatabase, mock_client: MagicMock):
+async def test_event_stop_none_active(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """No event → message."""
     cfg = _make_config()
     mock_presence = MagicMock()
@@ -220,7 +226,9 @@ async def test_claim_bounty_valid(database: EconomyDatabase, mock_client: MagicM
 
 
 @pytest.mark.asyncio
-async def test_claim_bounty_non_admin(database: EconomyDatabase, mock_client: MagicMock):
+async def test_claim_bounty_non_admin(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Rank < 4 → rejected."""
     cfg = _make_config(
         bounties={

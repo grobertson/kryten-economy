@@ -292,8 +292,12 @@ class TriviaEngine:
                     net=net,
                     biggest_win=max(0, net),
                 )
-                await self._db.increment_lifetime_gambled(username, channel, wager, payout)
-                await self._db.increment_daily_gambled(username, channel, today, wager, payout)
+                await self._db.increment_lifetime_gambled(
+                    username, channel, wager, payout
+                )
+                await self._db.increment_daily_gambled(
+                    username, channel, today, wager, payout
+                )
                 await self._db.update_trivia_stats(
                     username,
                     channel,
@@ -308,7 +312,9 @@ class TriviaEngine:
                 winners.append(f"@{username} (+{net:,})")
             else:
                 # Wrong or no answer
-                reason = "no answer" if user_answer is None else f"answered {user_answer}"
+                reason = (
+                    "no answer" if user_answer is None else f"answered {user_answer}"
+                )
                 await self._db.update_gambling_stats(
                     username,
                     channel,
@@ -317,7 +323,9 @@ class TriviaEngine:
                     biggest_loss=wager,
                 )
                 await self._db.increment_lifetime_gambled(username, channel, wager, 0)
-                await self._db.increment_daily_gambled(username, channel, today, wager, 0)
+                await self._db.increment_daily_gambled(
+                    username, channel, today, wager, 0
+                )
                 await self._db.update_trivia_stats(
                     username,
                     channel,
@@ -353,11 +361,14 @@ class TriviaEngine:
             return None
 
         remaining = max(
-            0, int((trivia.answer_deadline - datetime.now(timezone.utc)).total_seconds())
+            0,
+            int((trivia.answer_deadline - datetime.now(timezone.utc)).total_seconds()),
         )
 
         display = trivia.question.format_display()
-        display += f"\n\nBet now: !trivia <amount> — Answer in chat within {remaining}s!"
+        display += (
+            f"\n\nBet now: !trivia <amount> — Answer in chat within {remaining}s!"
+        )
         return display
 
     # ── Prefetch ──────────────────────────────────────────────

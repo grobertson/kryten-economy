@@ -55,11 +55,21 @@ class HeistNarrator:
         self._log = logger or logging.getLogger(__name__)
 
         # Merge built-in pools + any custom templates from config
-        self._scenarios = list(heist_narratives.SCENARIOS) + list(config.custom_scenarios)
-        self._win_lines = list(heist_narratives.WIN_LINES) + list(config.custom_win_lines)
-        self._lose_lines = list(heist_narratives.LOSE_LINES) + list(config.custom_lose_lines)
-        self._push_lines = list(heist_narratives.PUSH_LINES) + list(config.custom_push_lines)
-        self._join_lines = list(heist_narratives.JOIN_LINES) + list(config.custom_join_lines)
+        self._scenarios = list(heist_narratives.SCENARIOS) + list(
+            config.custom_scenarios
+        )
+        self._win_lines = list(heist_narratives.WIN_LINES) + list(
+            config.custom_win_lines
+        )
+        self._lose_lines = list(heist_narratives.LOSE_LINES) + list(
+            config.custom_lose_lines
+        )
+        self._push_lines = list(heist_narratives.PUSH_LINES) + list(
+            config.custom_push_lines
+        )
+        self._join_lines = list(heist_narratives.JOIN_LINES) + list(
+            config.custom_join_lines
+        )
 
         # Pre-generated LLM story cache (consumed once per heist)
         self._cached_story: HeistStory | None = None
@@ -94,11 +104,21 @@ class HeistNarrator:
 
     def update_config(self, config: HeistNarrativeConfig) -> None:
         self._cfg = config
-        self._scenarios = list(heist_narratives.SCENARIOS) + list(config.custom_scenarios)
-        self._win_lines = list(heist_narratives.WIN_LINES) + list(config.custom_win_lines)
-        self._lose_lines = list(heist_narratives.LOSE_LINES) + list(config.custom_lose_lines)
-        self._push_lines = list(heist_narratives.PUSH_LINES) + list(config.custom_push_lines)
-        self._join_lines = list(heist_narratives.JOIN_LINES) + list(config.custom_join_lines)
+        self._scenarios = list(heist_narratives.SCENARIOS) + list(
+            config.custom_scenarios
+        )
+        self._win_lines = list(heist_narratives.WIN_LINES) + list(
+            config.custom_win_lines
+        )
+        self._lose_lines = list(heist_narratives.LOSE_LINES) + list(
+            config.custom_lose_lines
+        )
+        self._push_lines = list(heist_narratives.PUSH_LINES) + list(
+            config.custom_push_lines
+        )
+        self._join_lines = list(heist_narratives.JOIN_LINES) + list(
+            config.custom_join_lines
+        )
 
     # ──────────────────────────────────────────────────────────
     #  Static mode helpers
@@ -197,7 +217,9 @@ class HeistNarrator:
                 # Strip markdown code fences if present
                 content = content.strip()
                 if content.startswith("```"):
-                    content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                    content = (
+                        content.split("\n", 1)[1] if "\n" in content else content[3:]
+                    )
                 if content.endswith("```"):
                     content = content[:-3]
                 content = content.strip()
@@ -239,7 +261,9 @@ class HeistNarrator:
         if mode in ("llm", "hybrid"):
             self._cached_story = await self._generate_llm_story()
             if self._cached_story is None and mode == "llm":
-                self._log.warning("LLM narrator failed with mode='llm'; will use static fallback")
+                self._log.warning(
+                    "LLM narrator failed with mode='llm'; will use static fallback"
+                )
 
     # ──────────────────────────────────────────────────────────
     #  Public API — called by GamblingEngine

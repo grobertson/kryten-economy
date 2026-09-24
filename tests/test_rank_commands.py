@@ -74,7 +74,9 @@ async def test_rank_shows_progress(
     spending_engine: SpendingEngine,
 ):
     """Progress bar, next tier, perks."""
-    rank_engine = RankEngine(sample_config, database, mock_client, logging.getLogger("test"))
+    rank_engine = RankEngine(
+        sample_config, database, mock_client, logging.getLogger("test")
+    )
     await _seed_account(database, "Alice", lifetime=500)
 
     handler = _make_handler(
@@ -99,7 +101,9 @@ async def test_rank_max_tier(
     spending_engine: SpendingEngine,
 ):
     """Shows 'Maximum rank achieved'."""
-    rank_engine = RankEngine(sample_config, database, mock_client, logging.getLogger("test"))
+    rank_engine = RankEngine(
+        sample_config, database, mock_client, logging.getLogger("test")
+    )
     await _seed_account(database, "Alice", lifetime=5_000_000)
 
     handler = _make_handler(
@@ -128,7 +132,9 @@ async def test_profile_self(
     spending_engine: SpendingEngine,
 ):
     """Own profile with all sections."""
-    rank_engine = RankEngine(sample_config, database, mock_client, logging.getLogger("test"))
+    rank_engine = RankEngine(
+        sample_config, database, mock_client, logging.getLogger("test")
+    )
     await _seed_account(database, "Alice", balance=5000, lifetime=2000)
 
     handler = _make_handler(
@@ -153,7 +159,9 @@ async def test_profile_other_user(
     spending_engine: SpendingEngine,
 ):
     """profile @Alice shows Alice's profile."""
-    rank_engine = RankEngine(sample_config, database, mock_client, logging.getLogger("test"))
+    rank_engine = RankEngine(
+        sample_config, database, mock_client, logging.getLogger("test")
+    )
     await _seed_account(database, "Alice", balance=3000, lifetime=1000)
 
     handler = _make_handler(
@@ -177,7 +185,9 @@ async def test_profile_not_found(
     spending_engine: SpendingEngine,
 ):
     """Unknown user → error."""
-    rank_engine = RankEngine(sample_config, database, mock_client, logging.getLogger("test"))
+    rank_engine = RankEngine(
+        sample_config, database, mock_client, logging.getLogger("test")
+    )
     handler = _make_handler(
         sample_config,
         database,
@@ -222,7 +232,9 @@ async def test_achievements_earned_and_progress(
     await _seed_account(database, "Alice", lifetime=50)
 
     # Award the first achievement manually
-    ach_engine = AchievementEngine(cfg, database, mock_client, logging.getLogger("test"))
+    ach_engine = AchievementEngine(
+        cfg, database, mock_client, logging.getLogger("test")
+    )
     await ach_engine.check_achievements("Alice", CH, ["lifetime_earned"])
 
     handler = _make_handler(cfg, database, mock_client)

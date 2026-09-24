@@ -27,7 +27,9 @@ def tracker(
 class TestDailyStreaks:
     """Daily streak evaluation logic."""
 
-    async def test_first_day_no_bonus(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_first_day_no_bonus(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Day 1 (first qualifying day) should set streak=1 but no bonus."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._evaluate_daily_streak("alice", "testchannel", "2026-01-01")
@@ -36,7 +38,9 @@ class TestDailyStreaks:
         # No bonus for day 1 (only day 2+)
         assert await database.get_balance("alice", "testchannel") == 0
 
-    async def test_day_two_bonus(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_day_two_bonus(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Day 2 should earn streak bonus."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._evaluate_daily_streak("alice", "testchannel", "2026-01-01")
@@ -46,7 +50,9 @@ class TestDailyStreaks:
         # Day 2 reward = 10 (from config)
         assert await database.get_balance("alice", "testchannel") == 10
 
-    async def test_streak_break_resets(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_streak_break_resets(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Missing a day should reset streak to 1."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._evaluate_daily_streak("alice", "testchannel", "2026-01-01")
@@ -56,7 +62,9 @@ class TestDailyStreaks:
         streak = await database.get_or_create_streak("alice", "testchannel")
         assert streak["current_daily_streak"] == 1
 
-    async def test_same_day_idempotent(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_same_day_idempotent(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Evaluating twice on same day should not double-count."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._evaluate_daily_streak("alice", "testchannel", "2026-01-01")
@@ -64,7 +72,9 @@ class TestDailyStreaks:
         streak = await database.get_or_create_streak("alice", "testchannel")
         assert streak["current_daily_streak"] == 1
 
-    async def test_7_day_milestone_bonus(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_7_day_milestone_bonus(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """7-day streak should get milestone bonus on top of daily."""
         await database.get_or_create_account("alice", "testchannel")
         # Build up 7 consecutive days
@@ -118,18 +128,38 @@ class TestGetDailyMinutesPresent:
 
     async def test_returns_zero_when_no_row(self, database: EconomyDatabase):
         """Should return 0 when no daily_activity row exists."""
-        result = await database.get_daily_minutes_present("alice", "testchannel", "2026-01-01")
+        result = await database.get_daily_minutes_present(
+            "alice", "testchannel", "2026-01-01"
+        )
         assert result == 0
 
     async def test_returns_accumulated_minutes(self, database: EconomyDatabase):
         """Should return the current minutes_present value."""
-        await database.increment_daily_minutes_present("alice", "testchannel", "2026-01-01", 42)
-        result = await database.get_daily_minutes_present("alice", "testchannel", "2026-01-01")
+        await database.increment_daily_minutes_present(
+            "alice", "testchannel", "2026-01-01", 42
+        )
+        result = await database.get_daily_minutes_present(
+            "alice", "testchannel", "2026-01-01"
+        )
         assert result == 42
 
     async def test_different_dates_are_independent(self, database: EconomyDatabase):
         """Minutes for different dates should not interfere."""
-        await database.increment_daily_minutes_present("alice", "testchannel", "2026-01-01", 30)
-        await database.increment_daily_minutes_present("alice", "testchannel", "2026-01-02", 15)
-        assert await database.get_daily_minutes_present("alice", "testchannel", "2026-01-01") == 30
-        assert await database.get_daily_minutes_present("alice", "testchannel", "2026-01-02") == 15
+        await database.increment_daily_minutes_present(
+            "alice", "testchannel", "2026-01-01", 30
+        )
+        await database.increment_daily_minutes_present(
+            "alice", "testchannel", "2026-01-02", 15
+        )
+        assert (
+            await database.get_daily_minutes_present(
+                "alice", "testchannel", "2026-01-01"
+            )
+            == 30
+        )
+        assert (
+            await database.get_daily_minutes_present(
+                "alice", "testchannel", "2026-01-02"
+            )
+            == 15
+        )

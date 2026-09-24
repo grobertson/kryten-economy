@@ -43,7 +43,11 @@ def test_inflation_loaded_from_yaml_dict():
             "channels": [{"domain": "cytu.be", "channel": "test"}],
             "service": {"name": "economy"},
             "database": {"path": ":memory:"},
-            "inflation": {"enabled": True, "anchor_float": 80_000_000, "max_multiplier": 10.0},
+            "inflation": {
+                "enabled": True,
+                "anchor_float": 80_000_000,
+                "max_multiplier": 10.0,
+            },
         }
     )
     assert cfg.inflation.enabled is True

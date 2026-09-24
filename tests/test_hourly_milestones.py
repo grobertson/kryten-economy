@@ -27,21 +27,29 @@ def tracker(
 class TestHourlyMilestones:
     """Hourly dwell milestone logic."""
 
-    async def test_1h_milestone(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_1h_milestone(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """60 cumulative minutes should trigger 1h milestone."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._check_hourly_milestones("alice", "testchannel", "2026-01-01", 60)
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 10  # 1h: 10 Z
 
-    async def test_3h_milestone(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_3h_milestone(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """180 cumulative minutes should trigger 1h + 3h milestones."""
         await database.get_or_create_account("alice", "testchannel")
-        await tracker._check_hourly_milestones("alice", "testchannel", "2026-01-01", 180)
+        await tracker._check_hourly_milestones(
+            "alice", "testchannel", "2026-01-01", 180
+        )
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 40  # 1h:10 + 3h:30
 
-    async def test_milestone_idempotent(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_milestone_idempotent(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Checking milestones twice should not double-award."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._check_hourly_milestones("alice", "testchannel", "2026-01-01", 60)
@@ -59,7 +67,10 @@ class TestHourlyMilestones:
         assert balance == 0
 
     async def test_milestone_pm_sent(
-        self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
+        mock_client: MagicMock,
     ):
         """Milestone should send a PM notification."""
         await database.get_or_create_account("alice", "testchannel")
@@ -81,15 +92,21 @@ class TestHourlyMilestones:
     async def test_db_mark_milestone(self, database: EconomyDatabase):
         """Database should track claimed milestones."""
         await database.get_or_create_account("alice", "testchannel")
-        row = await database.get_or_create_hourly_milestones("alice", "testchannel", "2026-01-01")
+        row = await database.get_or_create_hourly_milestones(
+            "alice", "testchannel", "2026-01-01"
+        )
         assert row["hours_1"] == 0
         await database.mark_hourly_milestone("alice", "testchannel", "2026-01-01", 1)
-        row = await database.get_or_create_hourly_milestones("alice", "testchannel", "2026-01-01")
+        row = await database.get_or_create_hourly_milestones(
+            "alice", "testchannel", "2026-01-01"
+        )
         assert row["hours_1"] == 1
 
     async def test_invalid_milestone_column(self, database: EconomyDatabase):
         """Invalid milestone hours should be silently ignored."""
         await database.get_or_create_account("alice", "testchannel")
-        await database.get_or_create_hourly_milestones("alice", "testchannel", "2026-01-01")
+        await database.get_or_create_hourly_milestones(
+            "alice", "testchannel", "2026-01-01"
+        )
         # hours=99 is invalid — should not error
         await database.mark_hourly_milestone("alice", "testchannel", "2026-01-01", 99)

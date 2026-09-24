@@ -23,7 +23,9 @@ from conftest import make_config_dict
 CH = "test-channel"
 
 
-async def _seed_account(db: EconomyDatabase, username: str, balance: int = 5000) -> None:
+async def _seed_account(
+    db: EconomyDatabase, username: str, balance: int = 5000
+) -> None:
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance, tx_type="seed", trigger_id="test")
     import asyncio

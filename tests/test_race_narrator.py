@@ -193,7 +193,10 @@ class TestPrepareStory:
         with patch.object(n, "_generate_llm_story", AsyncMock(return_value=bad)):
             await n.prepare_story(CH, "race-1")
         # Must not raise; falls back to the raw template text.
-        assert n.get_lead_change_line(CH, "Red", "🔴") == "{emoji} {racer} leads { unbalanced"
+        assert (
+            n.get_lead_change_line(CH, "Red", "🔴")
+            == "{emoji} {racer} leads { unbalanced"
+        )
         assert n.get_finish_line(CH, "Red", "🔴") == "winner is {racer} }"
 
     async def test_stale_prep_for_replaced_race_is_discarded(self) -> None:

@@ -134,7 +134,9 @@ class TestLoadConfig:
         with pytest.raises(ValueError, match="YAML mapping"):
             load_config(str(config_path))
 
-    def test_service_identity_auto_injected(self, sample_config_dict: dict, tmp_path: Path):
+    def test_service_identity_auto_injected(
+        self, sample_config_dict: dict, tmp_path: Path
+    ):
         """service.name/version should be injected even when service block is omitted."""
         sample_config_dict.pop("service", None)
         config_path = tmp_path / "config.yaml"

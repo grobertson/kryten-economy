@@ -23,7 +23,9 @@ def _write_config(path: Path, overrides: dict | None = None) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reload_valid(pm_handler: PmHandler, sample_config_dict: dict, tmp_path: Path):
+async def test_reload_valid(
+    pm_handler: PmHandler, sample_config_dict: dict, tmp_path: Path
+):
     """Reads new config, applies, returns success."""
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.dump(sample_config_dict))

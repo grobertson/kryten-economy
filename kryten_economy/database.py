@@ -128,10 +128,12 @@ class EconomyDatabase:
                 "ON transactions(created_at)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_transactions_type " "ON transactions(type)"
+                "CREATE INDEX IF NOT EXISTS idx_transactions_type "
+                "ON transactions(type)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_daily_activity_date " "ON daily_activity(date)"
+                "CREATE INDEX IF NOT EXISTS idx_daily_activity_date "
+                "ON daily_activity(date)"
             )
 
             # ── Sprint 2: Streaks & milestones tables ────────
@@ -317,7 +319,9 @@ class EconomyDatabase:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tip_receiver ON tip_history(receiver, channel)"
             )
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_tip_date ON tip_history(created_at)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tip_date ON tip_history(created_at)"
+            )
 
             conn.execute(
                 """
@@ -475,7 +479,9 @@ class EconomyDatabase:
 
             # ── Migrations: add columns if missing ────────
             try:
-                conn.execute("ALTER TABLE accounts ADD COLUMN quiet_mode BOOLEAN DEFAULT 0")
+                conn.execute(
+                    "ALTER TABLE accounts ADD COLUMN quiet_mode BOOLEAN DEFAULT 0"
+                )
             except sqlite3.OperationalError:
                 pass  # column already exists
 
@@ -484,7 +490,9 @@ class EconomyDatabase:
             # (CREATE TABLE IF NOT EXISTS won't alter an existing table).
             for _col in ("total_races", "total_trivias", "total_blackjacks"):
                 try:
-                    conn.execute(f"ALTER TABLE gambling_stats ADD COLUMN {_col} INTEGER DEFAULT 0")
+                    conn.execute(
+                        f"ALTER TABLE gambling_stats ADD COLUMN {_col} INTEGER DEFAULT 0"
+                    )
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
@@ -836,7 +844,15 @@ class EconomyDatabase:
                 conn.execute(
                     "INSERT INTO transactions (username, channel, amount, type, reason, trigger_id, "
                     "related_user, metadata) VALUES (?, ?, ?, 'refund', ?, ?, ?, ?)",
-                    (username, channel, amount, reason, trigger_id, related_user, metadata),
+                    (
+                        username,
+                        channel,
+                        amount,
+                        reason,
+                        trigger_id,
+                        related_user,
+                        metadata,
+                    ),
                 )
                 conn.commit()
                 row = conn.execute(
@@ -962,7 +978,9 @@ class EconomyDatabase:
     #  Sprint 2: Welcome Wallet
     # ══════════════════════════════════════════════════════════
 
-    async def claim_welcome_wallet(self, username: str, channel: str, amount: int) -> bool:
+    async def claim_welcome_wallet(
+        self, username: str, channel: str, amount: int
+    ) -> bool:
         """Atomically credit welcome wallet if not already claimed.
         Returns True if credited, False if already claimed."""
         loop = asyncio.get_running_loop()
@@ -1088,7 +1106,9 @@ class EconomyDatabase:
     #  Sprint 2: Hourly Milestones
     # ══════════════════════════════════════════════════════════
 
-    async def get_or_create_hourly_milestones(self, username: str, channel: str, date: str) -> dict:
+    async def get_or_create_hourly_milestones(
+        self, username: str, channel: str, date: str
+    ) -> dict:
         """Return milestones row for today, creating if needed."""
         loop = asyncio.get_running_loop()
 
@@ -1140,7 +1160,9 @@ class EconomyDatabase:
     #  Sprint 2: Balance Maintenance
     # ══════════════════════════════════════════════════════════
 
-    async def get_accounts_with_min_balance(self, channel: str, min_balance: int) -> list[dict]:
+    async def get_accounts_with_min_balance(
+        self, channel: str, min_balance: int
+    ) -> list[dict]:
         """Return all accounts in channel with balance >= min_balance."""
         loop = asyncio.get_running_loop()
 
@@ -1192,7 +1214,9 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
-    async def apply_decay_batch(self, channel: str, rate: float, exempt_below: int) -> int:
+    async def apply_decay_batch(
+        self, channel: str, rate: float, exempt_below: int
+    ) -> int:
         """Apply decay to all qualifying accounts. Returns total decay collected."""
         loop = asyncio.get_running_loop()
 
@@ -1511,7 +1535,11 @@ class EconomyDatabase:
     ) -> None:
         """Insert or replace cooldown entry."""
         loop = asyncio.get_running_loop()
-        ts = window_start.isoformat() if hasattr(window_start, "isoformat") else str(window_start)
+        ts = (
+            window_start.isoformat()
+            if hasattr(window_start, "isoformat")
+            else str(window_start)
+        )
 
         def _sync() -> None:
             conn = self._get_connection()
@@ -1768,7 +1796,12 @@ class EconomyDatabase:
                 return (
                     dict(row)
                     if row
-                    else {"races_bet": 0, "total_wagered": 0, "total_won": 0, "biggest_win": 0}
+                    else {
+                        "races_bet": 0,
+                        "total_wagered": 0,
+                        "total_won": 0,
+                        "biggest_win": 0,
+                    }
                 )
             finally:
                 conn.close()
@@ -1916,7 +1949,11 @@ class EconomyDatabase:
     ) -> int:
         """Insert a pending challenge. Returns the challenge ID."""
         loop = asyncio.get_running_loop()
-        ts = expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at)
+        ts = (
+            expires_at.isoformat()
+            if hasattr(expires_at, "isoformat")
+            else str(expires_at)
+        )
 
         def _sync() -> int:
             conn = self._get_connection()
@@ -2489,7 +2526,7 @@ class EconomyDatabase:
                     "ORDER BY t.id DESC",
                     (username, channel),
                 ).fetchall()
-                
+
                 # Find the first non-refunded transaction
                 for r in row:
                     trigger_id = r["trigger_id"]
@@ -2510,7 +2547,7 @@ class EconomyDatabase:
                             break
                 else:
                     return None  # No valid transaction found
-                
+
                 if isinstance(ts, str):
                     # Parse ISO or SQLite timestamp format
                     for fmt in (
@@ -2519,7 +2556,9 @@ class EconomyDatabase:
                         "%Y-%m-%dT%H:%M:%S+00:00",
                     ):
                         try:
-                            return datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
+                            return datetime.strptime(ts, fmt).replace(
+                                tzinfo=timezone.utc
+                            )
                         except ValueError:
                             continue
                     return datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
@@ -2680,7 +2719,9 @@ class EconomyDatabase:
     #  Sprint 6: Achievements
     # ══════════════════════════════════════════════════════════
 
-    async def has_achievement(self, username: str, channel: str, achievement_id: str) -> bool:
+    async def has_achievement(
+        self, username: str, channel: str, achievement_id: str
+    ) -> bool:
         """Check if a user already has a specific achievement."""
         loop = asyncio.get_running_loop()
 
@@ -2697,7 +2738,9 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
-    async def award_achievement(self, username: str, channel: str, achievement_id: str) -> bool:
+    async def award_achievement(
+        self, username: str, channel: str, achievement_id: str
+    ) -> bool:
         """Award an achievement. Returns True if newly awarded, False if already held."""
         loop = asyncio.get_running_loop()
 
@@ -2882,7 +2925,9 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
-    async def update_account_rank(self, username: str, channel: str, rank_name: str) -> None:
+    async def update_account_rank(
+        self, username: str, channel: str, rank_name: str
+    ) -> None:
         """Update the rank_name field on an account."""
         loop = asyncio.get_running_loop()
 

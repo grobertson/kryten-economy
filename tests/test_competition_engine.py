@@ -71,7 +71,11 @@ async def test_threshold_all_qualify(database: EconomyDatabase, mock_client: Mag
             {
                 "id": "gif_fan",
                 "description": "GIF Enthusiast",
-                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 5},
+                "condition": {
+                    "type": "daily_threshold",
+                    "field": "gifs_posted",
+                    "threshold": 5,
+                },
                 "reward": 50,
             }
         ]
@@ -90,14 +94,20 @@ async def test_threshold_all_qualify(database: EconomyDatabase, mock_client: Mag
 
 
 @pytest.mark.asyncio
-async def test_threshold_none_qualify(database: EconomyDatabase, mock_client: MagicMock):
+async def test_threshold_none_qualify(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """No users meet threshold → 0 awards."""
     cfg = _cfg_with_competitions(
         [
             {
                 "id": "gif_fan",
                 "description": "GIF Enthusiast",
-                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 10},
+                "condition": {
+                    "type": "daily_threshold",
+                    "field": "gifs_posted",
+                    "threshold": 10,
+                },
                 "reward": 50,
             }
         ]
@@ -114,14 +124,20 @@ async def test_threshold_none_qualify(database: EconomyDatabase, mock_client: Ma
 
 
 @pytest.mark.asyncio
-async def test_threshold_some_qualify(database: EconomyDatabase, mock_client: MagicMock):
+async def test_threshold_some_qualify(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """1 of 3 meets threshold → 1 awarded."""
     cfg = _cfg_with_competitions(
         [
             {
                 "id": "gif_fan",
                 "description": "GIF Enthusiast",
-                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 5},
+                "condition": {
+                    "type": "daily_threshold",
+                    "field": "gifs_posted",
+                    "threshold": 5,
+                },
                 "reward": 50,
             }
         ]
@@ -143,7 +159,9 @@ async def test_threshold_some_qualify(database: EconomyDatabase, mock_client: Ma
 
 
 @pytest.mark.asyncio
-async def test_daily_top_single_winner(database: EconomyDatabase, mock_client: MagicMock):
+async def test_daily_top_single_winner(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Top earner gets champion bonus."""
     cfg = _cfg_with_competitions(
         [
@@ -171,7 +189,9 @@ async def test_daily_top_single_winner(database: EconomyDatabase, mock_client: M
 
 
 @pytest.mark.asyncio
-async def test_daily_top_percent_reward(database: EconomyDatabase, mock_client: MagicMock):
+async def test_daily_top_percent_reward(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Top earner reward = 25% of z_earned."""
     cfg = _cfg_with_competitions(
         [
@@ -226,7 +246,11 @@ async def test_multiple_competitions(database: EconomyDatabase, mock_client: Mag
             {
                 "id": "gif_fan",
                 "description": "GIF Enthusiast",
-                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 3},
+                "condition": {
+                    "type": "daily_threshold",
+                    "field": "gifs_posted",
+                    "threshold": 3,
+                },
                 "reward": 30,
             },
             {
@@ -259,7 +283,11 @@ async def test_pm_sent_per_award(database: EconomyDatabase, mock_client: MagicMo
             {
                 "id": "gif_fan",
                 "description": "GIF Enthusiast",
-                "condition": {"type": "daily_threshold", "field": "gifs_posted", "threshold": 1},
+                "condition": {
+                    "type": "daily_threshold",
+                    "field": "gifs_posted",
+                    "threshold": 1,
+                },
                 "reward": 10,
             }
         ]
@@ -303,7 +331,9 @@ async def test_public_announcement(database: EconomyDatabase, mock_client: Magic
 
 
 @pytest.mark.asyncio
-async def test_competition_error_isolated(database: EconomyDatabase, mock_client: MagicMock):
+async def test_competition_error_isolated(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """One competition error doesn't stop others."""
     cfg = _cfg_with_competitions(
         [

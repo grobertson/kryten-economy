@@ -13,7 +13,9 @@ from kryten_economy.gambling_engine import GamblingEngine
 CH = "testchannel"
 
 
-async def _seed_account(db: EconomyDatabase, username: str = "Alice", balance: int = 5000) -> None:
+async def _seed_account(
+    db: EconomyDatabase, username: str = "Alice", balance: int = 5000
+) -> None:
     """Create account with generous balance and old enough age."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
@@ -38,7 +40,9 @@ async def _seed_account(db: EconomyDatabase, username: str = "Alice", balance: i
 
 
 @pytest.mark.asyncio
-async def test_free_spin_win(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_free_spin_win(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Free spin in win range → payout credited, no debit."""
     await _seed_account(database)
 
@@ -59,7 +63,9 @@ async def test_free_spin_win(gambling_engine: GamblingEngine, database: EconomyD
 
 
 @pytest.mark.asyncio
-async def test_free_spin_loss(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_free_spin_loss(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Free spin in loss range → no debit, no credit."""
     await _seed_account(database)
 
@@ -74,7 +80,9 @@ async def test_free_spin_loss(gambling_engine: GamblingEngine, database: Economy
 
 
 @pytest.mark.asyncio
-async def test_free_spin_once_per_day(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_free_spin_once_per_day(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Second free spin same day → rejected."""
     await _seed_account(database)
 
@@ -88,7 +96,9 @@ async def test_free_spin_once_per_day(gambling_engine: GamblingEngine, database:
 
 
 @pytest.mark.asyncio
-async def test_free_spin_resets_daily(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_free_spin_resets_daily(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """New day → eligible again."""
     await _seed_account(database)
 
@@ -121,7 +131,9 @@ async def test_free_spin_resets_daily(gambling_engine: GamblingEngine, database:
 
 
 @pytest.mark.asyncio
-async def test_free_spin_disabled(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_free_spin_disabled(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Config disabled → error."""
     await _seed_account(database)
 
