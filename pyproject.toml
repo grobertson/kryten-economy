@@ -75,6 +75,20 @@ packages = ["kryten_economy"]
 line-length = 88
 target-version = ["py312"]
 
+[tool.mypy]
+python_version = "3.12"
+
+# kryten-py ships no py.typed marker, so mypy reports import-untyped for it.
+# The package IS installed, so `ignore_missing_imports` does not apply - the
+# per-module flag for "installed but untyped" is `follow_imports = skip`,
+# scoped to just this one dependency. The rest of the PostgreSQL layer is
+# genuinely type-checked. Adding py.typed to kryten-py is the real fix and is
+# tracked there.
+[[tool.mypy.overrides]]
+module = ["kryten", "kryten.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

@@ -62,7 +62,9 @@ def _database_url_for_alembic() -> str:
                 "config.yaml that contains a database.postgres block."
             ) from exc
         except Exception as exc:  # pragma: no cover - surfaced to the operator
-            raise RuntimeError(f"Failed to resolve PostgreSQL URL for Alembic: {exc}") from exc
+            raise RuntimeError(
+                f"Failed to resolve PostgreSQL URL for Alembic: {exc}"
+            ) from exc
 
     # Alembic's migration engine is synchronous; swap async drivers for psycopg2.
     if _is_asyncio_url(url):
