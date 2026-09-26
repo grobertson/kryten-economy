@@ -1,0 +1,56 @@
+# Build context exclusions for the kryten-economy Containerfile.
+#
+# The Containerfile does `COPY . /tmp/kryten-economy` and then
+# `pip install`es it, so anything in the context that is not excluded becomes
+# part of the image. Without this file the context includes the development
+# SQLite database (~1 GB), the local virtualenv, test caches, and scratch
+# scripts - all of which bloat the image and leak local state into production.
+
+# Databases and their sidecars - never belong in an image
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Virtualenvs and build output
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Version control and CI
+.git/
+.github/
+
+# Local-only scratch used during the PostgreSQL migration
+_sortie5_*.sh
+_rehearse*.sh
+_rehearsal*.sh
+_remount*.sh
+_relocate*.sh
+_pre_reboot*.sh
+_post_reboot*.sh
+_prod_*.sh
+_take_prod_copy.sh
+_float_analysis.py
+_ledger_recon.py
+_ledger_gap_prod.py
+_wager_gap.py
+_host_probe.py
+_progress.sh
+
+# Local development config may contain machine-specific paths/secrets.
+# config.example.yaml is the committed template and IS included.
+config.yaml

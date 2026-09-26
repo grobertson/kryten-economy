@@ -128,12 +128,10 @@ class EconomyDatabase:
                 "ON transactions(created_at)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_transactions_type "
-                "ON transactions(type)"
+                "CREATE INDEX IF NOT EXISTS idx_transactions_type " "ON transactions(type)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_daily_activity_date "
-                "ON daily_activity(date)"
+                "CREATE INDEX IF NOT EXISTS idx_daily_activity_date " "ON daily_activity(date)"
             )
 
             # ── Sprint 2: Streaks & milestones tables ────────
@@ -319,9 +317,7 @@ class EconomyDatabase:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tip_receiver ON tip_history(receiver, channel)"
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_tip_date ON tip_history(created_at)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tip_date ON tip_history(created_at)")
 
             conn.execute(
                 """
@@ -479,9 +475,7 @@ class EconomyDatabase:
 
             # ── Migrations: add columns if missing ────────
             try:
-                conn.execute(
-                    "ALTER TABLE accounts ADD COLUMN quiet_mode BOOLEAN DEFAULT 0"
-                )
+                conn.execute("ALTER TABLE accounts ADD COLUMN quiet_mode BOOLEAN DEFAULT 0")
             except sqlite3.OperationalError:
                 pass  # column already exists
 
@@ -490,9 +484,7 @@ class EconomyDatabase:
             # (CREATE TABLE IF NOT EXISTS won't alter an existing table).
             for _col in ("total_races", "total_trivias", "total_blackjacks"):
                 try:
-                    conn.execute(
-                        f"ALTER TABLE gambling_stats ADD COLUMN {_col} INTEGER DEFAULT 0"
-                    )
+                    conn.execute(f"ALTER TABLE gambling_stats ADD COLUMN {_col} INTEGER DEFAULT 0")
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
@@ -666,6 +658,38 @@ class EconomyDatabase:
             finally:
                 conn.close()
 
+        return await loop.run_in_executor(None, _sync)
+
+    async def search_accounts(
+        self,
+        channel: str,
+        pattern: str = "",
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return channel accounts ordered by balance, optionally filtered by username."""
+
+        def _sync() -> list[dict[str, Any]]:
+            conn = self._get_connection()
+            try:
+                if pattern:
+                    rows = conn.execute(
+                        "SELECT username, balance, lifetime_earned, rank_name "
+                        "FROM accounts WHERE channel = ? AND username LIKE ? "
+                        "ORDER BY balance DESC LIMIT ?",
+                        (channel, f"%{pattern}%", limit),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT username, balance, lifetime_earned, rank_name "
+                        "FROM accounts WHERE channel = ? "
+                        "ORDER BY balance DESC LIMIT ?",
+                        (channel, limit),
+                    ).fetchall()
+                return [dict(row) for row in rows]
+            finally:
+                conn.close()
+
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, _sync)
 
     async def update_last_seen(self, username: str, channel: str) -> None:
@@ -978,9 +1002,7 @@ class EconomyDatabase:
     #  Sprint 2: Welcome Wallet
     # ══════════════════════════════════════════════════════════
 
-    async def claim_welcome_wallet(
-        self, username: str, channel: str, amount: int
-    ) -> bool:
+    async def claim_welcome_wallet(self, username: str, channel: str, amount: int) -> bool:
         """Atomically credit welcome wallet if not already claimed.
         Returns True if credited, False if already claimed."""
         loop = asyncio.get_running_loop()
@@ -1106,9 +1128,7 @@ class EconomyDatabase:
     #  Sprint 2: Hourly Milestones
     # ══════════════════════════════════════════════════════════
 
-    async def get_or_create_hourly_milestones(
-        self, username: str, channel: str, date: str
-    ) -> dict:
+    async def get_or_create_hourly_milestones(self, username: str, channel: str, date: str) -> dict:
         """Return milestones row for today, creating if needed."""
         loop = asyncio.get_running_loop()
 
@@ -1160,9 +1180,7 @@ class EconomyDatabase:
     #  Sprint 2: Balance Maintenance
     # ══════════════════════════════════════════════════════════
 
-    async def get_accounts_with_min_balance(
-        self, channel: str, min_balance: int
-    ) -> list[dict]:
+    async def get_accounts_with_min_balance(self, channel: str, min_balance: int) -> list[dict]:
         """Return all accounts in channel with balance >= min_balance."""
         loop = asyncio.get_running_loop()
 
@@ -1214,9 +1232,7 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
-    async def apply_decay_batch(
-        self, channel: str, rate: float, exempt_below: int
-    ) -> int:
+    async def apply_decay_batch(self, channel: str, rate: float, exempt_below: int) -> int:
         """Apply decay to all qualifying accounts. Returns total decay collected."""
         loop = asyncio.get_running_loop()
 
@@ -1535,11 +1551,7 @@ class EconomyDatabase:
     ) -> None:
         """Insert or replace cooldown entry."""
         loop = asyncio.get_running_loop()
-        ts = (
-            window_start.isoformat()
-            if hasattr(window_start, "isoformat")
-            else str(window_start)
-        )
+        ts = window_start.isoformat() if hasattr(window_start, "isoformat") else str(window_start)
 
         def _sync() -> None:
             conn = self._get_connection()
@@ -1700,21 +1712,53 @@ class EconomyDatabase:
 
         await loop.run_in_executor(None, _sync)
 
-    async def atomic_debit(self, username: str, channel: str, amount: int) -> bool:
-        """Debit balance atomically; return True if succeeded, False if insufficient."""
+    async def atomic_debit(
+        self,
+        username: str,
+        channel: str,
+        amount: int,
+        tx_type: str = "wager",
+        reason: str | None = None,
+        trigger_id: str | None = None,
+        metadata: str | None = None,
+    ) -> bool:
+        """Debit a wager atomically and write its ledger row.
+
+        The balance update, the ``lifetime_spent`` increment and the
+        ``transactions`` insert all happen in one transaction, so a wager can
+        never move the balance without leaving a ledger entry, and vice versa.
+        Returns False (and changes nothing) when the balance is insufficient.
+
+        ``tx_type`` identifies the game so the ledger distinguishes a spin from
+        a blackjack double-down. It must be a wagering type; ``credit`` is the
+        opposite operation and is not appropriate here.
+        """
         loop = asyncio.get_running_loop()
 
         def _sync() -> bool:
             conn = self._get_connection()
             try:
                 cursor = conn.execute(
-                    "UPDATE accounts SET balance = balance - ? "
+                    "UPDATE accounts SET balance = balance - ?, lifetime_spent = lifetime_spent + ? "
                     "WHERE username = ? AND channel = ? AND balance >= ?",
-                    (amount, username, channel, amount),
+                    (amount, amount, username, channel, amount),
                 )
                 if cursor.rowcount == 0:
                     conn.rollback()
                     return False
+                conn.execute(
+                    "INSERT INTO transactions (username, channel, amount, type, reason, trigger_id, "
+                    "metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        username,
+                        channel,
+                        -amount,
+                        tx_type,
+                        reason,
+                        trigger_id,
+                        metadata,
+                    ),
+                )
                 conn.commit()
                 return True
             finally:
@@ -1949,11 +1993,7 @@ class EconomyDatabase:
     ) -> int:
         """Insert a pending challenge. Returns the challenge ID."""
         loop = asyncio.get_running_loop()
-        ts = (
-            expires_at.isoformat()
-            if hasattr(expires_at, "isoformat")
-            else str(expires_at)
-        )
+        ts = expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at)
 
         def _sync() -> int:
             conn = self._get_connection()
@@ -1964,6 +2004,8 @@ class EconomyDatabase:
                     (challenger, target, channel, wager, ts),
                 )
                 conn.commit()
+                if cursor.lastrowid is None:
+                    raise RuntimeError("SQLite did not return a challenge ID")
                 return cursor.lastrowid
             finally:
                 conn.close()
@@ -2192,6 +2234,11 @@ class EconomyDatabase:
         still charging the user. To prevent it, update any existing case-insensitive
         match in place — refreshing the value AND the canonical casing — and only
         insert when no row exists for this user yet.
+
+        The stored casing is read from the ``accounts`` table, which always holds the
+        canonical CyTube casing. Using the caller's casing instead would let a later,
+        differently-cased purchase clobber it, breaking the case-sensitive CSS selector
+        ``.chat-msg-<User>``.
         """
         loop = asyncio.get_running_loop()
 
@@ -2204,19 +2251,25 @@ class EconomyDatabase:
                     "ORDER BY purchased_at DESC, id DESC LIMIT 1",
                     (username, channel, item_type),
                 ).fetchone()
+                canonical = conn.execute(
+                    "SELECT username FROM accounts "
+                    "WHERE username = ? COLLATE NOCASE AND channel = ? LIMIT 1",
+                    (username, channel),
+                ).fetchone()
+                stored_username = canonical["username"] if canonical else username
                 if existing is not None:
                     conn.execute(
                         "UPDATE vanity_items "
                         "SET username = ?, value = ?, active = 1, "
                         "    purchased_at = CURRENT_TIMESTAMP "
                         "WHERE id = ?",
-                        (username, value, existing["id"]),
+                        (stored_username, value, existing["id"]),
                     )
                 else:
                     conn.execute(
                         "INSERT INTO vanity_items (username, channel, item_type, value) "
                         "VALUES (?, ?, ?, ?)",
-                        (username, channel, item_type, value),
+                        (stored_username, channel, item_type, value),
                     )
                 conn.commit()
             finally:
@@ -2415,6 +2468,8 @@ class EconomyDatabase:
                     (username, channel, approval_type, data_str, cost),
                 )
                 conn.commit()
+                if cursor.lastrowid is None:
+                    raise RuntimeError("SQLite did not return an approval ID")
                 return cursor.lastrowid
             finally:
                 conn.close()
@@ -2556,9 +2611,7 @@ class EconomyDatabase:
                         "%Y-%m-%dT%H:%M:%S+00:00",
                     ):
                         try:
-                            return datetime.strptime(ts, fmt).replace(
-                                tzinfo=timezone.utc
-                            )
+                            return datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
                         except ValueError:
                             continue
                     return datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
@@ -2577,19 +2630,41 @@ class EconomyDatabase:
         username: str,
         channel: str,
         limit: int = 10,
-    ) -> list[dict]:
-        """Return last N transactions for a user, newest first."""
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Return transactions for a user, newest first."""
         loop = asyncio.get_running_loop()
 
-        def _sync() -> list[dict]:
+        def _sync() -> list[dict[str, Any]]:
             conn = self._get_connection()
             try:
                 rows = conn.execute(
                     "SELECT * FROM transactions WHERE username = ? AND channel = ? "
-                    "ORDER BY id DESC LIMIT ?",
-                    (username, channel, limit),
+                    "ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (username, channel, limit, offset),
                 ).fetchall()
-                return [dict(r) for r in rows]
+                return [dict(row) for row in rows]
+            finally:
+                conn.close()
+
+        return await loop.run_in_executor(None, _sync)
+
+    async def get_recent_channel_transactions(
+        self,
+        channel: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Return the most recent transactions for a channel, newest first."""
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> list[dict[str, Any]]:
+            conn = self._get_connection()
+            try:
+                rows = conn.execute(
+                    "SELECT * FROM transactions WHERE channel = ? ORDER BY id DESC LIMIT ?",
+                    (channel, limit),
+                ).fetchall()
+                return [dict(row) for row in rows]
             finally:
                 conn.close()
 
@@ -2719,9 +2794,7 @@ class EconomyDatabase:
     #  Sprint 6: Achievements
     # ══════════════════════════════════════════════════════════
 
-    async def has_achievement(
-        self, username: str, channel: str, achievement_id: str
-    ) -> bool:
+    async def has_achievement(self, username: str, channel: str, achievement_id: str) -> bool:
         """Check if a user already has a specific achievement."""
         loop = asyncio.get_running_loop()
 
@@ -2738,9 +2811,7 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
-    async def award_achievement(
-        self, username: str, channel: str, achievement_id: str
-    ) -> bool:
+    async def award_achievement(self, username: str, channel: str, achievement_id: str) -> bool:
         """Award an achievement. Returns True if newly awarded, False if already held."""
         loop = asyncio.get_running_loop()
 
@@ -2925,9 +2996,7 @@ class EconomyDatabase:
 
         return await loop.run_in_executor(None, _sync)
 
-    async def update_account_rank(
-        self, username: str, channel: str, rank_name: str
-    ) -> None:
+    async def update_account_rank(self, username: str, channel: str, rank_name: str) -> None:
         """Update the rank_name field on an account."""
         loop = asyncio.get_running_loop()
 
@@ -3064,6 +3133,8 @@ class EconomyDatabase:
                     (creator, channel, description, amount, expires_at),
                 )
                 conn.commit()
+                if cursor.lastrowid is None:
+                    raise RuntimeError("SQLite did not return a bounty ID")
                 return cursor.lastrowid
             finally:
                 conn.close()

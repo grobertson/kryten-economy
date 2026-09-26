@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Lint with ruff
+        run: uv run ruff check .
+
+      - name: Format check with black
+        run: uv run black --check .
+
+      - name: Type check with mypy
+        run: uv run mypy kryten_economy
+
+  test:
+    name: Test (with PostgreSQL)
+    runs-on: ubuntu-latest
+
+    # The PostgreSQL backend is validated against a real server rather than a
+    # mock pool, because a mock would happily pass while asyncpg failed in
+    # production. The service is therefore required, not optional: the suite
+    # that runs here is the one that exercises debit/credit atomicity and the
+    # SQLite -> PostgreSQL ETL.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kryten
+          POSTGRES_PASSWORD: kryten
+          POSTGRES_DB: kryten_economy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kryten -d kryten_economy_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # A throwaway CI-only value defined above, not a secret.
+      KRYTEN_ECONOMY_TEST_DSN: postgresql://kryten:kryten@localhost:5432/kryten_economy_test
+      # Alembic reads its own URL variable, not the test DSN.
+      KRYTEN_ECONOMY_ALEMBIC_URL: postgresql://kryten:kryten@localhost:5432/kryten_economy_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Apply schema
+        run: uv run alembic upgrade head
+
+      - name: Run full suite including postgres-marked tests
+        run: uv run pytest -v
+
+  test-no-postgres:
+    name: Test (no PostgreSQL)
+    runs-on: ubuntu-latest
+
+    # Proves the suite stays green on a machine with no database - the
+    # postgres-marked tests must skip cleanly rather than error. This is the
+    # regression guard for the "works everywhere else" property.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Confirm no DSN leaks into the environment
+        run: |
+          if [ -n "${KRYTEN_ECONOMY_TEST_DSN:-}" ] || [ -n "${KRYTEN_ECONOMY_PG_DSN:-}" ]; then
+            echo "FATAL: a PostgreSQL DSN is set; this job must run without one" >&2
+            exit 1
+          fi
+
+      - name: Run suite, skipping postgres tests
+        run: uv run pytest -m "not postgres" -v
+
+      - name: Verify the postgres tests exist and were deselected, not deleted
+        run: |
+          COUNT=$(uv run pytest -m postgres --collect-only -q 2>/dev/null | tail -n1 | grep -oE '[0-9]+' | head -n1)
+          if [ -z "$COUNT" ] || [ "$COUNT" -lt 1 ]; then
+            echo "FATAL: no postgres-marked tests were found; the marker is misconfigured" >&2
+            exit 1
+          fi
+          echo "postgres-marked tests present: $COUNT"

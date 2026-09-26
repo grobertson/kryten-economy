@@ -273,7 +273,13 @@ class GamblingEngine:
                 message=error,
             )
 
-        success = await self._db.atomic_debit(username, channel, wager)
+        success = await self._db.atomic_debit(
+            username,
+            channel,
+            wager,
+            tx_type="wager_spin",
+            trigger_id="gambling.spin",
+        )
         if not success:
             return GambleResult(
                 outcome=GambleOutcome.LOSS,
@@ -322,9 +328,7 @@ class GamblingEngine:
             else self._generate_loss_display(result_entry.symbols)
         )
 
-        announce = (
-            cfg.announce_jackpots_public and payout >= cfg.jackpot_announce_threshold
-        )
+        announce = cfg.announce_jackpots_public and payout >= cfg.jackpot_announce_threshold
 
         # Record stats
         now = datetime.now(timezone.utc)
@@ -350,7 +354,9 @@ class GamblingEngine:
         elif net == 0:
             message = f"🎰 {display} — Push. Balance: {balance} {self._symbol}"
         else:
-            message = f"🎰 {display} — Loss. -{wager} {self._symbol}. Balance: {balance} {self._symbol}"
+            message = (
+                f"🎰 {display} — Loss. -{wager} {self._symbol}. Balance: {balance} {self._symbol}"
+            )
 
         return GambleResult(
             outcome=outcome,
@@ -391,7 +397,13 @@ class GamblingEngine:
                 message=error,
             )
 
-        success = await self._db.atomic_debit(username, channel, wager)
+        success = await self._db.atomic_debit(
+            username,
+            channel,
+            wager,
+            tx_type="wager_flip",
+            trigger_id="gambling.flip",
+        )
         if not success:
             return GambleResult(
                 outcome=GambleOutcome.LOSS,
@@ -587,7 +599,13 @@ class GamblingEngine:
         if existing:
             return f"You already have a pending challenge with {target}."
 
-        success = await self._db.atomic_debit(challenger, channel, wager)
+        success = await self._db.atomic_debit(
+            challenger,
+            channel,
+            wager,
+            tx_type="wager_challenge",
+            trigger_id="gambling.challenge",
+        )
         if not success:
             return "Insufficient funds."
 
@@ -628,7 +646,13 @@ class GamblingEngine:
             await self._expire_challenge(challenge_id, challenger, channel, wager)
             return ("That challenge has expired.", None, None)
 
-        success = await self._db.atomic_debit(target, channel, wager)
+        success = await self._db.atomic_debit(
+            target,
+            channel,
+            wager,
+            tx_type="wager_challenge",
+            trigger_id="gambling.challenge.accept",
+        )
         if not success:
             return ("You can't afford the wager anymore.", None, None)
 
@@ -681,9 +705,7 @@ class GamblingEngine:
 
         await self._db.resolve_challenge(challenge_id, "accepted")
 
-        winner_bal = (await self._db.get_account(winner, channel) or {}).get(
-            "balance", 0
-        )
+        winner_bal = (await self._db.get_account(winner, channel) or {}).get("balance", 0)
         loser_bal = (await self._db.get_account(loser, channel) or {}).get("balance", 0)
 
         target_msg = (
@@ -722,11 +744,10 @@ class GamblingEngine:
         wager = challenge["wager"]
         challenge_id = challenge["id"]
 
-        await self._db.credit(
+        await self._db.refund(
             challenger,
             channel,
             wager,
-            tx_type="gamble_win",
             trigger_id="gambling.challenge.refund",
             reason=f"Challenge declined by {target}",
         )
@@ -745,11 +766,10 @@ class GamblingEngine:
         wager: int,
     ) -> None:
         """Expire a timed-out challenge and refund the challenger."""
-        await self._db.credit(
+        await self._db.refund(
             challenger,
             channel,
             wager,
-            tx_type="gamble_win",
             trigger_id="gambling.challenge.refund",
             reason="Challenge expired",
         )
@@ -766,11 +786,10 @@ class GamblingEngine:
             if challenge.get("channel") != channel:
                 continue
             # Refund challenger
-            await self._db.credit(
+            await self._db.refund(
                 challenge["challenger"],
                 channel,
                 challenge["wager"],
-                tx_type="gamble_win",
                 trigger_id="gambling.challenge.refund",
                 reason="Challenge expired",
             )
@@ -838,7 +857,13 @@ class GamblingEngine:
         if error:
             return error
 
-        success = await self._db.atomic_debit(username, channel, wager)
+        success = await self._db.atomic_debit(
+            username,
+            channel,
+            wager,
+            tx_type="wager_heist",
+            trigger_id="gambling.heist.start",
+        )
         if not success:
             return "Insufficient funds."
 
@@ -866,7 +891,13 @@ class GamblingEngine:
         if datetime.now(timezone.utc) > heist.expires_at:
             return "The join window has closed."
 
-        success = await self._db.atomic_debit(username, channel, wager)
+        success = await self._db.atomic_debit(
+            username,
+            channel,
+            wager,
+            tx_type="wager_heist",
+            trigger_id="gambling.heist.join",
+        )
         if not success:
             return "Insufficient funds."
 
@@ -914,11 +945,10 @@ class GamblingEngine:
         if crew_size < cfg.min_participants:
             per_user_pm: dict[str, str] = {}
             for user, wager in heist.participants.items():
-                await self._db.credit(
+                await self._db.refund(
                     user,
                     channel,
                     wager,
-                    tx_type="gamble_win",
                     trigger_id="gambling.heist.refund",
                     reason="Heist cancelled — not enough participants",
                 )
@@ -988,15 +1018,18 @@ class GamblingEngine:
 
         elif roll < cfg.success_chance + cfg.push_chance:
             # ── PUSH — refund minus fee ──
+            # The fee is genuinely consumed, so it stays counted as spent: only
+            # the returned portion unwinds the wager via ``refund``. Crediting the
+            # full refund-minus-fee through ``refund`` would wrongly discount the
+            # fee out of ``lifetime_spent``.
             fee_pct = cfg.push_fee_pct
             per_user_pm = {}
             for user, wager in heist.participants.items():
                 refund = int(wager * (1.0 - fee_pct))
-                await self._db.credit(
+                await self._db.refund(
                     user,
                     channel,
                     refund,
-                    tx_type="gamble_win",
                     trigger_id="gambling.heist.push",
                     reason="Heist push — partial refund",
                 )
@@ -1010,8 +1043,7 @@ class GamblingEngine:
                     biggest_loss=loss,
                 )
                 per_user_pm[user] = (
-                    f"↩️ Heist pushed. You got back {refund:,} {self._symbol} "
-                    f"(-{loss:,} fee)."
+                    f"↩️ Heist pushed. You got back {refund:,} {self._symbol} " f"(-{loss:,} fee)."
                 )
 
             random_user = random.choice(participants)
@@ -1034,9 +1066,7 @@ class GamblingEngine:
                     biggest_win=0,
                     biggest_loss=wager,
                 )
-                per_user_pm[user] = (
-                    f"❌ Heist failed. You lost {wager:,} {self._symbol}."
-                )
+                per_user_pm[user] = f"❌ Heist failed. You lost {wager:,} {self._symbol}."
 
             random_user = random.choice(participants)
             lose_line = self._narrator.get_lose_line(

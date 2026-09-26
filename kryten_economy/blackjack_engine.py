@@ -258,7 +258,13 @@ class BlackjackEngine:
             if count_today >= cfg.daily_limit:
                 return f"Daily blackjack limit reached ({cfg.daily_limit}/day)."
 
-        success = await self._db.atomic_debit(username, channel, wager)
+        success = await self._db.atomic_debit(
+            username,
+            channel,
+            wager,
+            tx_type="wager_blackjack",
+            trigger_id="gambling.blackjack",
+        )
         if not success:
             return "Insufficient funds."
 
@@ -345,7 +351,13 @@ class BlackjackEngine:
         if not account or account.get("balance", 0) < game.wager:
             return f"Insufficient funds to double down. Need {game.wager} {self._symbol} more."
 
-        success = await self._db.atomic_debit(username, channel, game.wager)
+        success = await self._db.atomic_debit(
+            username,
+            channel,
+            game.wager,
+            tx_type="wager_blackjack_double",
+            trigger_id="gambling.blackjack.double",
+        )
         if not success:
             return "Insufficient funds to double down."
 
@@ -436,12 +448,8 @@ class BlackjackEngine:
             biggest_win=max(0, net),
             biggest_loss=abs(min(0, net)),
         )
-        await self._db.increment_lifetime_gambled(
-            game.username, game.channel, wager, payout
-        )
-        await self._db.increment_daily_gambled(
-            game.username, game.channel, today, wager, payout
-        )
+        await self._db.increment_lifetime_gambled(game.username, game.channel, wager, payout)
+        await self._db.increment_daily_gambled(game.username, game.channel, today, wager, payout)
         await self._db.update_blackjack_stats(
             game.username,
             game.channel,
@@ -464,9 +472,7 @@ class BlackjackEngine:
         lines.append(f"Dealer: {game.dealer_hand.display_with_value()}")
 
         if outcome == BJOutcome.BLACKJACK:
-            lines.append(
-                f"🎉 BLACKJACK! +{net:,} {self._symbol} ({cfg.blackjack_payout}:1)"
-            )
+            lines.append(f"🎉 BLACKJACK! +{net:,} {self._symbol} ({cfg.blackjack_payout}:1)")
         elif outcome == BJOutcome.WIN:
             lines.append(f"✅ You win! +{net:,} {self._symbol}")
         elif outcome == BJOutcome.PUSH:

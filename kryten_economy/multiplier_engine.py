@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from .config import EconomyConfig
@@ -35,9 +35,7 @@ class MultiplierEngine:
         # Ad-hoc event state (set by admin commands)
         self._adhoc_event: dict | None = None  # {name, multiplier, end_time}
         # Scheduled event state (set by ScheduledEventManager)
-        self._scheduled_events: dict[str, dict] = (
-            {}
-        )  # channel → {name, multiplier, end_time}
+        self._scheduled_events: dict[str, dict] = {}  # channel → {name, multiplier, end_time}
 
     def update_config(self, new_config) -> None:
         """Hot-swap the config reference."""
@@ -142,6 +140,15 @@ class MultiplierEngine:
         """Deregister the active scheduled event."""
         self._scheduled_events.pop(channel, None)
 
+    def get_scheduled_event(self, channel: str) -> dict[str, Any] | None:
+        """Return a copy of the scheduled event state for a channel."""
+        event = self._scheduled_events.get(channel)
+        return dict(event) if event else None
+
+    def get_adhoc_event(self) -> dict[str, Any] | None:
+        """Return a copy of the current ad-hoc event state."""
+        return dict(self._adhoc_event) if self._adhoc_event else None
+
     def _get_scheduled_multiplier(self, channel: str) -> ActiveMultiplier | None:
         """Check for an active scheduled event."""
         ev = self._scheduled_events.get(channel)
@@ -167,8 +174,7 @@ class MultiplierEngine:
         self._adhoc_event = {
             "name": name,
             "multiplier": multiplier,
-            "end_time": datetime.now(timezone.utc)
-            + timedelta(minutes=duration_minutes),
+            "end_time": datetime.now(timezone.utc) + timedelta(minutes=duration_minutes),
         }
 
     def stop_adhoc_event(self) -> bool:

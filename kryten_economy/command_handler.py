@@ -6,7 +6,6 @@ and admin tooling.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 import logging
 import math
@@ -249,30 +248,7 @@ class CommandHandler:
         limit = int(request.get("limit", 50))
         limit = max(1, min(limit, 200))
 
-        loop = asyncio.get_running_loop()
-
-        def _sync() -> list[dict[str, Any]]:
-            conn = self._app.db._get_connection()  # noqa: SLF001
-            try:
-                if pattern:
-                    rows = conn.execute(
-                        "SELECT username, balance, lifetime_earned, rank_name "
-                        "FROM accounts WHERE channel = ? AND username LIKE ? "
-                        "ORDER BY balance DESC LIMIT ?",
-                        (channel, f"%{pattern}%", limit),
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        "SELECT username, balance, lifetime_earned, rank_name "
-                        "FROM accounts WHERE channel = ? "
-                        "ORDER BY balance DESC LIMIT ?",
-                        (channel, limit),
-                    ).fetchall()
-                return [dict(r) for r in rows]
-            finally:
-                conn.close()
-
-        results = await loop.run_in_executor(None, _sync)
+        results = await self._app.db.search_accounts(channel, pattern, limit)
         return {
             "channel": channel,
             "pattern": pattern,
@@ -280,9 +256,7 @@ class CommandHandler:
             "results": results,
         }
 
-    async def _handle_transactions_list(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_transactions_list(self, request: dict[str, Any]) -> dict[str, Any]:
         username = self._username(request)
         channel = self._channel(request)
         limit = int(request.get("limit", 50))
@@ -290,22 +264,12 @@ class CommandHandler:
         limit = max(1, min(limit, 500))
         offset = max(0, offset)
 
-        loop = asyncio.get_running_loop()
-
-        def _sync() -> list[dict[str, Any]]:
-            conn = self._app.db._get_connection()  # noqa: SLF001
-            try:
-                rows = conn.execute(
-                    "SELECT * FROM transactions "
-                    "WHERE username = ? AND channel = ? "
-                    "ORDER BY id DESC LIMIT ? OFFSET ?",
-                    (username, channel, limit, offset),
-                ).fetchall()
-                return [dict(r) for r in rows]
-            finally:
-                conn.close()
-
-        transactions = await loop.run_in_executor(None, _sync)
+        transactions = await self._app.db.get_recent_transactions(
+            username,
+            channel,
+            limit=limit,
+            offset=offset,
+        )
         return {
             "username": username,
             "channel": channel,
@@ -314,28 +278,12 @@ class CommandHandler:
             "transactions": transactions,
         }
 
-    async def _handle_transactions_recent(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_transactions_recent(self, request: dict[str, Any]) -> dict[str, Any]:
         channel = self._channel(request)
         limit = int(request.get("limit", 50))
         limit = max(1, min(limit, 500))
 
-        loop = asyncio.get_running_loop()
-
-        def _sync() -> list[dict[str, Any]]:
-            conn = self._app.db._get_connection()  # noqa: SLF001
-            try:
-                rows = conn.execute(
-                    "SELECT * FROM transactions "
-                    "WHERE channel = ? ORDER BY id DESC LIMIT ?",
-                    (channel, limit),
-                ).fetchall()
-                return [dict(r) for r in rows]
-            finally:
-                conn.close()
-
-        transactions = await loop.run_in_executor(None, _sync)
+        transactions = await self._app.db.get_recent_channel_transactions(channel, limit)
         return {
             "channel": channel,
             "limit": limit,
@@ -346,9 +294,7 @@ class CommandHandler:
     #  Sprint 5: Queue Spending Commands
     # ══════════════════════════════════════════════════════════
 
-    async def _handle_spending_queue_preview(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_spending_queue_preview(self, request: dict[str, Any]) -> dict[str, Any]:
         """Read-only cost estimate. No state changed."""
         username = self._username(request)
         channel = self._channel(request)
@@ -361,9 +307,7 @@ class CommandHandler:
         db = self._app.db
 
         # --- Pricing ---
-        tier_label, base_cost, inflated_cost = engine.get_effective_price_tier(
-            duration_sec
-        )
+        tier_label, base_cost, inflated_cost = engine.get_effective_price_tier(duration_sec)
         account = await db.get_account(username, channel)
         rank_index = engine.get_rank_tier_index(account) if account else 0
         final_cost, discount_frac = engine.apply_discount(inflated_cost, rank_index)
@@ -400,9 +344,7 @@ class CommandHandler:
 
         # 3. Balance
         if error_code is None:
-            outcome = await engine.validate_spend(
-                username, channel, final_cost, "queue"
-            )
+            outcome = await engine.validate_spend(username, channel, final_cost, "queue")
             if outcome is not None:
                 error_code = "insufficient_balance"
 
@@ -448,9 +390,7 @@ class CommandHandler:
             }
 
         # --- Pricing ---
-        tier_label, base_cost, inflated_cost = engine.get_effective_price_tier(
-            duration_sec
-        )
+        tier_label, base_cost, inflated_cost = engine.get_effective_price_tier(duration_sec)
         account = await db.get_account(username, channel)
         rank_index = engine.get_rank_tier_index(account) if account else 0
         final_cost, _ = engine.apply_discount(inflated_cost, rank_index)
@@ -524,9 +464,7 @@ class CommandHandler:
             "request_id": request_id,
         }
 
-    async def _handle_spending_queue_refund(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_spending_queue_refund(self, request: dict[str, Any]) -> dict[str, Any]:
         """Compensating credit. Idempotent via request_id."""
         username = self._username(request)
         channel = self._channel(request)
@@ -625,8 +563,7 @@ class CommandHandler:
             "accounts": accounts,
             "totals": daily,
             "gambling": gambling,
-            "net_flow_today": int(daily.get("z_earned", 0))
-            - int(daily.get("z_spent", 0)),
+            "net_flow_today": int(daily.get("z_earned", 0)) - int(daily.get("z_spent", 0)),
         }
 
     async def _handle_stats_health(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -638,9 +575,7 @@ class CommandHandler:
         circulation = await self._app.db.get_total_circulation(channel)
         median = await self._app.db.get_median_balance(channel)
         accounts = await self._app.db.get_account_count(channel)
-        active_today = await self._app.db.get_active_economy_users_today(
-            channel, today.isoformat()
-        )
+        active_today = await self._app.db.get_active_economy_users_today(channel, today.isoformat())
         daily = await self._app.db.get_daily_totals(channel, today.isoformat())
         weekly = await self._app.db.get_weekly_totals(channel, week_start, week_end)
 
@@ -700,10 +635,7 @@ class CommandHandler:
             if component and hasattr(component, "update_config"):
                 component.update_config(new_config)
 
-        if hasattr(self._app, "_ignored_users"):
-            self._app._ignored_users = {  # noqa: SLF001
-                u.lower() for u in (new_config.ignored_users or [])
-            }
+        self._app.update_ignored_users(new_config.ignored_users or [])
 
         return {
             "reloaded": True,
@@ -754,9 +686,7 @@ class CommandHandler:
         now = datetime.now(timezone.utc)
         active = []
 
-        sched = self._app.multiplier_engine._scheduled_events.get(
-            channel
-        )  # noqa: SLF001
+        sched = self._app.multiplier_engine.get_scheduled_event(channel)
         if sched and now < sched["end_time"]:
             active.append(
                 {
@@ -767,7 +697,7 @@ class CommandHandler:
                 }
             )
 
-        adhoc = self._app.multiplier_engine._adhoc_event  # noqa: SLF001
+        adhoc = self._app.multiplier_engine.get_adhoc_event()
         if adhoc and now < adhoc["end_time"]:
             active.append(
                 {
@@ -873,7 +803,7 @@ class CommandHandler:
         if rank_engine is not None:
             tier_index, current_tier = rank_engine.get_rank_for_lifetime(lifetime)
             next_tier = rank_engine.get_next_tier(tier_index)
-            tier_count = len(rank_engine._tiers)  # noqa: SLF001
+            tier_count = rank_engine.get_tier_count()
             perks = list(current_tier.perks)
             if spending is not None:
                 discount_fraction = spending.get_rank_discount(tier_index)
@@ -936,9 +866,7 @@ class CommandHandler:
                     else greeting_cfg.cost
                 ),
                 "custom_color": (
-                    spending.get_vanity_item_price(color_cfg.cost)
-                    if spending
-                    else color_cfg.cost
+                    spending.get_vanity_item_price(color_cfg.cost) if spending else color_cfg.cost
                 ),
                 "shoutout": (
                     spending.get_vanity_item_price(shoutout_cfg.cost)
@@ -1010,9 +938,7 @@ class CommandHandler:
             "new_balance": new_balance,
         }
 
-    async def _handle_vanity_set_greeting(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_vanity_set_greeting(self, request: dict[str, Any]) -> dict[str, Any]:
         username = self._username(request)
         channel = self._channel(request)
         value = str(request.get("value", "")).strip()
@@ -1092,9 +1018,7 @@ class CommandHandler:
             )
         return result
 
-    async def _handle_vanity_check_color(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_vanity_check_color(self, request: dict[str, Any]) -> dict[str, Any]:
         """Read-only readability check for a candidate chat color.
 
         Lets the dashboard preview/validate a color server-side (single source
@@ -1187,9 +1111,7 @@ class CommandHandler:
             hex_value = _normalize_hex_color(value)
             if hex_value is None:
                 continue
-            await self._app.db.set_vanity_item(
-                display, channel, "chat_color", hex_value
-            )
+            await self._app.db.set_vanity_item(display, channel, "chat_color", hex_value)
             imported += 1
         if imported:
             self._logger.info(
@@ -1312,9 +1234,7 @@ class CommandHandler:
             item_type,
         )
 
-    async def _handle_vanity_resync_colors(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_vanity_resync_colors(self, request: dict[str, Any]) -> dict[str, Any]:
         """Ops command: import pre-existing CSS colors into the DB and re-apply.
 
         Lets an operator import the channel's hand-maintained chat colors into
@@ -1328,18 +1248,14 @@ class CommandHandler:
         domain = self._domain_for_channel(channel)
         existing = await self._client.get_state_channel_css(channel, domain=domain)
         if not existing.strip():
-            raise ValueError(
-                "Channel CSS is empty or unavailable; cannot resync colors."
-            )
+            raise ValueError("Channel CSS is empty or unavailable; cannot resync colors.")
 
         protected = self._chat_color_protected_users()
         imported = await self._import_legacy_chat_colors(channel, existing, protected)
 
         applied = False
         if bool(request.get("apply", True)) and cfg.apply_css:
-            outcome = await self._apply_chat_color_css(
-                channel, self._app.config.bot.username
-            )
+            outcome = await self._apply_chat_color_css(channel, self._app.config.bot.username)
             applied = outcome in ("applied", "noop")
 
         total = len(await self._app.db.get_users_with_chat_colors(channel))
@@ -1502,16 +1418,12 @@ class CommandHandler:
         await self._client.send_chat(channel, message)
         return {"channel": channel, "sent": True}
 
-    async def _handle_approval_approve_gif(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_approval_approve_gif(self, request: dict[str, Any]) -> dict[str, Any]:
         username = self._username(request)
         channel = self._channel(request)
         admin = str(request.get("admin", "system"))
 
-        pending = await self._app.db.get_pending_approval(
-            username, channel, "channel_gif"
-        )
+        pending = await self._app.db.get_pending_approval(username, channel, "channel_gif")
         if not pending:
             raise ValueError(f"No pending GIF approval for {username}")
 
@@ -1525,16 +1437,12 @@ class CommandHandler:
             "approved": True,
         }
 
-    async def _handle_approval_reject_gif(
-        self, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_approval_reject_gif(self, request: dict[str, Any]) -> dict[str, Any]:
         username = self._username(request)
         channel = self._channel(request)
         admin = str(request.get("admin", "system"))
 
-        pending = await self._app.db.get_pending_approval(
-            username, channel, "channel_gif"
-        )
+        pending = await self._app.db.get_pending_approval(username, channel, "channel_gif")
         if not pending:
             raise ValueError(f"No pending GIF approval for {username}")
 

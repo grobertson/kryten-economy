@@ -41,9 +41,20 @@ metrics:
 # =====================================================================
 
 # -- Database ---------------------------------------------------------
-# Path to the SQLite database file (relative to working directory).
+# SQLite is the only operational data layer while PostgreSQL migration
+# work is in progress. Do not set backend: postgres for production use.
 database:
-  path: economy-dev.db
+  backend: "sqlite"
+  path: economy-dev.db          # sqlite only
+  postgres:                     # migration scaffolding; postgres only
+    dsn_env: "KRYTEN_ECONOMY_DSN" # full DSN env var; highest precedence
+    host: "localhost"
+    port: 5432
+    user: "kryten"
+    dbname: "kryten_economy"
+    password_env: "KRYTEN_ECONOMY_PG_PASSWORD" # preferred over password
+    pool_min_size: 1
+    pool_max_size: 8
 
 # -- Currency ---------------------------------------------------------
 # Name and symbol for the channel virtual currency.
@@ -700,9 +711,7 @@ commands:
   rate_limit_per_minute: 10
 """
 
-with open(
-    r"D:\Devel\Kryten-Ecosystem\kryten-economy\config.yaml", "w", encoding="utf-8"
-) as f:
+with open(r"D:\Devel\Kryten-Ecosystem\kryten-economy\config.yaml", "w", encoding="utf-8") as f:
     f.write(content)
 
 print(f"Written successfully — {content.count(chr(10))} lines")
