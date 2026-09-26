@@ -40,7 +40,9 @@ class PostgresConfig(BaseModel):
     def validate_pool_bounds(self) -> PostgresConfig:
         """Ensure asyncpg receives a usable pool-size range."""
         if self.pool_min_size > self.pool_max_size:
-            raise ValueError("pool_min_size must be less than or equal to pool_max_size")
+            raise ValueError(
+                "pool_min_size must be less than or equal to pool_max_size"
+            )
         return self
 
 
@@ -78,7 +80,9 @@ class NightWatchConfig(BaseModel):
     """Night-watch multiplier for off-peak presence earning."""
 
     enabled: bool = False
-    hours: list[int] = Field(default=[2, 3, 4, 5, 6, 7], description="UTC hours (24h format)")
+    hours: list[int] = Field(
+        default=[2, 3, 4, 5, 6, 7], description="UTC hours (24h format)"
+    )
     multiplier: float = 1.5
 
 
@@ -116,12 +120,16 @@ class WeekendBridgeConfig(BaseModel):
     enabled: bool = True
     bonus: int = 500
     announce_on_weekend: bool = True
-    message: str = "Connect any weekday this week for a {amount} {currency} bridge bonus!"
+    message: str = (
+        "Connect any weekday this week for a {amount} {currency} bridge bonus!"
+    )
 
 
 class StreaksConfig(BaseModel):
     daily: DailyStreakConfig = Field(default_factory=DailyStreakConfig)
-    weekend_weekday_bridge: WeekendBridgeConfig = Field(default_factory=WeekendBridgeConfig)
+    weekend_weekday_bridge: WeekendBridgeConfig = Field(
+        default_factory=WeekendBridgeConfig
+    )
 
 
 class RainConfig(BaseModel):
@@ -214,7 +222,9 @@ class InactivityNudgeConfig(BaseModel):
 
 class RetentionConfig(BaseModel):
     welcome_back: WelcomeBackConfig = Field(default_factory=WelcomeBackConfig)
-    inactivity_nudge: InactivityNudgeConfig = Field(default_factory=InactivityNudgeConfig)
+    inactivity_nudge: InactivityNudgeConfig = Field(
+        default_factory=InactivityNudgeConfig
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -269,7 +279,9 @@ class ChatTriggersConfig(BaseModel):
     long_message: LongMessageTrigger = Field(default_factory=LongMessageTrigger)
     laugh_received: LaughReceivedTrigger = Field(default_factory=LaughReceivedTrigger)
     kudos_received: KudosReceivedTrigger = Field(default_factory=KudosReceivedTrigger)
-    first_message_of_day: FirstMessageOfDayTrigger = Field(default_factory=FirstMessageOfDayTrigger)
+    first_message_of_day: FirstMessageOfDayTrigger = Field(
+        default_factory=FirstMessageOfDayTrigger
+    )
     conversation_starter: ConversationStarterTrigger = Field(
         default_factory=ConversationStarterTrigger
     )
@@ -310,7 +322,9 @@ class ContentTriggersConfig(BaseModel):
         default_factory=CommentDuringMediaTrigger
     )
     like_current: LikeCurrentTrigger = Field(default_factory=LikeCurrentTrigger)
-    survived_full_media: SurvivedFullMediaTrigger = Field(default_factory=SurvivedFullMediaTrigger)
+    survived_full_media: SurvivedFullMediaTrigger = Field(
+        default_factory=SurvivedFullMediaTrigger
+    )
     present_at_event_start: PresentAtEventStartTrigger = Field(
         default_factory=PresentAtEventStartTrigger
     )
@@ -339,9 +353,15 @@ class BotInteractionTrigger(BaseModel):
 
 
 class SocialTriggersConfig(BaseModel):
-    greeted_newcomer: GreetedNewcomerTrigger = Field(default_factory=GreetedNewcomerTrigger)
-    mentioned_by_other: MentionedByOtherTrigger = Field(default_factory=MentionedByOtherTrigger)
-    bot_interaction: BotInteractionTrigger = Field(default_factory=BotInteractionTrigger)
+    greeted_newcomer: GreetedNewcomerTrigger = Field(
+        default_factory=GreetedNewcomerTrigger
+    )
+    mentioned_by_other: MentionedByOtherTrigger = Field(
+        default_factory=MentionedByOtherTrigger
+    )
+    bot_interaction: BotInteractionTrigger = Field(
+        default_factory=BotInteractionTrigger
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -425,10 +445,14 @@ class HeistLLMConfig(BaseModel):
         ),
         description="System prompt sent to the LLM",
     )
-    temperature: float = Field(default=1.0, description="LLM sampling temperature (0.0–2.0)")
+    temperature: float = Field(
+        default=1.0, description="LLM sampling temperature (0.0–2.0)"
+    )
     max_tokens: int = Field(default=600, description="Max tokens in LLM response")
     timeout_seconds: int = Field(default=10, description="HTTP timeout per request")
-    max_retries: int = Field(default=1, description="Retry count on failure before falling back")
+    max_retries: int = Field(
+        default=1, description="Retry count on failure before falling back"
+    )
 
 
 class HeistNarrativeConfig(BaseModel):
@@ -553,10 +577,14 @@ class RaceLLMConfig(BaseModel):
         ),
         description="System prompt sent to the LLM",
     )
-    temperature: float = Field(default=1.0, description="LLM sampling temperature (0.0–2.0)")
+    temperature: float = Field(
+        default=1.0, description="LLM sampling temperature (0.0–2.0)"
+    )
     max_tokens: int = Field(default=400, description="Max tokens in LLM response")
     timeout_seconds: int = Field(default=10, description="HTTP timeout per request")
-    max_retries: int = Field(default=1, description="Retry count on failure before falling back")
+    max_retries: int = Field(
+        default=1, description="Retry count on failure before falling back"
+    )
 
 
 class RaceCommentaryConfig(BaseModel):
@@ -629,9 +657,15 @@ class RaceConfig(BaseModel):
         default_factory=lambda: [
             RaceOddsProfileConfig(
                 racers=[
-                    RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.26, speed_base=1.4),
-                    RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.19, speed_base=1.25),
-                    RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.15, speed_base=1.1),
+                    RacerProfileConfig(
+                        color="Blue", emoji="🔵", win_chance=0.26, speed_base=1.4
+                    ),
+                    RacerProfileConfig(
+                        color="Red", emoji="🔴", win_chance=0.19, speed_base=1.25
+                    ),
+                    RacerProfileConfig(
+                        color="Green", emoji="🟢", win_chance=0.15, speed_base=1.1
+                    ),
                     RacerProfileConfig(
                         color="Yellow", emoji="🟡", win_chance=0.11, speed_base=0.98
                     ),
@@ -641,34 +675,68 @@ class RaceConfig(BaseModel):
                     RacerProfileConfig(
                         color="Orange", emoji="🟠", win_chance=0.08, speed_base=0.78
                     ),
-                    RacerProfileConfig(color="Brown", emoji="🟤", win_chance=0.07, speed_base=0.7),
-                    RacerProfileConfig(color="White", emoji="⚪", win_chance=0.05, speed_base=0.62),
+                    RacerProfileConfig(
+                        color="Brown", emoji="🟤", win_chance=0.07, speed_base=0.7
+                    ),
+                    RacerProfileConfig(
+                        color="White", emoji="⚪", win_chance=0.05, speed_base=0.62
+                    ),
                 ]
             ),
             RaceOddsProfileConfig(
                 racers=[
-                    RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.24, speed_base=1.35),
-                    RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.19, speed_base=1.2),
-                    RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.15, speed_base=1.1),
-                    RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.12, speed_base=1.0),
-                    RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.10, speed_base=0.9),
+                    RacerProfileConfig(
+                        color="Red", emoji="🔴", win_chance=0.24, speed_base=1.35
+                    ),
+                    RacerProfileConfig(
+                        color="Green", emoji="🟢", win_chance=0.19, speed_base=1.2
+                    ),
+                    RacerProfileConfig(
+                        color="Blue", emoji="🔵", win_chance=0.15, speed_base=1.1
+                    ),
+                    RacerProfileConfig(
+                        color="Purple", emoji="🟣", win_chance=0.12, speed_base=1.0
+                    ),
+                    RacerProfileConfig(
+                        color="Orange", emoji="🟠", win_chance=0.10, speed_base=0.9
+                    ),
                     RacerProfileConfig(
                         color="Yellow", emoji="🟡", win_chance=0.08, speed_base=0.82
                     ),
-                    RacerProfileConfig(color="Brown", emoji="🟤", win_chance=0.07, speed_base=0.72),
-                    RacerProfileConfig(color="White", emoji="⚪", win_chance=0.05, speed_base=0.64),
+                    RacerProfileConfig(
+                        color="Brown", emoji="🟤", win_chance=0.07, speed_base=0.72
+                    ),
+                    RacerProfileConfig(
+                        color="White", emoji="⚪", win_chance=0.05, speed_base=0.64
+                    ),
                 ]
             ),
             RaceOddsProfileConfig(
                 racers=[
-                    RacerProfileConfig(color="Green", emoji="🟢", win_chance=0.22, speed_base=1.3),
-                    RacerProfileConfig(color="Yellow", emoji="🟡", win_chance=0.18, speed_base=1.2),
-                    RacerProfileConfig(color="Purple", emoji="🟣", win_chance=0.15, speed_base=1.1),
-                    RacerProfileConfig(color="Red", emoji="🔴", win_chance=0.12, speed_base=1.0),
-                    RacerProfileConfig(color="Orange", emoji="🟠", win_chance=0.11, speed_base=0.9),
-                    RacerProfileConfig(color="Blue", emoji="🔵", win_chance=0.09, speed_base=0.8),
-                    RacerProfileConfig(color="Brown", emoji="🟤", win_chance=0.08, speed_base=0.72),
-                    RacerProfileConfig(color="White", emoji="⚪", win_chance=0.05, speed_base=0.62),
+                    RacerProfileConfig(
+                        color="Green", emoji="🟢", win_chance=0.22, speed_base=1.3
+                    ),
+                    RacerProfileConfig(
+                        color="Yellow", emoji="🟡", win_chance=0.18, speed_base=1.2
+                    ),
+                    RacerProfileConfig(
+                        color="Purple", emoji="🟣", win_chance=0.15, speed_base=1.1
+                    ),
+                    RacerProfileConfig(
+                        color="Red", emoji="🔴", win_chance=0.12, speed_base=1.0
+                    ),
+                    RacerProfileConfig(
+                        color="Orange", emoji="🟠", win_chance=0.11, speed_base=0.9
+                    ),
+                    RacerProfileConfig(
+                        color="Blue", emoji="🔵", win_chance=0.09, speed_base=0.8
+                    ),
+                    RacerProfileConfig(
+                        color="Brown", emoji="🟤", win_chance=0.08, speed_base=0.72
+                    ),
+                    RacerProfileConfig(
+                        color="White", emoji="⚪", win_chance=0.05, speed_base=0.62
+                    ),
                 ]
             ),
         ],
@@ -808,7 +876,9 @@ class ChatColorConfig(BaseModel):
     # an auto-managed block (delimited by the markers below), and pushes it back.
     apply_css: bool = True
     css_selector_template: str = ".chat-msg-{username}"
-    css_block_begin: str = "/* BEGIN kryten-economy vanity colors — auto-managed, do not edit */"
+    css_block_begin: str = (
+        "/* BEGIN kryten-economy vanity colors — auto-managed, do not edit */"
+    )
     css_block_end: str = "/* END kryten-economy vanity colors */"
     # Existing hand-maintained per-user rules use this comment; matching rules
     # are absorbed into the managed block on first apply (no duplicates).
@@ -866,7 +936,9 @@ class DailyFortuneConfig(BaseModel):
 class RenameCurrencyConfig(BaseModel):
     enabled: bool = True
     cost: int = 25000
-    description: str = "Your balance displays with a custom currency name (e.g. 'TacoBucks')"
+    description: str = (
+        "Your balance displays with a custom currency name (e.g. 'TacoBucks')"
+    )
 
 
 class VanityShopConfig(BaseModel):
@@ -884,7 +956,9 @@ class VanityShopConfig(BaseModel):
     channel_gif: ChannelGifConfig = Field(default_factory=ChannelGifConfig)
     shoutout: ShoutoutConfig = Field(default_factory=ShoutoutConfig)
     daily_fortune: DailyFortuneConfig = Field(default_factory=DailyFortuneConfig)
-    rename_currency_personal: RenameCurrencyConfig = Field(default_factory=RenameCurrencyConfig)
+    rename_currency_personal: RenameCurrencyConfig = Field(
+        default_factory=RenameCurrencyConfig
+    )
 
 
 class TippingConfig(BaseModel):
@@ -928,8 +1002,12 @@ class RanksConfig(BaseModel):
     tiers: list[RankTierConfig] = Field(
         default_factory=lambda: [
             RankTierConfig(name="Extra", min_lifetime_earned=0),
-            RankTierConfig(name="Grip", min_lifetime_earned=1000, perks=["1 free daily fortune"]),
-            RankTierConfig(name="Key Grip", min_lifetime_earned=5000, perks=["2% spend discount"]),
+            RankTierConfig(
+                name="Grip", min_lifetime_earned=1000, perks=["1 free daily fortune"]
+            ),
+            RankTierConfig(
+                name="Key Grip", min_lifetime_earned=5000, perks=["2% spend discount"]
+            ),
             RankTierConfig(
                 name="Gaffer",
                 min_lifetime_earned=15000,
@@ -1068,7 +1146,9 @@ class AdminConfig(BaseModel):
 
 class AnnouncementTemplatesConfig(BaseModel):
     queue: str = '🎬 {user} just queued "{title}"! ({cost} {currency})'
-    now_playing_credit: str = '🎬 Now playing: "{title}" — hat tip to {user} for the queue! 🎩'
+    now_playing_credit: str = (
+        '🎬 Now playing: "{title}" — hat tip to {user} for the queue! 🎩'
+    )
     jackpot: str = "🎰 JACKPOT! {user} just won {amount} {currency}!"
     rank_up: str = "⭐ {user} is now a {rank}!"
     streak: str = "🔥 {user} hit a {days}-day streak!"
@@ -1092,7 +1172,9 @@ class AnnouncementsConfig(BaseModel):
     daily_champion: bool = True
     streak_milestone: bool = True
     custom_greeting: bool = True
-    templates: AnnouncementTemplatesConfig = Field(default_factory=AnnouncementTemplatesConfig)
+    templates: AnnouncementTemplatesConfig = Field(
+        default_factory=AnnouncementTemplatesConfig
+    )
 
 
 class UserDigestConfig(BaseModel):
@@ -1149,7 +1231,9 @@ class EconomyConfig(KrytenConfig):
     # Sprint 2 — Streaks, Milestones & Dwell
     streaks: StreaksConfig = Field(default_factory=StreaksConfig)
     rain: RainConfig = Field(default_factory=RainConfig)
-    balance_maintenance: BalanceMaintenanceConfig = Field(default_factory=BalanceMaintenanceConfig)
+    balance_maintenance: BalanceMaintenanceConfig = Field(
+        default_factory=BalanceMaintenanceConfig
+    )
     inflation: InflationConfig = Field(default_factory=InflationConfig)
     retention: RetentionConfig = Field(default_factory=RetentionConfig)
 
@@ -1163,7 +1247,9 @@ class EconomyConfig(KrytenConfig):
 
     # Sprint 3 — Chat Earning Triggers
     chat_triggers: ChatTriggersConfig = Field(default_factory=ChatTriggersConfig)
-    content_triggers: ContentTriggersConfig = Field(default_factory=ContentTriggersConfig)
+    content_triggers: ContentTriggersConfig = Field(
+        default_factory=ContentTriggersConfig
+    )
     social_triggers: SocialTriggersConfig = Field(default_factory=SocialTriggersConfig)
 
     # Sprint 4 — Gambling
@@ -1178,7 +1264,9 @@ class EconomyConfig(KrytenConfig):
     # Sprint 6 — Achievements & Ranks
     achievements: list[AchievementConfig] = Field(default_factory=list)
     ranks: RanksConfig = Field(default_factory=RanksConfig)
-    cytube_promotion: CytubePromotionConfig = Field(default_factory=CytubePromotionConfig)
+    cytube_promotion: CytubePromotionConfig = Field(
+        default_factory=CytubePromotionConfig
+    )
 
     # Sprint 7 — Events, Multipliers & Bounties
     daily_competitions: list[CompetitionConfig] = Field(default_factory=list)

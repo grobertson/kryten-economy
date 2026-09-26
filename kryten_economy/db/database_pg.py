@@ -91,7 +91,9 @@ _DAILY_COUNTER_COLUMNS: frozenset[str] = frozenset(
     }
 )
 
-_DAILY_FLAG_COLUMNS: frozenset[str] = frozenset({"first_message_claimed", "free_spin_used"})
+_DAILY_FLAG_COLUMNS: frozenset[str] = frozenset(
+    {"first_message_claimed", "free_spin_used"}
+)
 
 _HOURLY_MILESTONE_HOURS: frozenset[int] = frozenset({1, 3, 6, 12, 24})
 
@@ -135,7 +137,9 @@ def _affected_rows(status: str) -> int:
 class EconomyDatabasePg:
     """asyncpg-backed persistence for the economy microservice."""
 
-    def __init__(self, pool: asyncpg.Pool, logger: logging.Logger | None = None) -> None:
+    def __init__(
+        self, pool: asyncpg.Pool, logger: logging.Logger | None = None
+    ) -> None:
         self._pool = pool
         self._logger = logger or logging.getLogger("economy.database.pg")
 
@@ -154,7 +158,9 @@ class EconomyDatabasePg:
         """
         async with self._pool.acquire() as con:
             await con.execute("SELECT 1")
-        self._logger.info("PostgreSQL economy store connected (schema managed by Alembic)")
+        self._logger.info(
+            "PostgreSQL economy store connected (schema managed by Alembic)"
+        )
 
     # ══════════════════════════════════════════════════════════
     #  Service Metrics
@@ -185,7 +191,9 @@ class EconomyDatabasePg:
     #  Accounts
     # ══════════════════════════════════════════════════════════
 
-    async def _ensure_account(self, con: AcquirableConnection, username: str, channel: str) -> None:
+    async def _ensure_account(
+        self, con: AcquirableConnection, username: str, channel: str
+    ) -> None:
         """Create the account row if absent (mirrors ``INSERT OR IGNORE``)."""
         await con.execute(
             """
@@ -344,7 +352,15 @@ class EconomyDatabasePg:
                 amount,
             )
             await self._log_tx(
-                con, username, channel, amount, tx_type, reason, trigger_id, related_user, metadata
+                con,
+                username,
+                channel,
+                amount,
+                tx_type,
+                reason,
+                trigger_id,
+                related_user,
+                metadata,
             )
         return int(balance)
 
@@ -430,7 +446,15 @@ class EconomyDatabasePg:
                 amount,
             )
             await self._log_tx(
-                con, username, channel, amount, "refund", reason, trigger_id, related_user, metadata
+                con,
+                username,
+                channel,
+                amount,
+                "refund",
+                reason,
+                trigger_id,
+                related_user,
+                metadata,
             )
         return int(balance)
 
@@ -463,7 +487,15 @@ class EconomyDatabasePg:
         """Append a ledger row without changing the balance."""
         async with self._pool.acquire() as con:
             await self._log_tx(
-                con, username, channel, amount, tx_type, reason, trigger_id, related_user, metadata
+                con,
+                username,
+                channel,
+                amount,
+                tx_type,
+                reason,
+                trigger_id,
+                related_user,
+                metadata,
             )
 
     async def atomic_debit(
@@ -578,7 +610,9 @@ class EconomyDatabasePg:
     async def get_account_count(self, channel: str) -> int:
         """Count of accounts in a channel."""
         async with self._pool.acquire() as con:
-            value = await con.fetchval("SELECT COUNT(*) FROM accounts WHERE channel = $1", channel)
+            value = await con.fetchval(
+                "SELECT COUNT(*) FROM accounts WHERE channel = $1", channel
+            )
         return int(value or 0)
 
     async def get_all_accounts_count(self, channel: str) -> int:
@@ -589,7 +623,9 @@ class EconomyDatabasePg:
     #  Onboarding
     # ══════════════════════════════════════════════════════════
 
-    async def claim_welcome_wallet(self, username: str, channel: str, amount: int) -> bool:
+    async def claim_welcome_wallet(
+        self, username: str, channel: str, amount: int
+    ) -> bool:
         """Credit the one-time welcome wallet. Returns False if already claimed."""
         async with self._pool.acquire() as con, con.transaction():
             balance = await con.fetchval(
@@ -622,7 +658,9 @@ class EconomyDatabasePg:
     #  Daily activity
     # ══════════════════════════════════════════════════════════
 
-    async def get_daily_minutes_present(self, username: str, channel: str, date: str) -> int:
+    async def get_daily_minutes_present(
+        self, username: str, channel: str, date: str
+    ) -> int:
         """Minutes present on a given day, or ``0``."""
         async with self._pool.acquire() as con:
             value = await con.fetchval(
@@ -711,26 +749,40 @@ class EconomyDatabasePg:
         async with self._pool.acquire() as con:
             await con.execute(sql, username, channel, to_date(date), payload)
 
-    async def mark_first_message_claimed(self, username: str, channel: str, date: str) -> None:
+    async def mark_first_message_claimed(
+        self, username: str, channel: str, date: str
+    ) -> None:
         """Record that the user claimed the first-message-of-day bonus."""
         await self._set_daily_flag(username, channel, date, "first_message_claimed")
 
-    async def increment_daily_messages_sent(self, username: str, channel: str, date: str) -> None:
+    async def increment_daily_messages_sent(
+        self, username: str, channel: str, date: str
+    ) -> None:
         await self._bump_daily(username, channel, date, "messages_sent", increment=1)
 
-    async def increment_daily_long_messages(self, username: str, channel: str, date: str) -> None:
+    async def increment_daily_long_messages(
+        self, username: str, channel: str, date: str
+    ) -> None:
         await self._bump_daily(username, channel, date, "long_messages", increment=1)
 
-    async def increment_daily_gifs_posted(self, username: str, channel: str, date: str) -> None:
+    async def increment_daily_gifs_posted(
+        self, username: str, channel: str, date: str
+    ) -> None:
         await self._bump_daily(username, channel, date, "gifs_posted", increment=1)
 
-    async def increment_daily_kudos_given(self, username: str, channel: str, date: str) -> None:
+    async def increment_daily_kudos_given(
+        self, username: str, channel: str, date: str
+    ) -> None:
         await self._bump_daily(username, channel, date, "kudos_given", increment=1)
 
-    async def increment_daily_kudos_received(self, username: str, channel: str, date: str) -> None:
+    async def increment_daily_kudos_received(
+        self, username: str, channel: str, date: str
+    ) -> None:
         await self._bump_daily(username, channel, date, "kudos_received", increment=1)
 
-    async def increment_daily_laughs_received(self, username: str, channel: str, date: str) -> None:
+    async def increment_daily_laughs_received(
+        self, username: str, channel: str, date: str
+    ) -> None:
         await self._bump_daily(username, channel, date, "laughs_received", increment=1)
 
     async def increment_daily_bot_interactions(
@@ -742,9 +794,13 @@ class EconomyDatabasePg:
         self, username: str, channel: str, date: str, count: int
     ) -> None:
         """Set the unique-emote counter outright."""
-        await self._bump_daily(username, channel, date, "unique_emotes_used", value=count)
+        await self._bump_daily(
+            username, channel, date, "unique_emotes_used", value=count
+        )
 
-    async def _set_daily_flag(self, username: str, channel: str, date: str, column: str) -> None:
+    async def _set_daily_flag(
+        self, username: str, channel: str, date: str, column: str
+    ) -> None:
         """Set a boolean ``daily_activity`` column to true."""
         if column not in _DAILY_FLAG_COLUMNS:
             self._logger.warning("Invalid daily_activity flag: %s", column)
@@ -788,7 +844,9 @@ class EconomyDatabasePg:
                 payout,
             )
 
-    async def get_or_create_daily_activity(self, username: str, channel: str, date: str) -> dict:
+    async def get_or_create_daily_activity(
+        self, username: str, channel: str, date: str
+    ) -> dict:
         """Return the day's activity row, creating it with defaults if absent."""
         async with self._pool.acquire() as con:
             await con.execute(
@@ -809,7 +867,9 @@ class EconomyDatabasePg:
             )
         return normalize_row("daily_activity", row) or {}
 
-    async def get_daily_activity_all(self, channel: str, date: str) -> list[dict[str, Any]]:
+    async def get_daily_activity_all(
+        self, channel: str, date: str
+    ) -> list[dict[str, Any]]:
         """Return every account's activity for a given day."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -898,8 +958,14 @@ class EconomyDatabasePg:
         # Identifiers are fixed literals; only values are bound, so this is not
         # a SQL-injection surface. Each entry is (column, value-or-None).
         fields: list[tuple[str, Any]] = [
-            ("weekend_seen_this_week", to_bool(weekend_seen) if weekend_seen is not None else None),
-            ("weekday_seen_this_week", to_bool(weekday_seen) if weekday_seen is not None else None),
+            (
+                "weekend_seen_this_week",
+                to_bool(weekend_seen) if weekend_seen is not None else None,
+            ),
+            (
+                "weekday_seen_this_week",
+                to_bool(weekday_seen) if weekday_seen is not None else None,
+            ),
             (
                 "bridge_claimed_this_week",
                 to_bool(bridge_claimed) if bridge_claimed is not None else None,
@@ -910,7 +976,9 @@ class EconomyDatabasePg:
         if not updates:
             return
 
-        assignments = ", ".join(f"{col} = ${idx}" for idx, (col, _v) in enumerate(updates, start=3))
+        assignments = ", ".join(
+            f"{col} = ${idx}" for idx, (col, _v) in enumerate(updates, start=3)
+        )
         params: list[Any] = [username, channel]
         params.extend(val for _col, val in updates)
 
@@ -920,7 +988,9 @@ class EconomyDatabasePg:
                 *params,
             )
 
-    async def get_or_create_hourly_milestones(self, username: str, channel: str, date: str) -> dict:
+    async def get_or_create_hourly_milestones(
+        self, username: str, channel: str, date: str
+    ) -> dict:
         """Return the hourly-milestone row for a day, creating it if absent."""
         async with self._pool.acquire() as con:
             await con.execute(
@@ -1051,7 +1121,9 @@ class EconomyDatabasePg:
         """
         await self.record_trigger_analytics(channel, trigger_id, date, z_awarded)
 
-    async def get_trigger_analytics(self, channel: str, date: str) -> list[dict[str, Any]]:
+    async def get_trigger_analytics(
+        self, channel: str, date: str
+    ) -> list[dict[str, Any]]:
         """Return a channel's trigger analytics for one day."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -1429,7 +1501,9 @@ class EconomyDatabasePg:
             )
         return normalize_row("pending_challenges", row)
 
-    async def get_pending_challenge_for_target(self, target: str, channel: str) -> dict | None:
+    async def get_pending_challenge_for_target(
+        self, target: str, channel: str
+    ) -> dict | None:
         """Return the newest pending challenge aimed at a user, or ``None``."""
         async with self._pool.acquire() as con:
             row = await con.fetchrow(
@@ -1470,7 +1544,9 @@ class EconomyDatabasePg:
     #  Sprint 5: Tips
     # ══════════════════════════════════════════════════════════
 
-    async def record_tip(self, sender: str, receiver: str, channel: str, amount: int) -> None:
+    async def record_tip(
+        self, sender: str, receiver: str, channel: str, amount: int
+    ) -> None:
         """Record a tip in the history table."""
         async with self._pool.acquire() as con:
             await con.execute(
@@ -1582,11 +1658,15 @@ class EconomyDatabasePg:
                 request_id,
             )
 
-    async def increment_daily_queues_used(self, username: str, channel: str, date: str) -> None:
+    async def increment_daily_queues_used(
+        self, username: str, channel: str, date: str
+    ) -> None:
         """Count one queue submission against the user's daily allowance."""
         await self._bump_daily(username, channel, date, "queues_used", increment=1)
 
-    async def decrement_daily_queues_used(self, username: str, channel: str, date: str) -> None:
+    async def decrement_daily_queues_used(
+        self, username: str, channel: str, date: str
+    ) -> None:
         """Give back one queue slot (used when refunding a failed attempt).
 
         Clamped at zero, and only applied to an existing row.
@@ -1657,7 +1737,9 @@ class EconomyDatabasePg:
     #  Sprint 6: Achievements
     # ══════════════════════════════════════════════════════════
 
-    async def has_achievement(self, username: str, channel: str, achievement_id: str) -> bool:
+    async def has_achievement(
+        self, username: str, channel: str, achievement_id: str
+    ) -> bool:
         """Whether a user already holds an achievement."""
         async with self._pool.acquire() as con:
             exists = await con.fetchval(
@@ -1668,7 +1750,9 @@ class EconomyDatabasePg:
             )
         return exists is not None
 
-    async def award_achievement(self, username: str, channel: str, achievement_id: str) -> bool:
+    async def award_achievement(
+        self, username: str, channel: str, achievement_id: str
+    ) -> bool:
         """Award an achievement. ``False`` if already held (no duplicate)."""
         async with self._pool.acquire() as con:
             status = await con.execute(
@@ -1683,7 +1767,9 @@ class EconomyDatabasePg:
             )
         return status.endswith(" 1")
 
-    async def get_user_achievements(self, username: str, channel: str) -> list[dict[str, Any]]:
+    async def get_user_achievements(
+        self, username: str, channel: str
+    ) -> list[dict[str, Any]]:
         """Return a user's achievements, newest first."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -1772,7 +1858,9 @@ class EconomyDatabasePg:
                     value,
                 )
 
-    async def deactivate_vanity_item(self, username: str, channel: str, item_type: str) -> None:
+    async def deactivate_vanity_item(
+        self, username: str, channel: str, item_type: str
+    ) -> None:
         """Deactivate a vanity item (used to roll back a failed purchase)."""
         async with self._pool.acquire() as con:
             await con.execute(
@@ -1785,7 +1873,9 @@ class EconomyDatabasePg:
                 item_type,
             )
 
-    async def get_vanity_item(self, username: str, channel: str, item_type: str) -> str | None:
+    async def get_vanity_item(
+        self, username: str, channel: str, item_type: str
+    ) -> str | None:
         """Return an active vanity value (case-insensitive identity), or ``None``."""
         async with self._pool.acquire() as con:
             value = await con.fetchval(
@@ -1974,7 +2064,9 @@ class EconomyDatabasePg:
             )
         return int(bounty_id)
 
-    async def get_open_bounties(self, channel: str, limit: int = 20) -> list[dict[str, Any]]:
+    async def get_open_bounties(
+        self, channel: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
         """List open bounties, newest first."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -1994,7 +2086,9 @@ class EconomyDatabasePg:
         """Return a single bounty, or ``None``."""
         async with self._pool.acquire() as con:
             row = await con.fetchrow(
-                "SELECT * FROM bounties WHERE id = $1 AND channel = $2", bounty_id, channel
+                "SELECT * FROM bounties WHERE id = $1 AND channel = $2",
+                bounty_id,
+                channel,
             )
         return normalize_row("bounties", row)
 
@@ -2036,7 +2130,9 @@ class EconomyDatabasePg:
             )
         return tag is not None
 
-    async def cancel_bounty(self, bounty_id: int, channel: str, resolved_by: str) -> bool:
+    async def cancel_bounty(
+        self, bounty_id: int, channel: str, resolved_by: str
+    ) -> bool:
         """Cancel an open bounty. ``False`` if it was not open."""
         return await self._close_bounty(bounty_id, channel, "cancelled", resolved_by)
 
@@ -2106,7 +2202,9 @@ class EconomyDatabasePg:
     #  Sprint 6: Leaderboards
     # ══════════════════════════════════════════════════════════
 
-    async def get_top_earners_today(self, channel: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def get_top_earners_today(
+        self, channel: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Top earners today (UTC), as ``[{username, earned_today}]``."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -2122,7 +2220,9 @@ class EconomyDatabasePg:
             )
         return normalize_rows("daily_activity", rows)
 
-    async def get_richest_users(self, channel: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def get_richest_users(
+        self, channel: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Highest current balances, as ``[{username, balance, rank_name}]``."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -2137,7 +2237,9 @@ class EconomyDatabasePg:
             )
         return normalize_rows("accounts", rows)
 
-    async def get_highest_lifetime(self, channel: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def get_highest_lifetime(
+        self, channel: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Highest lifetime earners, as ``[{username, lifetime_earned, rank_name}]``."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -2170,7 +2272,8 @@ class EconomyDatabasePg:
         """Median account balance (integer division for an even population)."""
         async with self._pool.acquire() as con:
             balances = await con.fetch(
-                "SELECT balance FROM accounts WHERE channel = $1 ORDER BY balance", channel
+                "SELECT balance FROM accounts WHERE channel = $1 ORDER BY balance",
+                channel,
             )
         if not balances:
             return 0
@@ -2193,7 +2296,9 @@ class EconomyDatabasePg:
             )
         return int(value or 0)
 
-    async def _daily_totals(self, channel: str, where: str, *params: Any) -> dict[str, Any]:
+    async def _daily_totals(
+        self, channel: str, where: str, *params: Any
+    ) -> dict[str, Any]:
         """Shared shape for daily/weekly totals."""
         async with self._pool.acquire() as con:
             row = await con.fetchrow(
@@ -2219,7 +2324,9 @@ class EconomyDatabasePg:
         """Daily earned/spent/gambled totals."""
         return await self._daily_totals(channel, "date = $2", to_date(date))
 
-    async def get_weekly_totals(self, channel: str, start_date: str, end_date: str) -> dict:
+    async def get_weekly_totals(
+        self, channel: str, start_date: str, end_date: str
+    ) -> dict:
         """Totals across an inclusive date range (admin digest)."""
         return await self._daily_totals(
             channel, "date >= $2 AND date <= $3", to_date(start_date), to_date(end_date)
@@ -2250,7 +2357,9 @@ class EconomyDatabasePg:
         self, channel: str, start_date: str, end_date: str, limit: int = 5
     ) -> list[dict[str, Any]]:
         """Top earners over a date range, as ``[{username, earned}]``."""
-        return await self._top_by_field(channel, start_date, end_date, "z_earned", limit)
+        return await self._top_by_field(
+            channel, start_date, end_date, "z_earned", limit
+        )
 
     async def get_top_spenders_range(
         self, channel: str, start_date: str, end_date: str, limit: int = 5
@@ -2302,7 +2411,9 @@ class EconomyDatabasePg:
             )
         return normalize_rows("accounts", rows)
 
-    async def get_participation_rate(self, channel: str, total_channel_users: int) -> float:
+    async def get_participation_rate(
+        self, channel: str, total_channel_users: int
+    ) -> float:
         """Percentage of channel users holding an economy account."""
         if total_channel_users <= 0:
             return 0.0
@@ -2355,7 +2466,9 @@ class EconomyDatabasePg:
                 total += interest
         return total
 
-    async def apply_decay_batch(self, channel: str, rate: float, exempt_below: int) -> int:
+    async def apply_decay_batch(
+        self, channel: str, rate: float, exempt_below: int
+    ) -> int:
         """Apply decay to qualifying accounts. Returns the total collected."""
         total = 0
         async with self._pool.acquire() as con, con.transaction():
@@ -2463,7 +2576,9 @@ class EconomyDatabasePg:
             )
         return normalize_row("economy_snapshots", row)
 
-    async def get_snapshot_history(self, channel: str, days: int = 7) -> list[dict[str, Any]]:
+    async def get_snapshot_history(
+        self, channel: str, days: int = 7
+    ) -> list[dict[str, Any]]:
         """Return snapshots from the last N days, oldest first."""
         async with self._pool.acquire() as con:
             rows = await con.fetch(
@@ -2627,7 +2742,9 @@ class EconomyDatabasePg:
                 to_bool(enabled),
             )
 
-    async def update_account_rank(self, username: str, channel: str, rank_name: str) -> None:
+    async def update_account_rank(
+        self, username: str, channel: str, rank_name: str
+    ) -> None:
         """Set the account's rank name, creating the account if needed."""
         async with self._pool.acquire() as con:
             await self._ensure_account(con, username, channel)

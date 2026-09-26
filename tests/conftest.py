@@ -556,7 +556,9 @@ class MockKrytenClient:
     ) -> None:
         self._kv_store.setdefault(bucket_name, {})[key] = value
 
-    async def nats_request(self, subject: str, request: Any, timeout: float = 5) -> dict:
+    async def nats_request(
+        self, subject: str, request: Any, timeout: float = 5
+    ) -> dict:
         return {}
 
     async def connect(self) -> None:
@@ -574,11 +576,15 @@ class MockKrytenClient:
     async def subscribe_request_reply(self, subject: str, handler: Any) -> None:
         self._request_reply_handlers[subject] = handler
 
-    async def get_or_create_kv_store(self, bucket_name: str, description: str = "") -> Any:
+    async def get_or_create_kv_store(
+        self, bucket_name: str, description: str = ""
+    ) -> Any:
         self._kv_store.setdefault(bucket_name, {})
         return MagicMock()
 
-    def on(self, event_name: str, channel: str | None = None, domain: str | None = None):
+    def on(
+        self, event_name: str, channel: str | None = None, domain: str | None = None
+    ):
         """Match kryten-py's ``on()`` decorator signature."""
 
         def decorator(func):

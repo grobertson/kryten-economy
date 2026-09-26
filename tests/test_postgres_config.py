@@ -66,7 +66,9 @@ class TestDatabaseConfig:
         ("pool_min_size", "pool_max_size"),
         [(2, 1), (-1, 8), (1, 0)],
     )
-    def test_invalid_pool_bounds_are_rejected(self, pool_min_size: int, pool_max_size: int) -> None:
+    def test_invalid_pool_bounds_are_rejected(
+        self, pool_min_size: int, pool_max_size: int
+    ) -> None:
         with pytest.raises(ValueError):
             PostgresConfig(
                 pool_min_size=pool_min_size,
@@ -77,7 +79,9 @@ class TestDatabaseConfig:
 class TestResolveDsn:
     """DSN resolution mirrors the established kryten-llm precedence contract."""
 
-    def test_dsn_env_has_highest_precedence(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_dsn_env_has_highest_precedence(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("KRYTEN_ECONOMY_DSN", "postgresql://env-db/economy")
         cfg = PostgresConfig(
             dsn_env="KRYTEN_ECONOMY_DSN",
@@ -100,7 +104,10 @@ class TestResolveDsn:
             password="fallback",
         )
 
-        assert resolve_dsn(cfg) == "postgresql://economy:fallback@db.internal:5544/economy_test"
+        assert (
+            resolve_dsn(cfg)
+            == "postgresql://economy:fallback@db.internal:5544/economy_test"
+        )
 
     def test_password_env_is_preferred(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("KRYTEN_ECONOMY_PG_PASSWORD", "from-env")
@@ -113,7 +120,10 @@ class TestResolveDsn:
             password="from-config",
         )
 
-        assert resolve_dsn(cfg) == "postgresql://kryten:from-env@localhost:5432/kryten_economy"
+        assert (
+            resolve_dsn(cfg)
+            == "postgresql://kryten:from-env@localhost:5432/kryten_economy"
+        )
 
     def test_missing_password_env_does_not_fall_back_to_literal(
         self, monkeypatch: pytest.MonkeyPatch

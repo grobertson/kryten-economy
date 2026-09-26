@@ -129,7 +129,9 @@ def to_datetime(value: Any) -> datetime | None:
                     continue
             else:
                 raise ValueError(f"Unrecognized timestamp format: {value!r}") from None
-        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        return (
+            parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        )
     raise TypeError(f"Unsupported timestamp value: {value!r}")
 
 

@@ -125,7 +125,9 @@ class TestValueParity:
         account = await store.get_or_create_account("Bob", ch)
 
         for key in ("first_seen", "last_seen"):
-            assert isinstance(account[key], str), f"{key} must be str, got {type(account[key])}"
+            assert isinstance(
+                account[key], str
+            ), f"{key} must be str, got {type(account[key])}"
             datetime.fromisoformat(account[key])
 
     async def test_boolean_flags_are_ints(self, pg_store) -> None:
@@ -170,7 +172,9 @@ class TestValueParity:
         stats = await store.get_race_stats("Sum", ch)
         for key, value in stats.items():
             assert not isinstance(value, Decimal), f"{key} leaked Decimal"
-            assert isinstance(value, int), f"{key} must be int, got {type(value).__name__}"
+            assert isinstance(
+                value, int
+            ), f"{key} must be int, got {type(value).__name__}"
         assert stats["total_wagered"] == 150
 
         await store.credit("Cir", ch, 100, "a")
@@ -198,7 +202,9 @@ class TestValueParity:
         store, ch = pg_store
         # update_streak must work even before the row exists.
         await store.update_streak("Streak", ch, 3, 9, "2026-03-01")
-        await store.update_bridge_fields("Streak", ch, weekend_seen=True, week_number="2026-W09")
+        await store.update_bridge_fields(
+            "Streak", ch, weekend_seen=True, week_number="2026-W09"
+        )
 
         row = await store.get_or_create_streak("Streak", ch)
         assert row["current_daily_streak"] == 3
@@ -220,7 +226,9 @@ class TestValueParity:
         assert stats["biggest_loss"] == 10
         assert stats["net_gambling"] == 80
 
-    async def test_creating_methods_on_missing_account_do_not_silently_noop(self, pg_store) -> None:
+    async def test_creating_methods_on_missing_account_do_not_silently_noop(
+        self, pg_store
+    ) -> None:
         """A bare UPDATE against a missing row would silently discard the write."""
         store, ch = pg_store
         await store.increment_lifetime_gambled("Fresh", ch, 100, 90)
@@ -236,13 +244,19 @@ class TestValueParity:
 
         store, ch = pg_store
         challenge_id = await store.create_challenge(
-            "Challenger", "Target", ch, 100, datetime.now(timezone.utc) + timedelta(minutes=5)
+            "Challenger",
+            "Target",
+            ch,
+            100,
+            datetime.now(timezone.utc) + timedelta(minutes=5),
         )
         assert isinstance(challenge_id, int)
 
         pending = await store.get_pending_challenge("Challenger", "Target", ch)
         assert pending is not None
-        assert isinstance(pending["expires_at"], str), "expires_at must cross as a string"
+        assert isinstance(
+            pending["expires_at"], str
+        ), "expires_at must cross as a string"
         assert await store.get_pending_challenge_for_target("Target", ch) is not None
 
         await store.resolve_challenge(challenge_id, "accepted")
@@ -292,7 +306,9 @@ class TestValueParity:
         assert trivia["best_streak"] == 2
         assert trivia["streak"] == 0, "a wrong answer must reset the streak"
 
-    async def test_vanity_lookup_is_case_insensitive_and_preserves_casing(self, pg_store) -> None:
+    async def test_vanity_lookup_is_case_insensitive_and_preserves_casing(
+        self, pg_store
+    ) -> None:
         """Identity is case-insensitive; stored casing is canonical.
 
         The account row holds the canonical CyTube casing, and chat-color CSS
@@ -305,8 +321,14 @@ class TestValueParity:
 
         await store.set_vanity_item("TeenageDraculerX", ch, "chat_color", "#C5A1F7")
         # Lookup by any casing finds it.
-        assert await store.get_vanity_item("teenagedraculerx", ch, "chat_color") == "#C5A1F7"
-        assert await store.get_vanity_item("TEENAGEDRACULERX", ch, "chat_color") == "#C5A1F7"
+        assert (
+            await store.get_vanity_item("teenagedraculerx", ch, "chat_color")
+            == "#C5A1F7"
+        )
+        assert (
+            await store.get_vanity_item("TEENAGEDRACULERX", ch, "chat_color")
+            == "#C5A1F7"
+        )
 
         # A differently-cased purchase updates the value, not the stored casing.
         await store.set_vanity_item("teenagedraculerx", ch, "chat_color", "#A6FFAA")
@@ -316,7 +338,9 @@ class TestValueParity:
         }, "exactly one row, canonical casing preserved, newest value"
 
         assert await store.get_custom_greeting("x", ch) is None
-        await store.set_vanity_item("TeenageDraculerX", ch, "custom_greeting", "hi there")
+        await store.set_vanity_item(
+            "TeenageDraculerX", ch, "custom_greeting", "hi there"
+        )
         assert await store.get_custom_greeting("teenagedraculerx", ch) == "hi there"
         assert (await store.get_all_vanity_items("TEENAGEDRACULERX", ch)) == {
             "chat_color": "#A6FFAA",
@@ -341,8 +365,12 @@ class TestValueParity:
     async def test_queue_spend_idempotency_and_refund(self, pg_store) -> None:
         """A duplicate request id must not double-charge."""
         store, ch = pg_store
-        assert await store.insert_queue_spend_request("rq1", "U", ch, 500, "tier") is True
-        assert await store.insert_queue_spend_request("rq1", "U", ch, 500, "tier") is False
+        assert (
+            await store.insert_queue_spend_request("rq1", "U", ch, 500, "tier") is True
+        )
+        assert (
+            await store.insert_queue_spend_request("rq1", "U", ch, 500, "tier") is False
+        )
 
         record = await store.get_queue_spend_request("rq1")
         assert record["cost_z"] == 500
@@ -380,7 +408,9 @@ class TestValueParity:
         assert await store.resolve_approval(approval_id, "other", True) is None
         assert await store.get_pending_approval("U", ch, "channel_gif") is None
 
-    async def test_batch_presence_credit_creates_missing_accounts(self, pg_store) -> None:
+    async def test_batch_presence_credit_creates_missing_accounts(
+        self, pg_store
+    ) -> None:
         """A presence tick must not silently credit nobody."""
         store, ch = pg_store
         await store.batch_credit_presence([("P1", ch, 5), ("P2", ch, 7)])
@@ -417,7 +447,12 @@ class TestValueParity:
     async def test_snapshots_roundtrip(self, pg_store) -> None:
         store, ch = pg_store
         await store.write_snapshot(
-            ch, {"total_accounts": 4, "total_z_circulation": 1000, "participation_rate": 42.5}
+            ch,
+            {
+                "total_accounts": 4,
+                "total_z_circulation": 1000,
+                "participation_rate": 42.5,
+            },
         )
         latest = await store.get_latest_snapshot(ch)
         assert latest["total_accounts"] == 4
@@ -427,7 +462,9 @@ class TestValueParity:
         history = await store.get_snapshot_history(ch, days=7)
         assert len(history) == 1
 
-    async def test_pruner_never_touches_banned_or_purchasing_accounts(self, pg_store) -> None:
+    async def test_pruner_never_touches_banned_or_purchasing_accounts(
+        self, pg_store
+    ) -> None:
         """Pruning must exclude moderation records and real purchases."""
         store, ch = pg_store
         old = datetime.now(timezone.utc) - timedelta(days=90)
@@ -454,11 +491,14 @@ class TestValueParity:
             )
 
         names = {
-            row["username"] for row in await store.find_purgeable_accounts(ch, 30, 0, None, None)
+            row["username"]
+            for row in await store.find_purgeable_accounts(ch, 30, 0, None, None)
         }
         assert "Ghost" in names
         assert "Banned" not in names, "banned accounts must never be pruned"
-        assert "Spender" not in names, "accounts with a vanity purchase must not be pruned"
+        assert (
+            "Spender" not in names
+        ), "accounts with a vanity purchase must not be pruned"
 
     async def test_cascade_delete_removes_child_rows(self, pg_store) -> None:
         store, ch = pg_store
@@ -470,7 +510,9 @@ class TestValueParity:
         assert counts["accounts"] == 1
         assert counts["transactions"] == 1
         assert counts["daily_activity"] == 1
-        assert counts["tip_history"] == 1, "tips sent by OR received by the user are removed"
+        assert (
+            counts["tip_history"] == 1
+        ), "tips sent by OR received by the user are removed"
         assert await store.get_account("Ghost", ch) is None
 
     async def test_leaderboards_and_rank_distribution(self, pg_store) -> None:
@@ -479,7 +521,11 @@ class TestValueParity:
             await store.credit(name, ch, balance, "seed")
         await store.update_account_rank("c", ch, "Producer")
 
-        assert [r["username"] for r in await store.get_richest_users(ch)] == ["b", "c", "a"]
+        assert [r["username"] for r in await store.get_richest_users(ch)] == [
+            "b",
+            "c",
+            "a",
+        ]
         assert await store.get_median_balance(ch) == 200
         assert (await store.get_rank_distribution(ch))["Producer"] == 1
 
@@ -500,7 +546,10 @@ class TestValueParity:
     async def test_daily_competition_rejects_unknown_field(self, pg_store) -> None:
         """The interpolated field name is allowlisted, so injection is refused."""
         store, ch = pg_store
-        assert await store.get_daily_top(ch, "2026-04-01", "bogus; DROP TABLE accounts", 5) == []
+        assert (
+            await store.get_daily_top(ch, "2026-04-01", "bogus; DROP TABLE accounts", 5)
+            == []
+        )
         assert (
             await store.get_daily_threshold_qualifiers(
                 ch, "2026-04-01", "bogus; DROP TABLE accounts", 1
@@ -524,7 +573,9 @@ class TestValueParity:
         cancel_id = await store.create_bounty("U", ch, "cancel me", 100)
         assert await store.cancel_bounty(cancel_id, ch, "admin") is True
 
-        stale_id = await store.create_bounty("U", ch, "stale", 100, "2020-01-01T00:00:00+00:00")
+        stale_id = await store.create_bounty(
+            "U", ch, "stale", 100, "2020-01-01T00:00:00+00:00"
+        )
         expired = await store.expire_bounties(ch)
         assert [row["id"] for row in expired] == [stale_id]
         assert await store.get_open_bounties(ch) == []
@@ -538,13 +589,17 @@ class TestValueParity:
 
         # A refunded NATS spend (newer row) must be skipped.
         await store.insert_queue_spend_request("rq9", "U", ch, 100, "tier")
-        await store.log_transaction("U", ch, -100, "spend", trigger_id="spend.queue.rq9")
+        await store.log_transaction(
+            "U", ch, -100, "spend", trigger_id="spend.queue.rq9"
+        )
         await store.mark_queue_spend_refunded("rq9")
         assert await store.get_last_queue_time("U", ch) == first
 
         # Once refunded it no longer blocks; an unrefunded one counts.
         await store.insert_queue_spend_request("rq10", "U", ch, 100, "tier")
-        await store.log_transaction("U", ch, -100, "spend", trigger_id="spend.queue.rq10")
+        await store.log_transaction(
+            "U", ch, -100, "spend", trigger_id="spend.queue.rq10"
+        )
         assert await store.get_last_queue_time("U", ch) != first
 
 

@@ -218,7 +218,9 @@ class TestBuildInsert:
         assert "balance = COALESCE" not in sql
 
     def test_casts_placeholders(self) -> None:
-        sql = etl._build_insert(self._plan(), {"username": "text", "quiet_mode": "boolean"})
+        sql = etl._build_insert(
+            self._plan(), {"username": "text", "quiet_mode": "boolean"}
+        )
         assert "$1::text" in sql
         assert "$2::boolean" in sql
 
@@ -240,17 +242,25 @@ class TestChecksum:
         """SQLite (BINARY) and PostgreSQL (locale) can order the same rows
         differently; the digest must not depend on row order."""
         rows = [("a", "c", 1), ("b", "c", 2)]
-        assert etl._balance_checksum(rows) == etl._balance_checksum(list(reversed(rows)))
+        assert etl._balance_checksum(rows) == etl._balance_checksum(
+            list(reversed(rows))
+        )
 
     def test_detects_value_drift(self) -> None:
-        assert etl._balance_checksum([("a", "c", 1)]) != etl._balance_checksum([("a", "c", 2)])
+        assert etl._balance_checksum([("a", "c", 1)]) != etl._balance_checksum(
+            [("a", "c", 2)]
+        )
 
     def test_detects_channel_drift(self) -> None:
-        assert etl._balance_checksum([("a", "c", 1)]) != etl._balance_checksum([("a", "z", 1)])
+        assert etl._balance_checksum([("a", "c", 1)]) != etl._balance_checksum(
+            [("a", "z", 1)]
+        )
 
     def test_normalises_numeric_types(self) -> None:
         """SQLite yields int; PostgreSQL may yield Decimal for the same value."""
-        assert etl._balance_checksum([("a", "c", 1)]) == etl._balance_checksum([("a", "c", 1.0)])
+        assert etl._balance_checksum([("a", "c", 1)]) == etl._balance_checksum(
+            [("a", "c", 1.0)]
+        )
 
 
 class TestTableOrder:
@@ -263,7 +273,9 @@ class TestTableOrder:
 
 class TestVerificationResult:
     def test_ok_requires_full_match(self) -> None:
-        good = etl.VerificationResult(counts={"a": (1, 1)}, circulation=(5, 5), checksum=("x", "x"))
+        good = etl.VerificationResult(
+            counts={"a": (1, 1)}, circulation=(5, 5), checksum=("x", "x")
+        )
         assert good.ok
 
     def test_count_drift_fails(self) -> None:
@@ -335,11 +347,17 @@ class TestExitCodeContract:
 
     def test_connection_refused_is_exit_2_not_1(self, monkeypatch) -> None:
         """A refused connection must not masquerade as verification drift."""
-        assert self._run_main_raising(monkeypatch, ConnectionRefusedError(1225, "refused")) == 2
+        assert (
+            self._run_main_raising(monkeypatch, ConnectionRefusedError(1225, "refused"))
+            == 2
+        )
 
     def test_postgres_error_is_exit_2_not_1(self, monkeypatch) -> None:
         """An asyncpg server-side error (auth, missing db) is a config problem."""
-        assert self._run_main_raising(monkeypatch, etl.asyncpg.InvalidPasswordError("no")) == 2
+        assert (
+            self._run_main_raising(monkeypatch, etl.asyncpg.InvalidPasswordError("no"))
+            == 2
+        )
 
     def test_value_error_is_still_exit_2(self, monkeypatch) -> None:
         assert self._run_main_raising(monkeypatch, ValueError("bad thing")) == 2
@@ -384,7 +402,9 @@ class TestRefusesToGuessTarget:
 
         cfg_file = tmp_path / "config.yaml"
         cfg_file.write_text(
-            yaml.safe_dump(make_config_dict(database={"backend": "postgres", "path": "e.db"})),
+            yaml.safe_dump(
+                make_config_dict(database={"backend": "postgres", "path": "e.db"})
+            ),
             encoding="utf-8",
         )
         args = type("Args", (), {})()
@@ -400,7 +420,9 @@ class TestRefusesToGuessTarget:
         assert "Confirm that is the intended database" in caplog.text
 
     def test_explicit_dsn_env_skips_the_guard(self, monkeypatch) -> None:
-        monkeypatch.setenv("KRYTEN_ECONOMY_EXPLICIT_DSN", "postgresql://u:p@host:5432/db")
+        monkeypatch.setenv(
+            "KRYTEN_ECONOMY_EXPLICIT_DSN", "postgresql://u:p@host:5432/db"
+        )
         args = type("Args", (), {})()
         args.source = "x.db"
         args.config = "does-not-exist.yaml"

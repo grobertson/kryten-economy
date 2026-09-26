@@ -97,7 +97,9 @@ async def test_transactions_list_preserves_pagination_and_response_shape(
     await database.credit("Alice", "testchannel", 20, "two")
     await database.credit("Alice", "other", 999, "other-channel")
 
-    expected = await database.get_recent_transactions("Alice", "testchannel", limit=1, offset=1)
+    expected = await database.get_recent_transactions(
+        "Alice", "testchannel", limit=1, offset=1
+    )
     assert [row["amount"] for row in expected] == [10]
 
     handler = _make_handler(sample_config, database, mock_client)
@@ -163,7 +165,9 @@ async def test_events_list_uses_public_state_accessors(
     """Scheduled and ad-hoc event details are exposed through public accessors."""
     handler = _make_handler(sample_config, database, mock_client)
     end_time = datetime.now(timezone.utc) + timedelta(hours=1)
-    handler._app.multiplier_engine.set_scheduled_event("testchannel", "Movie Night", 2.0, end_time)
+    handler._app.multiplier_engine.set_scheduled_event(
+        "testchannel", "Movie Night", 2.0, end_time
+    )
     handler._app.multiplier_engine.start_adhoc_event("Flash Event", 1.5, 30)
 
     response = await handler._handle_command(
@@ -183,7 +187,8 @@ async def test_events_list_uses_public_state_accessors(
     assert scheduled is not None
     scheduled["name"] = "mutated copy"
     assert (
-        handler._app.multiplier_engine.get_scheduled_event("testchannel")["name"] == "Movie Night"
+        handler._app.multiplier_engine.get_scheduled_event("testchannel")["name"]
+        == "Movie Night"
     )
 
 
@@ -244,6 +249,8 @@ def test_raw_sqlite_access_is_confined_to_database_module() -> None:
             ):
                 offenders.add(".execute(")
         if offenders:
-            violations.append(f"{path.relative_to(package_root).as_posix()}: {sorted(offenders)}")
+            violations.append(
+                f"{path.relative_to(package_root).as_posix()}: {sorted(offenders)}"
+            )
 
     assert violations == []

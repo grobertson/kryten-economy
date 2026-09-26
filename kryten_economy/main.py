@@ -139,7 +139,9 @@ class EconomyApp:
         if channel not in self.price_scalers:
             # Defensive: return a disabled-effective scaler rather than raising.
             # config and db are always set by the time this is called at runtime.
-            assert self.config is not None, "price_scaler_for called before config loaded"
+            assert (
+                self.config is not None
+            ), "price_scaler_for called before config loaded"
             assert self.db is not None, "price_scaler_for called before db initialized"
             scaler = FloatPriceScaler(self.config, self.db, channel, self.logger)
             self.price_scalers[channel] = scaler
@@ -270,7 +272,9 @@ class EconomyApp:
                     logger=self.logger.getChild("inflation"),
                 )
                 self.price_scalers[ch_cfg.channel] = scaler
-            self.logger.info("FloatPriceScaler created for %d channel(s)", len(self.price_scalers))
+            self.logger.info(
+                "FloatPriceScaler created for %d channel(s)", len(self.price_scalers)
+            )
 
         # 3. Initialize domain components
         self.channel_state = ChannelStateTracker(
@@ -306,7 +310,9 @@ class EconomyApp:
             media_client=self.media_client,
             logger=self.logger,
             price_scaler=(
-                next(iter(self.price_scalers.values()), None) if self.price_scalers else None
+                next(iter(self.price_scalers.values()), None)
+                if self.price_scalers
+                else None
             ),
         )
         self.achievement_engine = AchievementEngine(
@@ -423,7 +429,9 @@ class EconomyApp:
         # 4b. Start MediaCMS HTTP client
         if self.config.mediacms.base_url:
             await self.media_client.start()
-            self.logger.info("MediaCMS client started: %s", self.config.mediacms.base_url)
+            self.logger.info(
+                "MediaCMS client started: %s", self.config.mediacms.base_url
+            )
 
         # 5. Register event handlers BEFORE connect
         @self.client.on("adduser")
@@ -431,12 +439,16 @@ class EconomyApp:
             try:
                 self.events_processed += 1
                 rank = getattr(event, "rank", 0) or 0
-                self.presence_tracker.update_user_rank(event.channel, event.username, rank)
+                self.presence_tracker.update_user_rank(
+                    event.channel, event.username, rank
+                )
                 is_genuine = await self.presence_tracker.handle_user_join(
                     event.username, event.channel
                 )
                 if is_genuine:
-                    await self.greeting_handler.on_user_join(event.channel, event.username)
+                    await self.greeting_handler.on_user_join(
+                        event.channel, event.username
+                    )
             except Exception:
                 self.logger.exception(
                     "adduser handler error for %s", getattr(event, "username", "?")
@@ -446,7 +458,9 @@ class EconomyApp:
         async def handle_leave(event):
             try:
                 self.events_processed += 1
-                await self.presence_tracker.handle_user_leave(event.username, event.channel)
+                await self.presence_tracker.handle_user_leave(
+                    event.username, event.channel
+                )
             except Exception:
                 self.logger.exception(
                     "userleave handler error for %s", getattr(event, "username", "?")
@@ -458,7 +472,9 @@ class EconomyApp:
                 self.events_processed += 1
                 await self.pm_handler.handle_pm(event)
             except Exception:
-                self.logger.exception("pm handler error for %s", getattr(event, "username", "?"))
+                self.logger.exception(
+                    "pm handler error for %s", getattr(event, "username", "?")
+                )
 
         @self.client.on("chatmsg")
         async def handle_chatmsg(event):
@@ -484,7 +500,10 @@ class EconomyApp:
                         channel,
                         username,
                     )
-                    if last_human and self.config.social_triggers.bot_interaction.enabled:
+                    if (
+                        last_human
+                        and self.config.social_triggers.bot_interaction.enabled
+                    ):
                         await self.earning_engine.evaluate_bot_interaction(
                             last_human,
                             channel,

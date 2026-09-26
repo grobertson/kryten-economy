@@ -215,7 +215,9 @@ async def describe_tables(con: asyncpg.Connection) -> dict[str, TablePlan]:
         if not conflict_cols:
             # Nothing to conflict on: fall back to the first column so the copy is
             # still idempotent-ish, and log loudly.
-            LOGGER.warning("table %s has no primary/unique key; using first column", table)
+            LOGGER.warning(
+                "table %s has no primary/unique key; using first column", table
+            )
             conflict_cols = [columns[0]]
 
         for r in cols:
@@ -292,7 +294,9 @@ def source_columns(con: sqlite3.Connection, table: str) -> dict[str, str]:
     return cols
 
 
-def fetch_batches(con: sqlite3.Connection, table: str, columns: list[str], batch_size: int) -> Any:
+def fetch_batches(
+    con: sqlite3.Connection, table: str, columns: list[str], batch_size: int
+) -> Any:
     """Yield rows from a source table in batches, ordered deterministically."""
     col_sql = ", ".join(f"`{c}`" for c in columns)
     cur = con.execute(f"SELECT {col_sql} FROM `{table}`")
@@ -337,14 +341,18 @@ async def copy_table(
     shared = [c for c in plan.columns if c in src_types]
     dropped = [c for c in plan.columns if c not in src_types]
     if not shared:
-        raise ValueError(f"table {table}: no columns in common between source and target")
+        raise ValueError(
+            f"table {table}: no columns in common between source and target"
+        )
 
     # A target column missing from the source is only harmless if PostgreSQL can
     # fill it in (nullable, or has a default). A NOT NULL column with no default and
     # no source counterpart would abort every insert, so fail fast with a clear
     # message naming the actual mismatch rather than a driver-level NOT NULL error
     # partway through a 60k-row copy.
-    required_missing = [c for c in dropped if await _is_required_without_default(con, table, c)]
+    required_missing = [
+        c for c in dropped if await _is_required_without_default(con, table, c)
+    ]
     if required_missing:
         raise ValueError(
             f"table {table}: target column(s) {required_missing} are NOT NULL with no "
@@ -352,7 +360,9 @@ async def copy_table(
             "the PostgreSQL schema; migrate or add the columns before running this."
         )
     if dropped:
-        LOGGER.warning("table %s: target column(s) absent from source: %s", table, dropped)
+        LOGGER.warning(
+            "table %s: target column(s) absent from source: %s", table, dropped
+        )
 
     pg_types = await _pg_types(con, table)
     insert_sql = _build_insert(plan, {c: pg_types[c] for c in shared})
@@ -360,7 +370,10 @@ async def copy_table(
 
     total = 0
     for batch in fetch_batches(src, table, column_list, batch_size):
-        params = [tuple(_convert_value(row[c], pg_types[c]) for c in column_list) for row in batch]
+        params = [
+            tuple(_convert_value(row[c], pg_types[c]) for c in column_list)
+            for row in batch
+        ]
         if dry_run:
             total += len(params)
             continue
@@ -372,7 +385,9 @@ async def copy_table(
     return total
 
 
-async def _is_required_without_default(con: asyncpg.Connection, table: str, column: str) -> bool:
+async def _is_required_without_default(
+    con: asyncpg.Connection, table: str, column: str
+) -> bool:
     """Return True when PostgreSQL cannot fill this column in on its own."""
     row = await con.fetchrow(
         """
@@ -433,9 +448,13 @@ async def verify(
         dst_count = await con.fetchval(f"SELECT COUNT(*) FROM {table}")
         result.counts[table] = (src_count, dst_count)
         if src_count != dst_count:
-            result.count_mismatches.append(f"{table}: source={src_count} target={dst_count}")
+            result.count_mismatches.append(
+                f"{table}: source={src_count} target={dst_count}"
+            )
 
-    src_circ = src.execute("SELECT COALESCE(SUM(balance), 0) FROM accounts").fetchone()[0]
+    src_circ = src.execute("SELECT COALESCE(SUM(balance), 0) FROM accounts").fetchone()[
+        0
+    ]
     dst_circ = await con.fetchval("SELECT COALESCE(SUM(balance), 0) FROM accounts")
     result.circulation = (int(src_circ), int(dst_circ or 0))
 
@@ -492,7 +511,9 @@ def _resolve_target(args: argparse.Namespace) -> str:
     return dsn
 
 
-def _guard_against_unconfigured_target(cfg: EconomyConfig, args: argparse.Namespace) -> None:
+def _guard_against_unconfigured_target(
+    cfg: EconomyConfig, args: argparse.Namespace
+) -> None:
     """Refuse to copy currency into a database the config does not nominate.
 
     Every field in ``PostgresConfig`` has a default, so an absent
@@ -534,7 +555,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Copy a kryten-economy SQLite database into PostgreSQL and verify it.",
     )
     parser.add_argument(
-        "--source", required=True, help="path to the SQLite economy.db (opened read-only)"
+        "--source",
+        required=True,
+        help="path to the SQLite economy.db (opened read-only)",
     )
     parser.add_argument(
         "--config",
@@ -568,7 +591,9 @@ async def run(args: argparse.Namespace) -> int:
     try:
         source_tables = [
             r[0]
-            for r in src.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            for r in src.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
             if r[0] not in _SKIP_TABLES
         ]
         tables = [t for t in TABLE_ORDER if t in source_tables]
@@ -594,9 +619,9 @@ async def run(args: argparse.Namespace) -> int:
                 for table in tables:
                     count = src.execute(f"SELECT COUNT(*) FROM `{table}`").fetchone()[0]
                     LOGGER.info("  would copy %-22s %d rows", table, count)
-                src_circ = src.execute("SELECT COALESCE(SUM(balance), 0) FROM accounts").fetchone()[
-                    0
-                ]
+                src_circ = src.execute(
+                    "SELECT COALESCE(SUM(balance), 0) FROM accounts"
+                ).fetchone()[0]
                 LOGGER.info("  source total circulation: %s", src_circ)
                 return 0
 
@@ -613,7 +638,13 @@ async def run(args: argparse.Namespace) -> int:
             LOGGER.info("--- verification ---")
             for table, (src_count, dst_count) in result.counts.items():
                 flag = "" if src_count == dst_count else "  <-- MISMATCH"
-                LOGGER.info("  %-22s source=%-7d target=%-7d%s", table, src_count, dst_count, flag)
+                LOGGER.info(
+                    "  %-22s source=%-7d target=%-7d%s",
+                    table,
+                    src_count,
+                    dst_count,
+                    flag,
+                )
             LOGGER.info(
                 "  total circulation        source=%-7d target=%-7d",
                 result.circulation[0],
@@ -629,7 +660,9 @@ async def run(args: argparse.Namespace) -> int:
                 for line in result.mismatched_accounts[:20]:
                     LOGGER.error("balance drift: %s", line)
                 if len(result.mismatched_accounts) > 20:
-                    LOGGER.error("... and %d more", len(result.mismatched_accounts) - 20)
+                    LOGGER.error(
+                        "... and %d more", len(result.mismatched_accounts) - 20
+                    )
 
             if result.ok:
                 LOGGER.info("VERIFIED: source and target match")

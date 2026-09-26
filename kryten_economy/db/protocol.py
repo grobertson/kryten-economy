@@ -149,10 +149,14 @@ class EconomyStore(Protocol):
     async def get_all_accounts_count(self, channel: str) -> int: ...
 
     # ── Onboarding ────────────────────────────────────────────
-    async def claim_welcome_wallet(self, username: str, channel: str, amount: int) -> bool: ...
+    async def claim_welcome_wallet(
+        self, username: str, channel: str, amount: int
+    ) -> bool: ...
 
     # ── Daily activity ─────────────────────────────────────────
-    async def get_daily_minutes_present(self, username: str, channel: str, date: str) -> int: ...
+    async def get_daily_minutes_present(
+        self, username: str, channel: str, date: str
+    ) -> int: ...
 
     async def increment_daily_minutes_present(
         self, username: str, channel: str, date: str, minutes: int = 1

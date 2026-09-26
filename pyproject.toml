@@ -68,7 +68,11 @@ build-backend = "hatchling.build"
 packages = ["kryten_economy"]
 
 [tool.black]
-line-length = 100
+# The whole tree is formatted at black's default 88, not 100 - the repo has
+# been like this since the initial release. Ruff is configured at 100, so the
+# two are deliberately allowed to disagree: black decides layout, ruff decides
+# lint. Changing this to 100 would reformat every file in the repository.
+line-length = 88
 target-version = ["py312"]
 
 [tool.ruff]

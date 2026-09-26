@@ -60,7 +60,9 @@ class TestWagerLedger:
         assert after[0]["type"] == "wager_spin"
         assert int(after[0]["amount"]) == -250, "the wager must be a negative row"
 
-    async def test_wager_increments_lifetime_spent(self, database: EconomyDatabase) -> None:
+    async def test_wager_increments_lifetime_spent(
+        self, database: EconomyDatabase
+    ) -> None:
         ch = _channel()
         await database.get_or_create_account("Bob", ch)
         await database.credit("Bob", ch, 1000, tx_type="admin_grant")
@@ -97,7 +99,9 @@ class TestWagerLedger:
         assert await _float(database, ch) == await _ledger_net(database, ch)
         assert await _float(database, ch) == 4500
 
-    async def test_declined_wager_writes_nothing(self, database: EconomyDatabase) -> None:
+    async def test_declined_wager_writes_nothing(
+        self, database: EconomyDatabase
+    ) -> None:
         """A rejected wager must leave no trace at all."""
         ch = _channel()
         await database.get_or_create_account("Eve", ch)
@@ -137,7 +141,9 @@ class TestWagerLedger:
 class TestWagerRefund:
     """A refunded wager must unwind the spend, not inflate earnings."""
 
-    async def test_refund_restores_balance_and_underspends(self, database: EconomyDatabase) -> None:
+    async def test_refund_restores_balance_and_underspends(
+        self, database: EconomyDatabase
+    ) -> None:
         ch = _channel()
         await database.get_or_create_account("Hank", ch)
         await database.credit("Hank", ch, 1000, tx_type="admin_grant")
@@ -158,7 +164,9 @@ class TestWagerRefund:
         ), "a refund must not count as earnings - the money was never won"
         assert acct["balance"] == acct["lifetime_earned"] - acct["lifetime_spent"]
 
-    async def test_partial_refund_keeps_the_fee_spent(self, database: EconomyDatabase) -> None:
+    async def test_partial_refund_keeps_the_fee_spent(
+        self, database: EconomyDatabase
+    ) -> None:
         """A push refunds less than the wager; the difference stays spent."""
         ch = _channel()
         await database.get_or_create_account("Iris", ch)
@@ -175,7 +183,9 @@ class TestWagerRefund:
 class TestWagerLedgerRegression:
     """Guards against the specific regression returning."""
 
-    async def test_no_balance_change_is_ever_ledgerless(self, database: EconomyDatabase) -> None:
+    async def test_no_balance_change_is_ever_ledgerless(
+        self, database: EconomyDatabase
+    ) -> None:
         """Walk every mutating store method and assert the invariant survives.
 
         This is the test that was missing when the defect was introduced: it does
