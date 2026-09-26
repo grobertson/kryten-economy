@@ -180,7 +180,9 @@ def evaluate_color(
     ``acceptable`` is False only when rejected.
     """
     lc = round(readability(text_hex, bg_hex), 1)
-    level, score = classify_contrast(text_hex, bg_hex, min_lc=min_lc, warn_lc=warn_lc, knee=knee)
+    level, score = classify_contrast(
+        text_hex, bg_hex, min_lc=min_lc, warn_lc=warn_lc, knee=knee
+    )
     if level == LEVEL_REJECT:
         # Tailor the hint to the failure mode: a near-mono red that APCA alone
         # would pass (good lc, chroma killed it) vs. a genuinely too-dark colour.

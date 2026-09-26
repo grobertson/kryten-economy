@@ -42,7 +42,9 @@ async def _seed_account(
 
 
 @pytest.mark.asyncio
-async def test_stats_no_gambling(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_stats_no_gambling(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """No prior gambling → friendly message."""
     await _seed_account(database)
     msg = await gambling_engine.get_stats_message("Alice", CH)
@@ -50,7 +52,9 @@ async def test_stats_no_gambling(gambling_engine: GamblingEngine, database: Econ
 
 
 @pytest.mark.asyncio
-async def test_stats_after_spin(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_stats_after_spin(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """After a spin → total_spins = 1."""
     await _seed_account(database)
 
@@ -62,7 +66,9 @@ async def test_stats_after_spin(gambling_engine: GamblingEngine, database: Econo
 
 
 @pytest.mark.asyncio
-async def test_stats_net_positive(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_stats_net_positive(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Wins > losses → positive net displayed."""
     await _seed_account(database, balance=10000)
 
@@ -75,7 +81,9 @@ async def test_stats_net_positive(gambling_engine: GamblingEngine, database: Eco
 
 
 @pytest.mark.asyncio
-async def test_stats_net_negative(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_stats_net_negative(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Losses > wins → negative net displayed."""
     await _seed_account(database, balance=10000)
 
@@ -87,7 +95,9 @@ async def test_stats_net_negative(gambling_engine: GamblingEngine, database: Eco
 
 
 @pytest.mark.asyncio
-async def test_biggest_win_tracked(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_biggest_win_tracked(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Largest win recorded."""
     await _seed_account(database, balance=10000)
 
@@ -100,7 +110,9 @@ async def test_biggest_win_tracked(gambling_engine: GamblingEngine, database: Ec
 
 
 @pytest.mark.asyncio
-async def test_biggest_loss_tracked(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_biggest_loss_tracked(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Largest loss recorded."""
     await _seed_account(database, balance=10000)
 
@@ -112,7 +124,9 @@ async def test_biggest_loss_tracked(gambling_engine: GamblingEngine, database: E
 
 
 @pytest.mark.asyncio
-async def test_stats_combines_all_games(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_stats_combines_all_games(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Spins + flips → all totals shown."""
     await _seed_account(database, balance=100_000)
 

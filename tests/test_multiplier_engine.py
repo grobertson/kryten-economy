@@ -84,7 +84,12 @@ async def test_off_peak_inactive():
     cfg = EconomyConfig(
         **make_config_dict(
             multipliers={
-                "off_peak": {"enabled": True, "days": [], "hours": [], "multiplier": 2.0},
+                "off_peak": {
+                    "enabled": True,
+                    "days": [],
+                    "hours": [],
+                    "multiplier": 2.0,
+                },
                 "high_population": {"enabled": False},
                 "holidays": {"enabled": False},
             }
@@ -131,7 +136,11 @@ async def test_population_below():
         **make_config_dict(
             multipliers={
                 "off_peak": {"enabled": False},
-                "high_population": {"enabled": True, "min_users": 10, "multiplier": 1.5},
+                "high_population": {
+                    "enabled": True,
+                    "min_users": 10,
+                    "multiplier": 1.5,
+                },
                 "holidays": {"enabled": False},
             }
         )
@@ -154,7 +163,9 @@ async def test_holiday_match():
                 "high_population": {"enabled": False},
                 "holidays": {
                     "enabled": True,
-                    "dates": [{"date": "12-25", "name": "Christmas", "multiplier": 3.0}],
+                    "dates": [
+                        {"date": "12-25", "name": "Christmas", "multiplier": 3.0}
+                    ],
                 },
             }
         )
@@ -183,7 +194,9 @@ async def test_holiday_no_match():
                 "high_population": {"enabled": False},
                 "holidays": {
                     "enabled": True,
-                    "dates": [{"date": "12-25", "name": "Christmas", "multiplier": 3.0}],
+                    "dates": [
+                        {"date": "12-25", "name": "Christmas", "multiplier": 3.0}
+                    ],
                 },
             }
         )

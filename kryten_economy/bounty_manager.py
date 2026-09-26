@@ -50,7 +50,11 @@ class BountyManager:
         cfg = self._config
 
         if not cfg.enabled:
-            return {"success": False, "bounty_id": 0, "message": "Bounties are disabled."}
+            return {
+                "success": False,
+                "bounty_id": 0,
+                "message": "Bounties are disabled.",
+            }
 
         if amount < cfg.min_amount:
             return {
@@ -185,7 +189,9 @@ class BountyManager:
             f'"{bounty["description"]}" (+{bounty["amount"]:,} Z)',
         )
 
-        return f"Bounty #{bounty_id} claimed by {winner}. {bounty['amount']:,} Z awarded."
+        return (
+            f"Bounty #{bounty_id} claimed by {winner}. {bounty['amount']:,} Z awarded."
+        )
 
     async def process_expired_bounties(self, channel: str) -> int:
         """Expire old bounties and refund creators partially.

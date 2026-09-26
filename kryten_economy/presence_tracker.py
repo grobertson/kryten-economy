@@ -125,7 +125,9 @@ class PresenceTracker:
 
             # ── Restore cumulative minutes from DB (survives restart) ──
             today = now.strftime("%Y-%m-%d")
-            restored = await self._db.get_daily_minutes_present(username, channel, today)
+            restored = await self._db.get_daily_minutes_present(
+                username, channel, today
+            )
             if restored > 0:
                 session.cumulative_minutes_today = restored
                 # Check if streak already evaluated today
@@ -139,7 +141,9 @@ class PresenceTracker:
             if not account.get("welcome_wallet_claimed"):
                 wallet_amount = self._onboarding_config.welcome_wallet
                 if wallet_amount > 0:
-                    claimed = await self._db.claim_welcome_wallet(username, channel, wallet_amount)
+                    claimed = await self._db.claim_welcome_wallet(
+                        username, channel, wallet_amount
+                    )
                     if claimed:
                         asyncio.create_task(
                             self._delayed_welcome_pm(channel, username, wallet_amount)
@@ -175,7 +179,9 @@ class PresenceTracker:
             departure_time = self._last_departure.get(key)
             connected_at = departure_time if departure_time else now
             today = now.strftime("%Y-%m-%d")
-            restored = await self._db.get_daily_minutes_present(username, channel, today)
+            restored = await self._db.get_daily_minutes_present(
+                username, channel, today
+            )
             session = UserSession(
                 username=username,
                 channel=channel,
@@ -210,12 +216,18 @@ class PresenceTracker:
         loop = asyncio.get_running_loop()
         loop.call_later(
             debounce_seconds,
-            lambda u=username, c=channel: asyncio.ensure_future(self._finalize_departure(u, c)),
+            lambda u=username, c=channel: asyncio.ensure_future(
+                self._finalize_departure(u, c)
+            ),
         )
 
     def get_connected_users(self, channel: str) -> set[str]:
         """Return set of currently connected usernames for channel."""
-        return {session.username for (_, ch), session in self._sessions.items() if ch == channel}
+        return {
+            session.username
+            for (_, ch), session in self._sessions.items()
+            if ch == channel
+        }
 
     def get_connected_count(self, channel: str) -> int:
         """Return count of connected users (excludes ignored)."""
@@ -236,7 +248,11 @@ class PresenceTracker:
     def get_admin_users(self, channel: str, min_rank: int) -> list[str]:
         """Get present users with CyTube rank >= min_rank."""
         present = self.get_connected_users(channel)
-        return [u for u in present if self._user_ranks.get((channel, u.lower()), 0) >= min_rank]
+        return [
+            u
+            for u in present
+            if self._user_ranks.get((channel, u.lower()), 0) >= min_rank
+        ]
 
     def update_config(self, new_config: EconomyConfig) -> None:
         """Hot-swap the config reference."""
@@ -305,12 +321,17 @@ class PresenceTracker:
             is_afk = meta.get("afk", False)
 
             # Restore cumulative minutes from DB (survives restart)
-            restored_minutes = await self._db.get_daily_minutes_present(username, channel, today)
+            restored_minutes = await self._db.get_daily_minutes_present(
+                username, channel, today
+            )
 
             # If user already crossed the streak threshold today and the
             # streak was recorded, mark the flag so we don't re-evaluate.
             streak_already_done = False
-            if streak_cfg.enabled and restored_minutes >= streak_cfg.min_presence_minutes:
+            if (
+                streak_cfg.enabled
+                and restored_minutes >= streak_cfg.min_presence_minutes
+            ):
                 streak = await self._db.get_or_create_streak(username, channel)
                 if streak.get("last_streak_date") == today:
                     streak_already_done = True
@@ -415,7 +436,9 @@ class PresenceTracker:
             try:
                 await self._db.update_last_seen(username, channel)
             except Exception:
-                self._logger.exception("Failed to update last_seen on departure for %s", username)
+                self._logger.exception(
+                    "Failed to update last_seen on departure for %s", username
+                )
 
         # Clean up departure record
         self._last_departure.pop(key, None)
@@ -467,8 +490,12 @@ class PresenceTracker:
                             trigger_id="presence.base",
                             metadata=json.dumps(metadata) if metadata else None,
                         )
-                        await self._db.increment_daily_minutes_present(username, channel, today)
-                        await self._db.increment_daily_z_earned(username, channel, today, amount)
+                        await self._db.increment_daily_minutes_present(
+                            username, channel, today
+                        )
+                        await self._db.increment_daily_z_earned(
+                            username, channel, today, amount
+                        )
 
                     # ── 4. Update session tracking ───────────────
                     session.cumulative_minutes_today += 1
@@ -485,7 +512,8 @@ class PresenceTracker:
                     if (
                         streak_cfg.enabled
                         and not session._streak_checked_today
-                        and session.cumulative_minutes_today >= streak_cfg.min_presence_minutes
+                        and session.cumulative_minutes_today
+                        >= streak_cfg.min_presence_minutes
                     ):
                         session._streak_checked_today = True
                         # Exact threshold crossing — evaluate streak once
@@ -498,7 +526,9 @@ class PresenceTracker:
                     # ── 7. Rank promotion check ──────────────────
                     if self._rank_engine:
                         try:
-                            await self._rank_engine.check_rank_promotion(username, channel)
+                            await self._rank_engine.check_rank_promotion(
+                                username, channel
+                            )
                         except Exception:
                             self._logger.exception(
                                 "Rank check error for %s/%s",
@@ -506,7 +536,9 @@ class PresenceTracker:
                                 channel,
                             )
                 except Exception:
-                    self._logger.exception("Presence tick error for %s/%s", username, channel)
+                    self._logger.exception(
+                        "Presence tick error for %s/%s", username, channel
+                    )
 
             # ── Flush any batched rank-up announcements ──────
             if self._rank_engine:
@@ -527,7 +559,9 @@ class PresenceTracker:
         for hours, reward in sorted(milestones.items()):
             threshold_minutes = hours * 60
             if cumulative_minutes >= threshold_minutes:
-                row = await self._db.get_or_create_hourly_milestones(username, channel, date)
+                row = await self._db.get_or_create_hourly_milestones(
+                    username, channel, date
+                )
                 col = f"hours_{hours}"
                 if not row.get(col):
                     await self._db.credit(
@@ -549,7 +583,9 @@ class PresenceTracker:
     #  Sprint 2: Daily Streaks
     # ══════════════════════════════════════════════════════════
 
-    async def _evaluate_daily_streak(self, username: str, channel: str, today: str) -> None:
+    async def _evaluate_daily_streak(
+        self, username: str, channel: str, today: str
+    ) -> None:
         """Called once per user per day when they hit min_presence_minutes."""
         streak = await self._db.get_or_create_streak(username, channel)
         last_date = streak.get("last_streak_date")
@@ -559,7 +595,9 @@ class PresenceTracker:
         if last_date == today:
             return  # Already counted today
 
-        yesterday = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)).strftime(
+            "%Y-%m-%d"
+        )
 
         if last_date == yesterday:
             current += 1  # Streak continues
@@ -731,4 +769,6 @@ class PresenceTracker:
         try:
             await self._client.send_pm(channel, username, full_msg)
         except Exception:
-            self._logger.debug("Failed to send trigger PM to %s: %s", username, message[:50])
+            self._logger.debug(
+                "Failed to send trigger PM to %s: %s", username, message[:50]
+            )

@@ -47,7 +47,9 @@ async def _seed_account(
 
 
 @pytest.mark.asyncio
-async def test_heist_disabled(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_heist_disabled(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Config disabled → error."""
     await _seed_account(database, "Alice")
 
@@ -92,7 +94,9 @@ async def test_join_heist(gambling_engine: GamblingEngine, database: EconomyData
 
 
 @pytest.mark.asyncio
-async def test_join_heist_already_in(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_join_heist_already_in(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Already participating → error."""
     gambling_engine._config.gambling.heist.enabled = True
     await _seed_account(database, "Alice")
@@ -123,7 +127,9 @@ async def test_join_heist_expired_window(
 
 
 @pytest.mark.asyncio
-async def test_heist_one_per_channel(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_heist_one_per_channel(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Start second heist while one active → error."""
     gambling_engine._config.gambling.heist.enabled = True
     await _seed_account(database, "Alice")
@@ -180,7 +186,9 @@ async def test_heist_success_crew_scaled(
 
 
 @pytest.mark.asyncio
-async def test_heist_failure_dramatic(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_heist_failure_dramatic(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Loss → dramatic lines, wagers forfeited."""
     cfg = gambling_engine._config.gambling.heist
     cfg.enabled = True
@@ -311,7 +319,9 @@ async def test_second_heist_can_start_after_first_resolves(
 
 
 @pytest.mark.asyncio
-async def test_heist_stats_recorded(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_heist_stats_recorded(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """total_heists incremented for all participants."""
     gambling_engine._config.gambling.heist.enabled = True
     gambling_engine._config.gambling.heist.min_participants = 2
@@ -428,7 +438,10 @@ def test_narrator_custom_templates(gambling_engine: GamblingEngine):
     gambling_engine._narrator.update_config(custom_cfg)
 
     assert "CUSTOM: {user} robs the moon! 🌕" in gambling_engine._narrator.scenarios
-    assert "CUSTOM: {user} arrives via teleporter! ⚡" in gambling_engine._narrator.join_lines
+    assert (
+        "CUSTOM: {user} arrives via teleporter! ⚡"
+        in gambling_engine._narrator.join_lines
+    )
 
 
 @pytest.mark.asyncio

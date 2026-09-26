@@ -36,7 +36,9 @@ def pm_handler(
     )
 
 
-def make_pm_event(username: str, message: str, channel: str = "testchannel") -> MagicMock:
+def make_pm_event(
+    username: str, message: str, channel: str = "testchannel"
+) -> MagicMock:
     """Create a mock ChatMessageEvent for PM testing."""
     event = MagicMock()
     event.username = username
@@ -111,7 +113,9 @@ class TestPmDispatch:
         await pm_handler.handle_pm(event)
         mock_client.send_pm.assert_not_called()
 
-    async def test_case_insensitive_command(self, pm_handler: PmHandler, mock_client: MagicMock):
+    async def test_case_insensitive_command(
+        self, pm_handler: PmHandler, mock_client: MagicMock
+    ):
         """Commands should be case-insensitive."""
         event = make_pm_event("Alice", "HELP")
         await pm_handler.handle_pm(event)
@@ -120,7 +124,9 @@ class TestPmDispatch:
         response = mock_client.send_pm.call_args_list[0][0][2]
         assert "Economy Bot" in response
 
-    async def test_status_command_available(self, pm_handler: PmHandler, mock_client: MagicMock):
+    async def test_status_command_available(
+        self, pm_handler: PmHandler, mock_client: MagicMock
+    ):
         """status should report queue available when no blackout is active/upcoming."""
         event = make_pm_event("Alice", "status")
         await pm_handler.handle_pm(event)
@@ -129,7 +135,9 @@ class TestPmDispatch:
         assert "Event Status" in response
         assert "Queueing: available" in response
 
-    async def test_status_command_blocked(self, pm_handler: PmHandler, mock_client: MagicMock):
+    async def test_status_command_blocked(
+        self, pm_handler: PmHandler, mock_client: MagicMock
+    ):
         """status should report queue unavailable for active/upcoming event windows."""
         pm_handler._config.spending.blackout_windows = [
             BlackoutWindowConfig(name="Always On", cron="* * * * *", duration_hours=1),
@@ -151,7 +159,9 @@ class TestPmDispatch:
         response = mock_client.send_pm.call_args[0][2]
         assert "Extra" in response  # Default rank
 
-    async def test_help_includes_status(self, pm_handler: PmHandler, mock_client: MagicMock):
+    async def test_help_includes_status(
+        self, pm_handler: PmHandler, mock_client: MagicMock
+    ):
         """help should list status command in events section."""
         event = make_pm_event("Alice", "help")
         await pm_handler.handle_pm(event)

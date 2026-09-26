@@ -283,7 +283,9 @@ async def _run(args: argparse.Namespace) -> int:
 
         for acct in accounts:
             try:
-                counts = await db.delete_account_and_cascade(acct["username"], acct["channel"])
+                counts = await db.delete_account_and_cascade(
+                    acct["username"], acct["channel"]
+                )
                 deleted += 1
                 writer.writerow(
                     {

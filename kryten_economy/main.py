@@ -11,6 +11,7 @@ import logging
 import time
 from pathlib import Path
 
+import asyncpg
 from kryten import KrytenClient
 
 from . import __version__
@@ -21,6 +22,8 @@ from .command_handler import CommandHandler
 from .competition_engine import CompetitionEngine
 from .config import EconomyConfig, load_config
 from .database import EconomyDatabase
+from .db.database_pg import EconomyDatabasePg
+from .db.pool import create_pool
 from .earning_engine import EarningEngine
 from .event_announcer import EventAnnouncer
 from .gambling_engine import GamblingEngine
@@ -53,7 +56,8 @@ class EconomyApp:
         # Components (initialized in start())
         self.config: EconomyConfig | None = None
         self.client: KrytenClient | None = None
-        self.db: EconomyDatabase | None = None
+        self.db: EconomyDatabase | EconomyDatabasePg | None = None
+        self._pg_pool: asyncpg.Pool | None = None
         self.channel_state: ChannelStateTracker | None = None
         self.earning_engine: EarningEngine | None = None
         self.gambling_engine: GamblingEngine | None = None
@@ -122,6 +126,10 @@ class EconomyApp:
             return 0.0
         return time.time() - self._start_time
 
+    def update_ignored_users(self, users: list[str]) -> None:
+        """Replace the normalized set of users excluded from chat activity."""
+        self._ignored_users = {username.lower() for username in users}
+
     # ------------------------------------------------------------------
     # Sprint 10: Price scaler helpers
     # ------------------------------------------------------------------
@@ -131,7 +139,9 @@ class EconomyApp:
         if channel not in self.price_scalers:
             # Defensive: return a disabled-effective scaler rather than raising.
             # config and db are always set by the time this is called at runtime.
-            assert self.config is not None, "price_scaler_for called before config loaded"
+            assert (
+                self.config is not None
+            ), "price_scaler_for called before config loaded"
             assert self.db is not None, "price_scaler_for called before db initialized"
             scaler = FloatPriceScaler(self.config, self.db, channel, self.logger)
             self.price_scalers[channel] = scaler
@@ -249,10 +259,8 @@ class EconomyApp:
         self.config = load_config(str(self.config_path))
         self.logger.info("Config loaded: %d channel(s)", len(self.config.channels))
 
-        # 2. Initialize database
-        self.db = EconomyDatabase(self.config.database.path, self.logger)
-        await self.db.initialize()
-        self.logger.info("Database initialized: %s", self.config.database.path)
+        # 2. Initialize database backend resources
+        await self._initialize_database_resources(self.config)
 
         # Sprint 10: Construct inflation price scalers (before SpendingEngine)
         if self.config.inflation.enabled:
@@ -264,7 +272,9 @@ class EconomyApp:
                     logger=self.logger.getChild("inflation"),
                 )
                 self.price_scalers[ch_cfg.channel] = scaler
-            self.logger.info("FloatPriceScaler created for %d channel(s)", len(self.price_scalers))
+            self.logger.info(
+                "FloatPriceScaler created for %d channel(s)", len(self.price_scalers)
+            )
 
         # 3. Initialize domain components
         self.channel_state = ChannelStateTracker(
@@ -300,7 +310,9 @@ class EconomyApp:
             media_client=self.media_client,
             logger=self.logger,
             price_scaler=(
-                next(iter(self.price_scalers.values()), None) if self.price_scalers else None
+                next(iter(self.price_scalers.values()), None)
+                if self.price_scalers
+                else None
             ),
         )
         self.achievement_engine = AchievementEngine(
@@ -387,7 +399,7 @@ class EconomyApp:
         )
 
         # Build ignored-user set for event handlers
-        self._ignored_users: set[str] = {u.lower() for u in (self.config.ignored_users or [])}
+        self.update_ignored_users(self.config.ignored_users or [])
 
         # 4. Create KrytenClient
         self.client = KrytenClient(self.config)
@@ -417,7 +429,9 @@ class EconomyApp:
         # 4b. Start MediaCMS HTTP client
         if self.config.mediacms.base_url:
             await self.media_client.start()
-            self.logger.info("MediaCMS client started: %s", self.config.mediacms.base_url)
+            self.logger.info(
+                "MediaCMS client started: %s", self.config.mediacms.base_url
+            )
 
         # 5. Register event handlers BEFORE connect
         @self.client.on("adduser")
@@ -425,12 +439,16 @@ class EconomyApp:
             try:
                 self.events_processed += 1
                 rank = getattr(event, "rank", 0) or 0
-                self.presence_tracker.update_user_rank(event.channel, event.username, rank)
+                self.presence_tracker.update_user_rank(
+                    event.channel, event.username, rank
+                )
                 is_genuine = await self.presence_tracker.handle_user_join(
                     event.username, event.channel
                 )
                 if is_genuine:
-                    await self.greeting_handler.on_user_join(event.channel, event.username)
+                    await self.greeting_handler.on_user_join(
+                        event.channel, event.username
+                    )
             except Exception:
                 self.logger.exception(
                     "adduser handler error for %s", getattr(event, "username", "?")
@@ -440,7 +458,9 @@ class EconomyApp:
         async def handle_leave(event):
             try:
                 self.events_processed += 1
-                await self.presence_tracker.handle_user_leave(event.username, event.channel)
+                await self.presence_tracker.handle_user_leave(
+                    event.username, event.channel
+                )
             except Exception:
                 self.logger.exception(
                     "userleave handler error for %s", getattr(event, "username", "?")
@@ -452,7 +472,9 @@ class EconomyApp:
                 self.events_processed += 1
                 await self.pm_handler.handle_pm(event)
             except Exception:
-                self.logger.exception("pm handler error for %s", getattr(event, "username", "?"))
+                self.logger.exception(
+                    "pm handler error for %s", getattr(event, "username", "?")
+                )
 
         @self.client.on("chatmsg")
         async def handle_chatmsg(event):
@@ -478,7 +500,10 @@ class EconomyApp:
                         channel,
                         username,
                     )
-                    if last_human and self.config.social_triggers.bot_interaction.enabled:
+                    if (
+                        last_human
+                        and self.config.social_triggers.bot_interaction.enabled
+                    ):
                         await self.earning_engine.evaluate_bot_interaction(
                             last_human,
                             channel,
@@ -754,6 +779,7 @@ class EconomyApp:
     async def stop(self) -> None:
         """Gracefully shut down all components in reverse order."""
         if not self._running:
+            await self._close_postgres_pool()
             return
         self.logger.info("Shutting down kryten-economy...")
         self._running = False
@@ -765,6 +791,7 @@ class EconomyApp:
                 await self._counter_persistence_task
             except asyncio.CancelledError:
                 pass
+            self._counter_persistence_task = None
         try:
             await self._save_counters()
             self.logger.info("Metrics counters saved on shutdown")
@@ -795,8 +822,47 @@ class EconomyApp:
             await self.media_client.stop()
         if self.client:
             await self.client.stop()
+        await self._close_postgres_pool()
 
         self.logger.info("kryten-economy stopped.")
+
+    async def _close_postgres_pool(self) -> None:
+        """Close the optional PostgreSQL connection pool, if one was opened."""
+        if self._pg_pool is None:
+            return
+        await self._pg_pool.close()
+        self._pg_pool = None
+
+    async def _initialize_database_resources(self, config: EconomyConfig) -> None:
+        """Select and initialize the persistence backend named by configuration.
+
+        ``database.backend`` now genuinely dispatches:
+
+        - ``sqlite``   -> :class:`EconomyDatabase` (the default, and the only
+          backend that is safe for production until the migration is cut over).
+        - ``postgres`` -> an :class:`EconomyDatabasePg` over the asyncpg pool
+          created from ``database.postgres``.
+
+        The PostgreSQL schema is owned by Alembic (Sprint 12 decision) and must
+        already be applied (``alembic upgrade head``); this function only
+        verifies connectivity so a misconfigured database fails at startup
+        instead of on the first query.
+        """
+        if config.database.backend == "postgres":
+            self._pg_pool = await create_pool(config.database.postgres)
+            self.logger.info(
+                "PostgreSQL pool initialized: %d-%d connections",
+                config.database.postgres.pool_min_size,
+                config.database.postgres.pool_max_size,
+            )
+            self.db = EconomyDatabasePg(self._pg_pool, self.logger)
+            await self.db.initialize()
+            self.logger.info("PostgreSQL economy store initialized")
+            return
+
+        self.db = EconomyDatabase(config.database.path, self.logger)
+        await self.db.initialize()
+        self.logger.info("SQLite economy store initialized: %s", config.database.path)
 
     async def _handle_robot_startup(self, msg) -> None:
         """Handle kryten-robot restart — re-announce ourselves and await fresh adduser events."""

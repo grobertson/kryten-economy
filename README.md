@@ -93,6 +93,7 @@ See [`config.example.yaml`](config.example.yaml) for the complete reference with
 
 | Section | Controls |
 |---|---|
+| `database` | SQLite path and PostgreSQL connection/pool settings |
 | `currency` | Name, symbol, starting balance, daily cap |
 | `presence` | Base rate, night watch, milestones, greeting absence |
 | `streaks` | Streak bonuses, milestones, bridge recovery |
@@ -111,10 +112,47 @@ See [`config.example.yaml`](config.example.yaml) for the complete reference with
 
 Environment variable substitution is supported: `${NATS_URL}`, `${VAR:-default}`.
 
+### Database backend status
+
+SQLite remains the production data layer, and remains the default. The `postgres` backend is
+complete as of 0.16.0 and is verified against a live PostgreSQL 16 server — an `asyncpg` store
+covering the full `EconomyDatabase` surface, with transactional, row-locked currency mutations.
+
+**Do not switch production over by editing `config.yaml`.** Moving live currency is a
+deliberate, reversible operation with its own procedure — see
+**[docs/postgres-cutover.md](docs/postgres-cutover.md)** for the cutover, verification,
+smoke-test, and rollback steps, and `docs/admin-guide.md` for the data-migration tool itself.
+Rollback is `database.backend: "sqlite"` plus a restart; the SQLite file is left untouched and
+stays valid for one full release.
+
+The PostgreSQL schema is managed by **Alembic** (the single schema authority for this service):
+
+```bash
+uv run alembic upgrade head
+```
+
+Alembic resolves its database URL from `KRYTEN_ECONOMY_ALEMBIC_URL`, or from the service's own
+`database.postgres` block, so no database credential is stored in the repository.
+
+When PostgreSQL connection plumbing is used, DSN resolution follows this precedence:
+
+1. The environment variable named by `postgres.dsn_env`
+2. `postgres.dsn`
+3. A DSN assembled from `host`, `port`, `user`, `dbname`, and the password selected by
+   `password_env` (preferred) or `password`
+
+Prefer `KRYTEN_ECONOMY_DSN` for a complete DSN or
+`KRYTEN_ECONOMY_PG_PASSWORD` for only the password. Keep secrets out of `config.yaml` and source
+control.
+
+Note that the migration tool reads a DSN through its own `--pg-dsn-env` name and does **not**
+share Alembic's `KRYTEN_ECONOMY_ALEMBIC_URL`; see the runbook.
+
 ## Documentation
 
 - [User Guide](docs/user-guide.md) - PM commands, queue flow, event window behavior, and troubleshooting
 - [Admin Guide](docs/admin-guide.md) - operator setup, admin commands, and full configuration reference
+- [PostgreSQL Cutover Runbook](docs/postgres-cutover.md) - migrating the economy from SQLite to PostgreSQL, verification, and rollback
 - [Configuration Migration Guide](docs/config-migration.md) - config changes from v0.8.10 to v0.9.2 and how to upgrade `config.yaml`
 
 ## PM Commands
@@ -169,17 +207,35 @@ Environment variable substitution is supported: `${NATS_URL}`, `${VAR:-default}`
 ## Testing
 
 ```bash
-# Run all 574 tests
-pytest
+# Run the whole suite
+uv run pytest
 
 # With coverage
-pytest --cov=kryten_economy --cov-report=term-missing
+uv run pytest --cov=kryten_economy --cov-report=term-missing
+
+# Skip the tests that need a real PostgreSQL server
+uv run pytest -m "not postgres"
+
+# Just the PostgreSQL backend + ETL tests (requires KRYTEN_ECONOMY_TEST_DSN)
+uv run pytest -m postgres -v
 
 # Specific sprint area
-pytest tests/test_gambling_engine.py tests/test_slots.py tests/test_flip.py -v
+uv run pytest tests/test_gambling_engine.py tests/test_slots.py tests/test_flip.py -v
 ```
 
-All tests use mocks — no NATS server, database, or external services required.
+Most tests need no external services: no NATS server and no database. The **PostgreSQL**
+backend is the exception — it is validated against a **real** PostgreSQL server rather than a
+mock, because a mock would pass while `asyncpg` failed in production. Those tests carry the
+`postgres` marker and **skip cleanly** when no DSN is configured:
+
+```bash
+export KRYTEN_ECONOMY_TEST_DSN='postgresql://kryten:...@host:5432/kryten_economy_test'
+uv run alembic upgrade head   # apply the schema to that database first
+uv run pytest -m postgres -v
+```
+
+Point that at a **disposable** database — the PostgreSQL tests create and drop rows, and the
+ETL tests truncate tables. CI does this automatically with a `postgres:16-alpine` service.
 
 ## Monitoring
 
@@ -198,7 +254,13 @@ kryten-economy/
 │   ├── __main__.py              # CLI entry, signal handling
 │   ├── main.py                  # EconomyApp orchestrator
 │   ├── config.py                # Pydantic config models
-│   ├── database.py              # SQLite WAL, 12 tables
+│   ├── database.py              # SQLite store (default backend)
+│   ├── db/                      # PostgreSQL backend
+│   │   ├── protocol.py          # EconomyStore Protocol (backend contract)
+│   │   ├── boundary.py          # SQLite≡PostgreSQL value normalisation
+│   │   ├── pool.py              # DSN resolution + asyncpg pool
+│   │   └── database_pg.py       # asyncpg store (full EconomyDatabase surface)
+│   ├── migrate_sqlite_to_pg.py  # One-time SQLite → PostgreSQL ETL (operator tool)
 │   ├── presence_tracker.py      # Dwell tracking, join debounce
 │   ├── earning_engine.py        # Centralized earning + multipliers
 │   ├── spending_engine.py       # Spending validation + rank discounts
@@ -231,6 +293,11 @@ kryten-economy/
 - **Zero raw NATS** — all messaging through [kryten-py](https://github.com/grobertson/kryten-py) wrappers
 - **Atomic debits** — single-transaction debit-or-fail prevents negative balances
 - **SQLite WAL** — write-ahead logging with `busy_timeout=30s` for concurrent access
+- **Transactional currency** — `credit`/`debit`/`refund` apply the balance change and write
+  the ledger row in one transaction on both backends, so a balance can never move without a
+  matching `transactions` row. `debit` is a conditional `UPDATE ... WHERE balance >= $` on
+  PostgreSQL, so simultaneous spends serialise on the row lock and a debit that cannot be
+  covered updates zero rows rather than going negative.
 - **Error isolation** — every event handler wrapped in try/except; one bad event never crashes the service
 - **Hot-reloadable config** — admin `reload` command re-validates via Pydantic and applies without restart
 

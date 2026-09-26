@@ -61,7 +61,9 @@ class ChannelStateTracker:
         self._config = config
         self._logger = logger
         self._states: dict[str, ChannelState] = {}
-        self._ignored_users: set[str] = {u.lower() for u in (config.ignored_users or [])}
+        self._ignored_users: set[str] = {
+            u.lower() for u in (config.ignored_users or [])
+        }
 
     def _get(self, channel: str) -> ChannelState:
         if channel not in self._states:
@@ -85,11 +87,16 @@ class ChannelStateTracker:
             return None
         return (now - state.last_message_time).total_seconds()
 
-    def get_last_non_self_message_user(self, channel: str, current_user: str) -> str | None:
+    def get_last_non_self_message_user(
+        self, channel: str, current_user: str
+    ) -> str | None:
         """Return the username who sent the last message before this one,
         excluding current_user. Returns None if no qualifying message found."""
         state = self._get(channel)
-        if state.last_message_user and state.last_message_user.lower() != current_user.lower():
+        if (
+            state.last_message_user
+            and state.last_message_user.lower() != current_user.lower()
+        ):
             return state.last_message_user
         return None
 
@@ -111,7 +118,9 @@ class ChannelStateTracker:
         state = self._get(channel)
         previous = state.current_media
 
-        non_ignored = {u for u in connected_users if u.lower() not in self._ignored_users}
+        non_ignored = {
+            u for u in connected_users if u.lower() not in self._ignored_users
+        }
 
         state.current_media = MediaInfo(
             title=title,
@@ -201,7 +210,9 @@ class ChannelStateTracker:
     #  Newcomer tracking
     # ══════════════════════════════════════════════════════════
 
-    def record_genuine_join(self, channel: str, username: str, timestamp: datetime) -> None:
+    def record_genuine_join(
+        self, channel: str, username: str, timestamp: datetime
+    ) -> None:
         """Called by presence_tracker when a genuine (debounced) arrival occurs."""
         if username.lower() in self._ignored_users:
             return

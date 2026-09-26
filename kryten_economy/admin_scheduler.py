@@ -94,9 +94,12 @@ class AdminScheduler:
             ),
             "z_earned_today": totals.get("z_earned", 0),
             "z_spent_today": totals.get("z_spent", 0),
-            "z_gambled_net_today": totals.get("z_gambled_out", 0) - totals.get("z_gambled_in", 0),
+            "z_gambled_net_today": totals.get("z_gambled_out", 0)
+            - totals.get("z_gambled_in", 0),
             "median_balance": await self._db.get_median_balance(channel),
-            "participation_rate": await self._db.get_participation_rate(channel, present_count),
+            "participation_rate": await self._db.get_participation_rate(
+                channel, present_count
+            ),
         }
 
         # Sprint 10: include inflation multiplier in snapshot
@@ -143,15 +146,17 @@ class AdminScheduler:
 
         weekly = await self._db.get_weekly_totals(channel, start, end)
         top_earners = await self._db.get_top_earners_range(channel, start, end, limit=5)
-        top_spenders = await self._db.get_top_spenders_range(channel, start, end, limit=5)
+        top_spenders = await self._db.get_top_spenders_range(
+            channel, start, end, limit=5
+        )
         gambling = await self._db.get_gambling_summary_global(channel)
         circulation = await self._db.get_total_circulation(channel)
         snapshots = await self._db.get_snapshot_history(channel, days=7)
 
         if snapshots and len(snapshots) >= 2:
-            circ_change = snapshots[-1].get("total_z_circulation", 0) - snapshots[0].get(
-                "total_z_circulation", 0
-            )
+            circ_change = snapshots[-1].get("total_z_circulation", 0) - snapshots[
+                0
+            ].get("total_z_circulation", 0)
         else:
             circ_change = 0
 
@@ -213,7 +218,9 @@ class AdminScheduler:
                     self._logger.error("User digest error for %s: %s", channel, e)
 
     async def _send_user_digests(self, channel: str) -> None:
-        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime(
+            "%Y-%m-%d"
+        )
 
         activities = await self._db.get_daily_activity_all(channel, yesterday)
         template = self._config.digest.user_digest.message
@@ -236,10 +243,14 @@ class AdminScheduler:
                 next_tier = None
 
             if next_tier:
-                remaining = next_tier.min_lifetime_earned - account.get("lifetime_earned", 0)
+                remaining = next_tier.min_lifetime_earned - account.get(
+                    "lifetime_earned", 0
+                )
                 daily_avg = activity.get("z_earned", 1) or 1
                 days_away = max(1, remaining // daily_avg)
-                next_goal = f"{next_tier.name} ({remaining:,} Z away, ~{days_away} days)"
+                next_goal = (
+                    f"{next_tier.name} ({remaining:,} Z away, ~{days_away} days)"
+                )
             else:
                 next_goal = "Maximum rank achieved! 🏆"
                 days_away = 0

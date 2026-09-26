@@ -114,7 +114,10 @@ class TestDecay:
     """Decay mode balance maintenance."""
 
     async def test_decay_applied(
-        self, database: EconomyDatabase, presence: PresenceTracker, mock_client: MagicMock
+        self,
+        database: EconomyDatabase,
+        presence: PresenceTracker,
+        mock_client: MagicMock,
     ):
         """Decay should reduce accounts above exempt_below."""
         d = make_config_dict()
@@ -140,7 +143,10 @@ class TestDecay:
         assert small_bal == 500
 
     async def test_decay_transaction_logged(
-        self, database: EconomyDatabase, presence: PresenceTracker, mock_client: MagicMock
+        self,
+        database: EconomyDatabase,
+        presence: PresenceTracker,
+        mock_client: MagicMock,
     ):
         """Decay should log negative transactions."""
         d = make_config_dict()
@@ -170,7 +176,10 @@ class TestMaintenanceNone:
     """No-op mode."""
 
     async def test_none_mode_no_changes(
-        self, database: EconomyDatabase, presence: PresenceTracker, mock_client: MagicMock
+        self,
+        database: EconomyDatabase,
+        presence: PresenceTracker,
+        mock_client: MagicMock,
     ):
         """mode=none should not change any balances."""
         d = make_config_dict()

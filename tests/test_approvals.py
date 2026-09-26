@@ -91,8 +91,12 @@ async def test_resolve_already_resolved(database: EconomyDatabase):
 @pytest.mark.asyncio
 async def test_list_pending_approvals(database: EconomyDatabase):
     """get_pending_approvals lists only pending items."""
-    await database.create_pending_approval("Alice", CH, "channel_gif", data={"url": "a"}, cost=5000)
-    await database.create_pending_approval("Bob", CH, "force_play", data={"id": "b"}, cost=100000)
+    await database.create_pending_approval(
+        "Alice", CH, "channel_gif", data={"url": "a"}, cost=5000
+    )
+    await database.create_pending_approval(
+        "Bob", CH, "force_play", data={"id": "b"}, cost=100000
+    )
     aid3 = await database.create_pending_approval(
         "Charlie", CH, "channel_gif", data={"url": "c"}, cost=5000
     )

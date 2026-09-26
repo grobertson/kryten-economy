@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from kryten import KrytenClient
+
     from .config import EconomyConfig, RankTierConfig
     from .database import EconomyDatabase
 
@@ -21,7 +23,7 @@ class RankEngine:
         self,
         config: EconomyConfig,
         database: EconomyDatabase,
-        client: object,
+        client: KrytenClient,
         logger: logging.Logger,
     ) -> None:
         self._config = config
@@ -71,6 +73,10 @@ class RankEngine:
         if current_index + 1 < len(self._tiers):
             return self._tiers[current_index + 1]
         return None
+
+    def get_tier_count(self) -> int:
+        """Return the number of configured rank tiers."""
+        return len(self._tiers)
 
     async def check_rank_promotion(
         self,

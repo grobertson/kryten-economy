@@ -114,7 +114,9 @@ async def test_econ_health_deflation(
 
 
 @pytest.mark.asyncio
-async def test_econ_triggers_hot_and_dead(pm_handler: PmHandler, database: EconomyDatabase):
+async def test_econ_triggers_hot_and_dead(
+    pm_handler: PmHandler, database: EconomyDatabase
+):
     """Shows active triggers, flags dead ones."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 

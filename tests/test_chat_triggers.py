@@ -77,7 +77,9 @@ async def test_long_message_cap_resets_after_hour(earning_engine):
 async def test_first_message_of_day_awarded(earning_engine):
     """First message → 5 Z, flag set."""
     outcome = await earning_engine.evaluate_chat_message("bob", CH, "hello", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "chat.first_message_of_day"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "chat.first_message_of_day"
+    ]
     assert len(results) == 1
     assert results[0].amount == 5
 
@@ -92,7 +94,9 @@ async def test_first_message_of_day_no_double(earning_engine):
         "hello again",
         NOW + timedelta(minutes=1),
     )
-    results = [r for r in outcome.results if r.trigger_id == "chat.first_message_of_day"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "chat.first_message_of_day"
+    ]
     assert results[0].amount == 0
     assert results[0].blocked_by == "cap"
 
@@ -103,7 +107,9 @@ async def test_first_message_of_day_resets_next_day(earning_engine):
     await earning_engine.evaluate_chat_message("bob", CH, "hello", NOW)
     next_day = NOW + timedelta(days=1)
     outcome = await earning_engine.evaluate_chat_message("bob", CH, "morning", next_day)
-    results = [r for r in outcome.results if r.trigger_id == "chat.first_message_of_day"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "chat.first_message_of_day"
+    ]
     assert results[0].amount == 5
 
 
@@ -120,7 +126,9 @@ async def test_conversation_starter_after_silence(earning_engine, channel_state)
     channel_state.record_message(CH, "someone", old_time)
 
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "hello", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "chat.conversation_starter"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "chat.conversation_starter"
+    ]
     assert len(results) == 1
     assert results[0].amount == 10
 
@@ -132,7 +140,9 @@ async def test_conversation_starter_no_silence(earning_engine, channel_state):
     channel_state.record_message(CH, "someone", recent)
 
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "hello", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "chat.conversation_starter"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "chat.conversation_starter"
+    ]
     assert results[0].amount == 0
     assert results[0].blocked_by == "condition"
 
@@ -141,7 +151,9 @@ async def test_conversation_starter_no_silence(earning_engine, channel_state):
 async def test_conversation_starter_first_ever_message(earning_engine):
     """No prior messages (None silence) → qualifies."""
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "hello", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "chat.conversation_starter"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "chat.conversation_starter"
+    ]
     assert results[0].amount == 10
 
 
@@ -165,5 +177,7 @@ async def test_conversation_starter_ignored_user_no_silence_reset(
 
     # Next real user should still see silence
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "hello", NOW)
-    results = [r for r in outcome.results if r.trigger_id == "chat.conversation_starter"]
+    results = [
+        r for r in outcome.results if r.trigger_id == "chat.conversation_starter"
+    ]
     assert results[0].amount == 10

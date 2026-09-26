@@ -57,7 +57,9 @@ class SpendingEngine:
         self._logger = logger
         self._scaler = price_scaler
 
-    def update_config(self, new_config, price_scaler: FloatPriceScaler | None = None) -> None:
+    def update_config(
+        self, new_config, price_scaler: FloatPriceScaler | None = None
+    ) -> None:
         """Hot-swap the config reference."""
         self._config = new_config
         if price_scaler is not None:

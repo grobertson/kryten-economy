@@ -56,7 +56,9 @@ class TestCommandHandler:
         assert result["data"]["status"] == "healthy"
         assert "uptime_seconds" in result["data"]
 
-    async def test_balance_get(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_balance_get(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """balance.get should return account details."""
         await database.get_or_create_account("alice", "testchannel")
         await database.credit("alice", "testchannel", 999, "earn")

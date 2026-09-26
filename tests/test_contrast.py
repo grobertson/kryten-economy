@@ -69,7 +69,8 @@ class TestReadabilityScore:
 
 class TestClassify:
     @pytest.mark.parametrize(
-        "hexv", ["#800000", "#AA0000", "#DC143C", "#FF0000", "#FF3300", "#0000FF", "#000080"]
+        "hexv",
+        ["#800000", "#AA0000", "#DC143C", "#FF0000", "#FF3300", "#0000FF", "#000080"],
     )
     def test_harsh_or_dark_colors_reject(self, hexv):
         level, _ = classify_contrast(hexv, BG, min_lc=MIN, warn_lc=WARN)
@@ -77,7 +78,16 @@ class TestClassify:
 
     @pytest.mark.parametrize(
         "hexv",
-        ["#FF69B4", "#FF7F50", "#FF6347", "#50C878", "#FFD700", "#DA70D6", "#AAAAAA", "#FFFFFF"],
+        [
+            "#FF69B4",
+            "#FF7F50",
+            "#FF6347",
+            "#50C878",
+            "#FFD700",
+            "#DA70D6",
+            "#AAAAAA",
+            "#FFFFFF",
+        ],
     )
     def test_good_colors_pass(self, hexv):
         level, _ = classify_contrast(hexv, BG, min_lc=MIN, warn_lc=WARN)
@@ -98,7 +108,9 @@ class TestEvaluate:
         assert "green or blue" in v["message"]
 
     def test_reject_dark_message_says_lighter(self):
-        v = evaluate_color("#000080", BG, min_lc=MIN, warn_lc=WARN)  # navy: dark, not red
+        v = evaluate_color(
+            "#000080", BG, min_lc=MIN, warn_lc=WARN
+        )  # navy: dark, not red
         assert v["level"] == LEVEL_REJECT
         assert "lighter" in v["message"]
 

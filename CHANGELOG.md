@@ -5,6 +5,201 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.16.1] - 2026-09-26
+
+**Behavioural change — read before upgrading:** gambling wagers are now recorded in the
+transaction ledger and count toward `lifetime_spent`. Historical wagers are **not** backfilled,
+so the ledger remains incomplete before the deployment date of this release.
+
+### Fixed
+
+- **Wagers no longer move currency without leaving a ledger entry.** `atomic_debit` (used by
+  every gambling, blackjack, trivia, and race wager) debited `balance` but wrote no `transactions`
+  row and never touched `lifetime_spent`. The consequence was that `SUM(transactions.amount)`
+  overstated currency in existence by roughly 6.8 billion against a float of ~918 million, and
+  every wager was invisible in a user's `!history`. Recorded in
+  `docs/KNOWN-ISSUES-wager-ledger-gap.md`.
+  - `atomic_debit` is now a complete accounting operation on **both** backends: the balance
+    decrement, the `lifetime_spent` increment, and the `transactions` insert all happen in a
+    single transaction, so a wager can never move the balance without a ledger row, nor the
+    reverse.
+  - The invariant `balance == lifetime_earned - lifetime_spent` now holds for every account, and
+    `SUM(accounts.balance) == SUM(transactions.amount)` per channel. Both were broken for the
+    lifetime of the feature and were never asserted by any test.
+  - Added a `postgres`-marked test module plus a shared `pg_store` fixture, so the invariant is
+    checked against the asyncpg store as well as SQLite.
+
+### Changed
+
+- **Wagers now count as spent.** `lifetime_spent` is incremented by a wager, which is what the
+  `lifetime_spent` achievement and the account pruner (`lifetime_spent = 0` means "never spent")
+  have always implied they meant. Refunds decrement it again.
+- **Wagers carry a specific `type` in the ledger** — `wager_spin`, `wager_flip`,
+  `wager_challenge`, `wager_heist`, `wager_blackjack`, `wager_blackjack_double`, `wager_trivia`,
+  `wager_race` — instead of leaving no row at all. Any report that groups by `type` will see
+  these new values; `wager` is the default when a caller omits one.
+- **Refunded wagers are no longer logged as `gamble_win`.** Challenge declines/expiries and
+  heist cancellations previously credited the balance as a win, which inflated apparent
+  gambling winnings and counted never-won money as `lifetime_earned`. They now use `refund()`,
+  so `lifetime_earned` means "actually earned". On a heist push only the returned portion is
+  refunded, leaving the fee counted as spent.
+
+**Not changed:** historical wager volume. It cannot be reconstructed from `gambling_stats`
+(counts and net results only, no per-wager amounts or timestamps), so no backfill was written.
+For reports spanning the boundary, filter on `transactions.id`.
+
+## [0.16.0] - 2026-09-26
+
+**High-stakes changes in this release — read before upgrading:**
+
+1. **New PostgreSQL backend.** `database.backend: "postgres"` runs the economy on
+   PostgreSQL 16 via asyncpg. `sqlite` remains the **default and is still what production
+   runs**; this release does not move any live data.
+2. **Config-schema addition.** The `database` block gains `backend` and a nested `postgres`
+   sub-block (`host`, `port`, `user`, `dbname`, `password_env`, `dsn_env`, `dsn`,
+   `pool_min_size`, `pool_max_size`). Every field has a default, so existing `config.yaml`
+   files load unchanged and keep working on SQLite. Selecting the backend requires a restart;
+   a config reload will not switch it.
+3. **Transactional credit/debit.** `credit`, `debit`, and `refund` now apply the balance change
+   and write the ledger row inside a single transaction, so a balance can never move without a
+   matching transaction row or vice versa. `debit` is a conditional `UPDATE ... WHERE
+   balance >= $` and therefore safe under concurrency: the row lock serialises simultaneous
+   spends, and a debit that cannot be covered updates zero rows instead of going negative.
+   This is a behaviour change on the SQLite backend too, which previously relied on
+   `INSERT OR IGNORE` + a separate balance write.
+4. **One-time data migration.** `python -m kryten_economy.migrate_sqlite_to_pg` copies an
+   existing `economy.db` into PostgreSQL and verifies it. It is a separate, operator-run step
+   — upgrading the package does **not** migrate anything. See `docs/postgres-cutover.md`.
+
+**Cutover and rollback.** Follow `docs/postgres-cutover.md`. Rollback is
+`database.backend: "sqlite"` plus a restart; the SQLite file is left untouched and is the
+rollback path for one full release. Note that rolling back discards any currency earned or
+spent on PostgreSQL after the cutover — `pg_dump` first if that window had real activity.
+
+### Added
+
+- **Sprint 12 Sortie 5 — test wiring, cutover runbook, and release.**
+  - `docs/postgres-cutover.md`: the full cutover procedure (create role/database, apply the
+    schema, stop, migrate, verify independently, flip the backend, smoke test, roll back),
+    including the `pg_hba.conf` per-database gotcha, the `pg_dump`-before-rollback warning,
+    and a rehearsal procedure that uses a scratch database.
+  - A `postgres` pytest marker plus shared `pg_dsn` / `pg_pool` fixtures in
+    `tests/conftest.py`. PostgreSQL tests skip cleanly with a clear reason when no DSN is
+    configured, so a developer machine without a database still gets a green suite.
+    `KRYTEN_ECONOMY_TEST_DSN` is the preferred variable; the Sorties 3–4
+    `KRYTEN_ECONOMY_PG_DSN` is still honoured.
+  - `.github/workflows/ci.yml`: a lint job, a test job with a real `postgres:16-alpine`
+    service running the PostgreSQL-marked tests, and a no-PostgreSQL job that proves those
+    tests skip rather than error.
+  - **The ETL now refuses to guess its target.** If no `database.postgres.dsn_env`/`dsn` is
+    configured and `database.backend` is not `postgres`, it exits 2 with an explanatory
+    message rather than assembling a default `localhost` DSN. Every `PostgresConfig` field
+    has a default, so the previous behaviour could point a currency migration at a database
+    nobody had nominated.
+  - **Connection failures now exit 2, not 1.** The runbook maps 1 to "verification drift — do
+    not start the service" and 2 to "usage or configuration error". A refused connection, a
+    DNS failure, or an authentication error is a configuration problem, so reporting it as
+    drift would have told an operator their currency was inconsistent when the real fault
+    was a bad DSN. The password is never echoed.
+
+- **Sprint 12 Sortie 4 — SQLite → PostgreSQL data-migration ETL.**
+  `kryten_economy/migrate_sqlite_to_pg.py` is a standalone, re-runnable operator tool that
+  copies the legacy `economy.db` into PostgreSQL and verifies the result. It is never
+  imported by the running service; it is an entry point invoked as
+  `python -m kryten_economy.migrate_sqlite_to_pg`.
+  - **Non-destructive by construction.** The source is opened through the SQLite
+    `file:...?mode=ro` URI, so the tool cannot write to production data even if a bug
+    tries to. Verified by byte-comparing the source file across a full run.
+  - **Idempotent.** Every insert is an `ON CONFLICT DO UPDATE` keyed on each table's
+    primary key, so a full re-run converges instead of duplicating. Verified by running
+    the migration twice against real data and asserting row counts and balances are
+    unchanged.
+  - **Resumable.** Each table is copied in committed batches (`--batch-size`, default
+    1000), so an interrupted run leaves the last batch unapplied and a re-run finishes.
+    Verified by migrating a deliberately truncated source, then re-running to a
+    fully-verified state.
+  - **Verifiable.** `--verify-only` (or the automatic post-run check) compares per-table
+    row counts, total circulation, and an order-independent per-account balance checksum,
+    exiting non-zero on any drift. Verified to detect a single-unit balance change and to
+    be repaired by a subsequent re-run. The checksum sorts in Python because SQLite
+    (`BINARY`) and PostgreSQL (locale) collations order identically-matching rows
+    differently, which would otherwise produce false failures.
+  - **Refuses to guess.** An unknown source table is a hard error rather than a silent
+    skip, and a target column that is `NOT NULL` with no default but missing from the
+    source aborts before copying with a message naming the mismatch, instead of failing
+    mid-way on a driver error.
+  - **Schema-introspecting.** Columns, primary keys, and types are read from the live
+    SQLite and PostgreSQL catalogs rather than hard-coded, so a schema change does not
+    silently mis-copy. Merge semantics are upsert-only (source wins for rows it has);
+    stale extra target rows are reported by verification rather than silently truncated.
+  - The target DSN is resolved exactly as the service resolves it (env-var indirection or
+    `database.postgres` config), so no credential is accepted as an argument or logged.
+    `--dry-run` reports the plan and row counts without writing.
+
+- **Sprint 12 Sortie 3 — PostgreSQL backend (Alembic schema + asyncpg store).**
+  `database.backend: postgres` now runs the economy on PostgreSQL; `sqlite` remains the
+  default and the only backend approved for production until the migration is cut over.
+  - **Alembic is the single schema authority** (decided for this sprint). There is no
+    hand-rolled `sql/` directory and no custom `schema_version` table —
+    `alembic_version` tracks applied revisions. Revision `0001` creates 22 tables and
+    42 indexes. Apply with `uv run alembic upgrade head`; the DSN is read from
+    `KRYTEN_ECONOMY_ALEMBIC_URL` or the service's own `database.postgres` config, so no
+    secret is stored in the repository.
+  - `EconomyStore` protocol (`kryten_economy/db/protocol.py`) defines the persistence
+    surface that both backends implement, and `EconomyDatabasePg`
+    (`kryten_economy/db/database_pg.py`) is a full asyncpg implementation of all 132
+    public `EconomyDatabase` methods. mypy checks the PostgreSQL store clean.
+  - **Currency-integrity semantics (high-stakes).** `credit`/`debit`/`refund` now update
+    the account row and write the ledger row inside a single transaction. `debit` uses a
+    conditional `UPDATE ... WHERE balance >= $n RETURNING balance`, so the balance check
+    and the write are one atomic statement: concurrent debits serialise on the row lock
+    and can never overdraw an account or lose an update. A refused debit writes nothing.
+  - **Value-boundary layer** (`kryten_economy/db/boundary.py`) keeps the store
+    interchangeable with SQLite at the Python-type level. PostgreSQL storage is native
+    (`timestamptz`, `boolean`, `date`, `NUMERIC` aggregates), but rows cross the store
+    edge as ISO-8601 timestamp strings, `0`/`1` integer flags, and `YYYY-MM-DD` dates,
+    because callers such as `pm_handler` call `datetime.fromisoformat()` on account rows
+    and `Decimal` from `SUM()` is not JSON-serialisable.
+
+### Fixed
+
+- **Vanity-item username casing is no longer clobbered by a differently-cased purchase.**
+  `set_vanity_item` now stores the canonical casing held on the `accounts` table instead
+  of whatever casing the caller used. Previously a later lowercase purchase overwrote the
+  stored casing, which would break the case-sensitive CyTube CSS selector
+  `.chat-msg-<User>`. This affected SQLite and PostgreSQL identically and is fixed in both.
+- **`asyncpg` is now type-checked rather than skipped.** The `asyncpg` import previously
+  raised `import-untyped` under mypy (the package ships no `py.typed` marker), so the
+  PostgreSQL layer was effectively unchecked. `asyncpg-stubs` is now a dev dependency,
+  which surfaced and fixed an inaccurate annotation: `_ensure_account` and `_log_tx`
+  declared `asyncpg.Connection`, but every caller passes a `PoolConnectionProxy` from
+  `pool.acquire()`. Both helpers are now typed against the union that actually describes
+  the call sites. `mypy kryten_economy/db` and the ETL are now clean with no suppressions.
+
+### Changed
+
+- **`test_raw_sqlite_access_is_confined_to_database_module` now also exempts
+  `migrate_sqlite_to_pg.py`.** The Sortie 4 ETL is the one offline module whose purpose is
+  to read the legacy SQLite file, and it is never imported by the running service. The
+  exemption is keyed on that single filename, so any new module touching `sqlite3` or
+  `.execute(` still fails the check; this was confirmed by temporarily adding an offending
+  module and observing the guard fail.
+
+- **Sprint 12 Sortie 2 — Encapsulated SQLite access at the data boundary.** `CommandHandler`
+  no longer opens private database connections or executes raw SQLite. Account search, user
+  transaction pagination, and channel-wide recent transactions now use typed public
+  `EconomyDatabase` methods that return plain dictionaries with unchanged command response
+  shapes. Added public read-only accessors for active multiplier events, rank tier count, and
+  normalized ignored users so command handling no longer relies on private state or `SLF001`
+  suppressions. No configuration, NATS command/event, or persistence behavior changes.
+
+- **Sprint 12 Sortie 1 — PostgreSQL configuration and connection plumbing.** Added
+  `PostgresConfig`/`DatabaseConfig.backend`, DSN resolution with env-var indirection, an
+  `asyncpg` pool factory, and application-owned pool lifecycle (opened at startup, closed
+  on normal and partial-startup shutdown). `SQLite` remains the default.
+
 ## [0.15.4] - 2026-08-30
 
 ### Fixed

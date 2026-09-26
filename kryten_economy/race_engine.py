@@ -245,7 +245,9 @@ class RaceEngine:
 
         betting_closes_in = 0
         if race.phase == RacePhase.BETTING:
-            betting_closes_in = max(0, int((race.betting_closes_at - now).total_seconds()))
+            betting_closes_in = max(
+                0, int((race.betting_closes_at - now).total_seconds())
+            )
 
         frame = {
             "race_id": race.race_id,
@@ -353,7 +355,9 @@ class RaceEngine:
 
         # Assign punny driver names (one per car) for the web race view.
         if cfg.racer_names.enabled:
-            pool = list(race_narratives.DRIVER_NAMES) + list(cfg.racer_names.extra_names)
+            pool = list(race_narratives.DRIVER_NAMES) + list(
+                cfg.racer_names.extra_names
+            )
             random.shuffle(pool)
             for i, racer in enumerate(racers.values()):
                 racer.name = pool[i % len(pool)] if pool else ""
@@ -449,7 +453,13 @@ class RaceEngine:
             return error
 
         # Debit
-        success = await self._db.atomic_debit(username, channel, amount)
+        success = await self._db.atomic_debit(
+            username,
+            channel,
+            amount,
+            tx_type="wager_race",
+            trigger_id="gambling.race",
+        )
         if not success:
             return "Insufficient funds."
 
@@ -539,7 +549,9 @@ class RaceEngine:
         final_hi = 0.90 + 0.09 * c  # 0.90 … 0.99
         targets: dict[str, float] = {}
         for r in racers:
-            targets[r.color] = 100.0 if r is winner else 100.0 * random.uniform(final_lo, final_hi)
+            targets[r.color] = (
+                100.0 if r is winner else 100.0 * random.uniform(final_lo, final_hi)
+            )
 
         # Monotonic cumulative curves 0 → target (in percent), one per racer.
         curves: dict[str, list[float]] = {}
@@ -585,7 +597,9 @@ class RaceEngine:
         from the static pools even in LLM mode; the LLM story (if any) supplies
         the start/finish flavour.
         """
-        out: list[dict] = [{"t": 0.0, "text": self._narrator.web_start_line(race.channel)}]
+        out: list[dict] = [
+            {"t": 0.0, "text": self._narrator.web_start_line(race.channel)}
+        ]
         prev = leaders[0]
         for i in range(1, n + 1):
             if leaders[i] != prev:
@@ -596,7 +610,9 @@ class RaceEngine:
                 out.append(
                     {
                         "t": round(i * dt, 2),
-                        "text": self._narrator.web_lead_change_line(r.color, r.emoji, r.name),
+                        "text": self._narrator.web_lead_change_line(
+                            r.color, r.emoji, r.name
+                        ),
                     }
                 )
         # A close-finish flourish in the final stretch.
@@ -683,7 +699,10 @@ class RaceEngine:
         commentary_lines: list[str] = []
 
         # ── Random events ────────────────────────────────────
-        if cfg.random_events.enabled and random.random() < cfg.random_events.chance_per_tick:
+        if (
+            cfg.random_events.enabled
+            and random.random() < cfg.random_events.chance_per_tick
+        ):
             event = self._generate_event(race)
             if event:
                 events.append(event)
@@ -819,8 +838,12 @@ class RaceEngine:
                 net=net,
                 biggest_win=max(0, net),
             )
-            await self._db.increment_lifetime_gambled(bet.username, channel, bet.amount, payout)
-            await self._db.increment_daily_gambled(bet.username, channel, today, bet.amount, payout)
+            await self._db.increment_lifetime_gambled(
+                bet.username, channel, bet.amount, payout
+            )
+            await self._db.increment_daily_gambled(
+                bet.username, channel, today, bet.amount, payout
+            )
             await self._db.save_race_bet(
                 race.race_id,
                 bet.username,
@@ -845,8 +868,12 @@ class RaceEngine:
                 net=-bet.amount,
                 biggest_loss=bet.amount,
             )
-            await self._db.increment_lifetime_gambled(bet.username, channel, bet.amount, 0)
-            await self._db.increment_daily_gambled(bet.username, channel, today, bet.amount, 0)
+            await self._db.increment_lifetime_gambled(
+                bet.username, channel, bet.amount, 0
+            )
+            await self._db.increment_daily_gambled(
+                bet.username, channel, today, bet.amount, 0
+            )
             await self._db.save_race_bet(
                 race.race_id,
                 bet.username,
@@ -873,7 +900,9 @@ class RaceEngine:
         # ── Build public announcement lines ──────────────────
         # Brief: a headline finish line + one combined summary line, to keep the
         # channel terse (the full play-by-play lives on the web race view).
-        finish_line = self._narrator.get_finish_line(channel, winner.color, winner.emoji)
+        finish_line = self._narrator.get_finish_line(
+            channel, winner.color, winner.emoji
+        )
         # Defensive: commentary (especially LLM-authored, or a misconfigured
         # template using a foreign placeholder) can drop the winner entirely. The
         # finish announcement must always name the winning car, so fall back to a
@@ -885,11 +914,15 @@ class RaceEngine:
         summary_bits: list[str] = []
         if winner_payouts:
             top_winners = sorted(winner_payouts, key=lambda wp: wp[1], reverse=True)[:3]
-            winner_strs = [f"@{bet.username} (+{net:,})" for bet, _payout, net in top_winners]
+            winner_strs = [
+                f"@{bet.username} (+{net:,})" for bet, _payout, net in top_winners
+            ]
             summary_bits.append(f"Winners: {', '.join(winner_strs)}")
         elif race.bets:
             summary_bits.append("💸 Nobody backed the winner — house takes all")
-        summary_bits.append(f"Pool {total_pool:,} {self._symbol} · {len(race.bets)} bettor(s)")
+        summary_bits.append(
+            f"Pool {total_pool:,} {self._symbol} · {len(race.bets)} bettor(s)"
+        )
         lines.append(" | ".join(summary_bits))
 
         # Stash a final web-view frame (winner + payouts) so the race view can
@@ -934,11 +967,13 @@ class RaceEngine:
 
         cfg = self._config.gambling.race
         remaining = max(
-            0, int((race.betting_closes_at - datetime.now(timezone.utc)).total_seconds())
+            0,
+            int((race.betting_closes_at - datetime.now(timezone.utc)).total_seconds()),
         )
 
         racers = " · ".join(
-            f"{racer.emoji} {color} {racer.odds_display}" for color, racer in race.racers.items()
+            f"{racer.emoji} {color} {racer.odds_display}"
+            for color, racer in race.racers.items()
         )
         return [
             f"🏁 Race OPEN! Betting closes in {remaining}s — {racers}",
@@ -954,10 +989,14 @@ class RaceEngine:
         cfg = self._config.gambling.race
         finish = cfg.finish_distance
         lines = ["📊 Live odds:"]
-        sorted_racers = sorted(race.racers.values(), key=lambda r: r.progress, reverse=True)
+        sorted_racers = sorted(
+            race.racers.values(), key=lambda r: r.progress, reverse=True
+        )
         for racer in sorted_racers:
             pct = min(100, int(racer.progress / finish * 100))
-            lines.append(f"  {racer.emoji} {racer.color} — {pct}% ({racer.odds_display})")
+            lines.append(
+                f"  {racer.emoji} {racer.color} — {pct}% ({racer.odds_display})"
+            )
         return lines
 
     def _build_progress_display(self, race: ActiveRace) -> list[str]:
@@ -998,7 +1037,12 @@ class RaceEngine:
         """Generate a random mid-race event."""
         cfg = self._config.gambling.race
         event_type = random.choices(
-            [_EventType.SPEED_BOOST, _EventType.STUMBLE, _EventType.MUDSLIDE, _EventType.SHORTCUT],
+            [
+                _EventType.SPEED_BOOST,
+                _EventType.STUMBLE,
+                _EventType.MUDSLIDE,
+                _EventType.SHORTCUT,
+            ],
             weights=list(EVENT_TYPE_WEIGHTS),
             k=1,
         )[0]
@@ -1013,7 +1057,9 @@ class RaceEngine:
                 race.channel, "speed_boost", target.color, target.emoji
             )
             return RaceEvent(
-                event_type, target.color, msg or f"⚡ {target.emoji} {target.color} boosts!"
+                event_type,
+                target.color,
+                msg or f"⚡ {target.emoji} {target.color} boosts!",
             )
 
         elif event_type == _EventType.STUMBLE:
@@ -1023,9 +1069,13 @@ class RaceEngine:
                 return None
             target = random.choice(eligible)
             target.frozen_ticks = STUMBLE_FREEZE_TICKS
-            msg = self._narrator.get_event_line(race.channel, "stumble", target.color, target.emoji)
+            msg = self._narrator.get_event_line(
+                race.channel, "stumble", target.color, target.emoji
+            )
             return RaceEvent(
-                event_type, target.color, msg or f"💥 {target.emoji} {target.color} stumbles!"
+                event_type,
+                target.color,
+                msg or f"💥 {target.emoji} {target.color} stumbles!",
             )
 
         elif event_type == _EventType.MUDSLIDE:
@@ -1035,7 +1085,9 @@ class RaceEngine:
                     r.speed_buff_ticks = MUDSLIDE_TICKS
                     r.speed_buff_multiplier = MUDSLIDE_MULTIPLIER
             msg = self._narrator.get_event_line(race.channel, "mudslide", "", "")
-            return RaceEvent(event_type, None, msg or "🌊 Mudslide! Everyone slows down!")
+            return RaceEvent(
+                event_type, None, msg or "🌊 Mudslide! Everyone slows down!"
+            )
 
         elif event_type == _EventType.SHORTCUT:
             # Give boost to trailing racer

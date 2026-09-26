@@ -22,7 +22,9 @@ from conftest import make_config_dict
 CH = "test-channel"
 
 
-async def _seed_account(db: EconomyDatabase, username: str, balance: int = 5000) -> None:
+async def _seed_account(
+    db: EconomyDatabase, username: str, balance: int = 5000
+) -> None:
     """Create account with sufficient age to bypass minimums."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance, tx_type="seed", trigger_id="test")
@@ -331,7 +333,16 @@ class TestRaceFrame:
             assert {"color", "emoji", "progress", "pct", "position", "odds"} <= set(r)
             assert 0.0 <= r["pct"] <= 100.0
         # Positions are a 1..N permutation.
-        assert sorted(r["position"] for r in frame["racers"]) == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert sorted(r["position"] for r in frame["racers"]) == [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+        ]
 
     async def test_racing_frame_reflects_progress(
         self,
@@ -560,7 +571,9 @@ class TestRaceStartLine:
         race_engine.start_race(CH, "Alice")
         assert "Betting is closed" in race_engine.get_race_start_line(CH)
 
-    async def test_uses_llm_story_start_when_present(self, race_engine: RaceEngine) -> None:
+    async def test_uses_llm_story_start_when_present(
+        self, race_engine: RaceEngine
+    ) -> None:
         from kryten_economy.race_narrator import RaceStory
 
         race_engine.start_race(CH, "Alice")

@@ -17,6 +17,7 @@
 7. [Content Approval Commands](#7-content-approval-commands)
 8. [Automated Reports](#8-automated-reports)
 9. [Configuration Guide](#9-configuration-guide)
+   - [Database Backend](#database-backend) · [Migrating data to PostgreSQL](#migrating-data-to-postgresql)
 10. [Multiplier Events](#10-multiplier-events)
 11. [Ranks & Progression](#11-ranks--progression)
 12. [Economy Health Monitoring](#12-economy-health-monitoring)
@@ -239,7 +240,8 @@ reload
 - Spending costs
 - Presence earning rates
 
-**Requires restart:** NATS connection settings, `channels` list, `database.path`, `metrics.port`.
+**Requires restart:** NATS connection settings, `channels` list, `database.backend`, all
+`database.postgres` connection/pool settings, `database.path`, `metrics.port`.
 
 ---
 
@@ -523,6 +525,116 @@ digest:
 ## 9. Configuration Guide
 
 All settings live in `config.yaml`. After editing, send `reload` to the bot to apply most changes without a restart.
+
+### Database Backend
+
+```yaml
+database:
+  backend: "sqlite"             # "sqlite" (default) or "postgres"
+  path: economy.db              # SQLite file
+  postgres:                     # used only when backend: postgres
+    host: "chandra-1.local"
+    port: 5432
+    user: "kryten"
+    dbname: "kryten_economy"
+    password_env: "KRYTEN_ECONOMY_PG_PASSWORD"
+    pool_min_size: 1
+    pool_max_size: 8
+```
+
+The PostgreSQL backend is complete and supported as of 0.16.0, but **production data still
+lives in SQLite**. Moving it is a deliberate, reversible operation with its own procedure —
+see [`docs/postgres-cutover.md`](postgres-cutover.md) — not something to do by editing this
+file and restarting. The ETL that moves existing data is described under **Migrating data to
+PostgreSQL** below.
+
+Rollback is `database.backend: "sqlite"` plus a restart. The SQLite file is left untouched on
+disk after a cutover and remains the rollback path for one full release. Note that a rollback
+discards any currency earned or spent on PostgreSQL after the cutover, so `pg_dump` first if
+that window contained real activity.
+
+Before selecting `backend: "postgres"` in any environment, apply the schema:
+
+```bash
+uv run alembic upgrade head
+```
+
+Alembic is the single schema authority. It reads its database URL from
+`KRYTEN_ECONOMY_ALEMBIC_URL`, or from this service's own `database.postgres` block, so no
+database credential is stored in the repository.
+
+For migration testing, DSN precedence is `dsn_env` → `dsn` → assembled connection fields. The
+assembled form uses `password_env` in preference to `password`; if the named password
+environment variable is missing, an empty password is used. A configured `dsn_env` that is
+missing or empty is an error. Provide a full DSN through `KRYTEN_ECONOMY_DSN`, or only the
+password through `KRYTEN_ECONOMY_PG_PASSWORD`; do not store credentials in `config.yaml`.
+
+Database backend, pool sizing, and all `database.postgres` settings require a restart. Config
+reload does not switch the backend or replace a live connection pool.
+
+---
+
+### Migrating data to PostgreSQL
+
+`kryten_economy/migrate_sqlite_to_pg.py` copies an existing SQLite economy database into
+PostgreSQL. It is an operator tool and is never imported by the running service.
+
+**The source is opened read-only** (SQLite `mode=ro`), so the tool cannot modify production
+data. Take a normal backup first anyway, and rehearse on a copy before any real cutover.
+
+```bash
+# 1. Preview: reports the plan and row counts, writes nothing.
+uv run python -m kryten_economy.migrate_sqlite_to_pg \
+    --source /var/lib/kryten-economy/economy.db \
+    --pg-dsn-env KRYTEN_ECONOMY_TARGET_DSN --dry-run
+
+# 2. Copy. Also prints a verification report; exit status 0 means source and target match.
+uv run python -m kryten_economy.migrate_sqlite_to_pg \
+    --source /var/lib/kryten-economy/economy.db \
+    --pg-dsn-env KRYTEN_ECONOMY_TARGET_DSN
+
+# 3. Re-check later without copying.
+uv run python -m kryten_economy.migrate_sqlite_to_pg \
+    --source /var/lib/kryten-economy/economy.db \
+    --pg-dsn-env KRYTEN_ECONOMY_TARGET_DSN --verify-only
+```
+
+The target connection is resolved exactly as the service resolves it: from the service's own
+`database.postgres` block, or from a full DSN in the environment variable named by
+`--pg-dsn-env`. No credential is accepted as a command-line argument or written to a log.
+
+> **Pass `--pg-dsn-env` explicitly.** If you omit it, the tool resolves the DSN from
+> `config.yaml`, and because every `database.postgres` field has a default, a config that is
+> still on SQLite would silently assemble `localhost:5432/kryten_economy`. The tool now
+> **refuses** in that case and exits 2, rather than copying currency into a database nobody
+> nominated.
+
+Behaviour worth knowing before you run it:
+
+- **It is safe to re-run.** Every row is an upsert keyed on the table's primary key, so a
+  repeated run converges on the same state instead of duplicating data. It also repairs a
+  target that has drifted from the source.
+- **It is resumable.** Tables are copied in committed batches (`--batch-size`, default 1000).
+  If it is interrupted, run it again.
+- **It never prunes.** Rows present in the target but absent from the source are left alone.
+  Verification reports them as count mismatches, so the drift is visible rather than silent.
+  For a clean cutover, start from an empty target created by `alembic upgrade head`.
+- **It refuses to guess.** An unknown source table, or a target column that is `NOT NULL` with
+  no default and missing from the source, aborts before copying rather than skipping data. It
+  also refuses to pick a target it was not told about (see the note above).
+- **Exit status is meaningful:** `0` verified, `1` verification drift, `2` a usage or
+  configuration error. Check it; do not only read the log. A connection, DNS, or
+  authentication failure is a **configuration** problem and reports `2`, never `1` — so `1`
+  really does mean "the data differs" and nothing else.
+
+Verification compares per-table row counts, total currency in circulation, and a
+per-account balance checksum, and names any account whose balance differs. Treat a non-zero
+exit as a failed migration.
+
+For the full cutover sequence — including stopping the service, independent verification,
+the config flip, smoke tests, and rollback — see [`docs/postgres-cutover.md`](postgres-cutover.md).
+
+---
 
 ### Currency Identity
 

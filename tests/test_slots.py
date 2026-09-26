@@ -13,7 +13,9 @@ from kryten_economy.gambling_engine import GambleOutcome, GamblingEngine
 CH = "testchannel"
 
 
-async def _seed_account(db: EconomyDatabase, username: str = "Alice", balance: int = 5000) -> None:
+async def _seed_account(
+    db: EconomyDatabase, username: str = "Alice", balance: int = 5000
+) -> None:
     """Create account with generous balance and old enough age."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance - 100, tx_type="test", reason="seed")
@@ -83,11 +85,15 @@ async def test_spin_jackpot(gambling_engine: GamblingEngine, database: EconomyDa
 
 
 @pytest.mark.asyncio
-async def test_spin_partial_match(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_partial_match(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Forced roll on partial → small multiplier."""
     await _seed_account(database)
 
-    partial_entries = [e for e in gambling_engine._slot_payouts if e.symbols == "partial"]
+    partial_entries = [
+        e for e in gambling_engine._slot_payouts if e.symbols == "partial"
+    ]
     if not partial_entries:
         pytest.skip("No partial entry in default config")
 
@@ -106,7 +112,9 @@ async def test_spin_partial_match(gambling_engine: GamblingEngine, database: Eco
 
 
 @pytest.mark.asyncio
-async def test_spin_cooldown_enforced(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_cooldown_enforced(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Second spin within 30s → rejected."""
     await _seed_account(database)
 
@@ -117,7 +125,9 @@ async def test_spin_cooldown_enforced(gambling_engine: GamblingEngine, database:
 
 
 @pytest.mark.asyncio
-async def test_spin_cooldown_expired(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_cooldown_expired(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Second spin after cooldown → allowed."""
     await _seed_account(database)
 
@@ -134,7 +144,9 @@ async def test_spin_cooldown_expired(gambling_engine: GamblingEngine, database: 
 
 
 @pytest.mark.asyncio
-async def test_spin_daily_limit(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_daily_limit(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """51st spin in a day → rejected."""
     await _seed_account(database, balance=100_000)
 
@@ -239,7 +251,9 @@ async def test_spin_display_jackpot_symbols(
 
 
 @pytest.mark.asyncio
-async def test_spin_display_loss_random(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_spin_display_loss_random(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Loss → display shows mixed symbols (not empty)."""
     await _seed_account(database)
 

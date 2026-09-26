@@ -27,7 +27,9 @@ SAMPLE_QUESTION = TriviaQuestion(
 )
 
 
-async def _seed_account(db: EconomyDatabase, username: str, balance: int = 5000) -> None:
+async def _seed_account(
+    db: EconomyDatabase, username: str, balance: int = 5000
+) -> None:
     """Create account with sufficient age to bypass minimums."""
     await db.get_or_create_account(username, CH)
     await db.credit(username, CH, balance, tx_type="seed", trigger_id="test")

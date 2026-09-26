@@ -30,10 +30,14 @@ def _make_config_with_events(events: list[dict]) -> EconomyConfig:
     )
 
 
-def _make_deps(config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock):
+def _make_deps(
+    config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+):
     mock_presence = MagicMock()
     mock_presence.get_connected_users = MagicMock(return_value=set())
-    multiplier_engine = MultiplierEngine(config, mock_presence, logging.getLogger("test"))
+    multiplier_engine = MultiplierEngine(
+        config, mock_presence, logging.getLogger("test")
+    )
     return multiplier_engine, mock_presence
 
 
@@ -80,7 +84,9 @@ async def test_event_start_on_cron(database: EconomyDatabase, mock_client: Magic
 
 
 @pytest.mark.asyncio
-async def test_event_end_after_duration(database: EconomyDatabase, mock_client: MagicMock):
+async def test_event_end_after_duration(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """Duration elapsed → event cleared, multiplier removed."""
     cfg = _make_config_with_events(
         [
@@ -127,7 +133,9 @@ async def test_event_end_after_duration(database: EconomyDatabase, mock_client: 
 
 
 @pytest.mark.asyncio
-async def test_presence_bonus_distributed(database: EconomyDatabase, mock_client: MagicMock):
+async def test_presence_bonus_distributed(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """500 Z split among 5 users → 100 each."""
     cfg = _make_config_with_events(
         [
@@ -168,7 +176,9 @@ async def test_presence_bonus_distributed(database: EconomyDatabase, mock_client
 
 
 @pytest.mark.asyncio
-async def test_presence_bonus_zero_users(database: EconomyDatabase, mock_client: MagicMock):
+async def test_presence_bonus_zero_users(
+    database: EconomyDatabase, mock_client: MagicMock
+):
     """No users → no error."""
     cfg = _make_config_with_events(
         [

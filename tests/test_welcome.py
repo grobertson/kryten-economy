@@ -29,14 +29,19 @@ def tracker(
 class TestWelcomeWallet:
     """Welcome wallet on first genuine join."""
 
-    async def test_new_user_gets_wallet(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_new_user_gets_wallet(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Brand new user should receive welcome wallet."""
         await tracker.handle_user_join("NewUser", "testchannel")
         balance = await database.get_balance("NewUser", "testchannel")
         assert balance == 100
 
     async def test_wallet_pm_sent(
-        self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
+        mock_client: MagicMock,
     ):
         """Welcome wallet should trigger a PM."""
         await tracker.handle_user_join("NewUser", "testchannel")
@@ -45,7 +50,9 @@ class TestWelcomeWallet:
         msg = mock_client.send_pm.call_args[0][2]
         assert "Welcome" in msg or "100" in msg
 
-    async def test_no_wallet_on_bounce(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_no_wallet_on_bounce(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Bounce (non-genuine join) should not trigger wallet."""
         # First genuine join
         await tracker.handle_user_join("NewUser", "testchannel")
@@ -62,7 +69,10 @@ class TestWelcomeWallet:
         assert await database.get_balance("NewUser", "testchannel") == first_balance
 
     async def test_zero_wallet_amount(
-        self, sample_config: EconomyConfig, database: EconomyDatabase, mock_client: MagicMock
+        self,
+        sample_config: EconomyConfig,
+        database: EconomyDatabase,
+        mock_client: MagicMock,
     ):
         """Zero welcome_wallet should not attempt credit."""
         from conftest import make_config_dict
@@ -72,7 +82,10 @@ class TestWelcomeWallet:
         cfg = EconomyConfig(**d)
 
         t = PresenceTracker(
-            config=cfg, database=database, client=mock_client, logger=logging.getLogger("test")
+            config=cfg,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         await t.handle_user_join("NewUser", "testchannel")
         assert await database.get_balance("NewUser", "testchannel") == 0
@@ -116,7 +129,10 @@ class TestWelcomeBack:
         assert balance == 100  # Only wallet, no welcome-back
 
     async def test_welcome_back_pm(
-        self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
+        mock_client: MagicMock,
     ):
         """Welcome-back should send PM."""
         await database.get_or_create_account("OldUser", "testchannel")
@@ -125,7 +141,9 @@ class TestWelcomeBack:
 
         old_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
         conn = sqlite3.connect(database._db_path)
-        conn.execute("UPDATE accounts SET last_seen = ? WHERE username = 'OldUser'", (old_date,))
+        conn.execute(
+            "UPDATE accounts SET last_seen = ? WHERE username = 'OldUser'", (old_date,)
+        )
         conn.commit()
         conn.close()
 
@@ -135,7 +153,9 @@ class TestWelcomeBack:
         msg = mock_client.send_pm.call_args[0][2]
         assert "back" in msg.lower() or "100" in msg
 
-    async def test_welcome_back_disabled(self, database: EconomyDatabase, mock_client: MagicMock):
+    async def test_welcome_back_disabled(
+        self, database: EconomyDatabase, mock_client: MagicMock
+    ):
         """Welcome-back disabled should not send bonus."""
         from conftest import make_config_dict
 
@@ -144,7 +164,10 @@ class TestWelcomeBack:
         cfg = EconomyConfig(**d)
 
         t = PresenceTracker(
-            config=cfg, database=database, client=mock_client, logger=logging.getLogger("test")
+            config=cfg,
+            database=database,
+            client=mock_client,
+            logger=logging.getLogger("test"),
         )
         await database.get_or_create_account("OldUser", "testchannel")
         await database.claim_welcome_wallet("OldUser", "testchannel", 100)
@@ -152,7 +175,9 @@ class TestWelcomeBack:
 
         old_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         conn = sqlite3.connect(database._db_path)
-        conn.execute("UPDATE accounts SET last_seen = ? WHERE username = 'OldUser'", (old_date,))
+        conn.execute(
+            "UPDATE accounts SET last_seen = ? WHERE username = 'OldUser'", (old_date,)
+        )
         conn.commit()
         conn.close()
 

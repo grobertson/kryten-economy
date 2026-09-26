@@ -27,8 +27,30 @@ metrics:
   port: 28290
 
 # ── Persistence ──────────────────────────────────────────────
+# backend: "sqlite" (default) or "postgres".
+#
+# The PostgreSQL backend ships in 0.16.0 and is fully implemented, but PRODUCTION
+# STILL RUNS SQLITE. Moving live currency across is a deliberate, reversible
+# operation - follow docs/postgres-cutover.md rather than editing this file and
+# restarting. The schema is managed by Alembic; apply it with
+# `alembic upgrade head` before selecting backend: "postgres".
+#
+# Rollback is this one line plus a restart. The SQLite file is left untouched
+# on disk after a cutover, so it stays valid for one full release.
 database:
-  path: economy.db
+  backend: "sqlite"                   # "sqlite" (current) or "postgres"
+  path: economy.db                    # sqlite only
+  postgres:                           # used only when backend: postgres
+    # dsn_env: "KRYTEN_ECONOMY_DSN"   # full DSN env var; highest precedence
+    # dsn: "postgresql://..."         # non-secret literal fallback if needed
+    host: "localhost"
+    port: 5432
+    user: "kryten"
+    dbname: "kryten_economy"
+    password_env: "KRYTEN_ECONOMY_PG_PASSWORD"  # preferred over password
+    # password: ""                    # legacy/plain-text fallback; avoid in config
+    pool_min_size: 1
+    pool_max_size: 8
 
 # ── Currency Identity ────────────────────────────────────────
 currency:

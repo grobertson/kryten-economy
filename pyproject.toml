@@ -1,6 +1,6 @@
 [project]
 name = "kryten-economy"
-version = "0.15.4"
+version = "0.16.1"
 description = "Channel engagement currency microservice for CyTube channels"
 readme = "README.md"
 requires-python = ">=3.12,<4.0.0"
@@ -36,6 +36,7 @@ dependencies = [
     "pydantic>=2.0,<3.0.0",
     "aiohttp>=3.9.0,<4.0.0",
     "croniter>=2.0.0,<3.0.0",
+    "asyncpg>=0.29",
 ]
 
 [project.optional-dependencies]
@@ -44,10 +45,21 @@ dev = [
     "pytest-asyncio>=0.24.0,<0.25.0",
     "pytest-cov>=4.1.0,<5.0.0",
     "black>=24.0.0,<25.0.0",
-    "ruff>=0.4.0,<1.0.0",
+    # Pinned to the version this tree was verified against. A wider range let CI
+    # resolve a newer ruff whose default rule set is stricter (it started
+    # flagging UP017, "use datetime.UTC"), which failed the lint gate on
+    # 375 findings that no local run could reproduce. Widen deliberately, and
+    # re-verify locally with the new version first.
+    "ruff==0.15.6",
     "mypy>=1.10.0,<2.0.0",
     "build>=1.0.0",
     "twine>=6.0.0",
+    # Alembic and its synchronous driver are needed to apply the schema, but
+    # they are not runtime dependencies of the service - the service connects
+    # with asyncpg and never runs migrations. They live in the dev group so
+    # `uv sync --dev` makes `alembic upgrade head` work in CI and locally.
+    "alembic>=1.20.0,<2.0.0",
+    "psycopg2-binary>=2.9.13",
 ]
 
 [project.urls]
@@ -67,16 +79,47 @@ build-backend = "hatchling.build"
 packages = ["kryten_economy"]
 
 [tool.black]
-line-length = 100
+# The whole tree is formatted at black's default 88, not 100 - the repo has
+# been like this since the initial release. Ruff is configured at 100, so the
+# two are deliberately allowed to disagree: black decides layout, ruff decides
+# lint. Changing this to 100 would reformat every file in the repository.
+line-length = 88
 target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+
+# kryten-py ships no py.typed marker, so mypy reports import-untyped for it.
+# The package IS installed, so `ignore_missing_imports` does not apply - the
+# per-module flag for "installed but untyped" is `follow_imports = skip`,
+# scoped to just this one dependency. The rest of the PostgreSQL layer is
+# genuinely type-checked. Adding py.typed to kryten-py is the real fix and is
+# tracked there.
+[[tool.mypy.overrides]]
+module = ["kryten", "kryten.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
+# E501 is black's job (line length), so ruff does not duplicate it.
+# The default rule set (E, F) is kept deliberately narrow: this repository has
+# never been linted with the pyupgrade (UP) rules, and enabling them would mean
+# a 375-finding cleanup that is unrelated to any current change.
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "postgres: requires a live PostgreSQL server (KRYTEN_ECONOMY_TEST_DSN or KRYTEN_ECONOMY_PG_DSN); skipped when neither is set",
+]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20260906",
+    "asyncpg-stubs>=0.31.3",
+]

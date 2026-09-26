@@ -96,7 +96,9 @@ def handler(spending_app: MagicMock, mock_client: MagicMock) -> CommandHandler:
 class TestQueuePreview:
     """Tests for Gap 4: spending.queue_preview."""
 
-    async def test_preview_returns_cost(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_preview_returns_cost(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """Happy path: correct cost_z, tier_label, available: true."""
         await _seed_account(database, "alice", balance=50000)
         result = await handler._handle_command(
@@ -132,7 +134,9 @@ class TestQueuePreview:
         assert data["available"] is False
         assert data["error_code"] == "insufficient_balance"
 
-    async def test_preview_daily_limit(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_preview_daily_limit(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """Seed daily_activity.queues_used = max; expect daily_limit_reached."""
         await _seed_account(database, "alice", balance=50000)
         today = datetime.now(timezone.utc).date().isoformat()
@@ -153,7 +157,9 @@ class TestQueuePreview:
         assert data["available"] is False
         assert data["error_code"] == "daily_limit_reached"
 
-    async def test_preview_cooldown(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_preview_cooldown(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """Seed a recent queue transaction; expect cooldown_active."""
         await _seed_account(database, "alice", balance=50000)
         # Insert a queue transaction (simulating recent spend)
@@ -181,7 +187,9 @@ class TestQueuePreview:
 class TestQueueSpend:
     """Tests for Gap 5: spending.queue."""
 
-    async def test_queue_happy_path(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_queue_happy_path(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """Debit succeeds; idempotency row inserted; daily counter incremented."""
         await _seed_account(database, "alice", balance=50000)
         result = await handler._handle_command(
@@ -212,7 +220,9 @@ class TestQueueSpend:
         activity = await database.get_or_create_daily_activity("alice", CH, today)
         assert activity["queues_used"] >= 1
 
-    async def test_queue_idempotent(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_queue_idempotent(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """Call spending.queue twice with same request_id; balance debited only once."""
         await _seed_account(database, "alice", balance=50000)
         req = {
@@ -264,7 +274,9 @@ class TestQueueSpend:
 class TestQueueRefund:
     """Tests for Gap 6: spending.queue_refund."""
 
-    async def test_refund_happy_path(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_refund_happy_path(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """Spend first, then refund; balance restored."""
         await _seed_account(database, "alice", balance=50000)
         # Spend
@@ -301,7 +313,9 @@ class TestQueueRefund:
         row = await database.get_queue_spend_request("req-refund1")
         assert row["refunded"] == 1
 
-    async def test_refund_idempotent(self, handler: CommandHandler, database: EconomyDatabase):
+    async def test_refund_idempotent(
+        self, handler: CommandHandler, database: EconomyDatabase
+    ):
         """Call spending.queue_refund twice; balance credited only once."""
         await _seed_account(database, "alice", balance=50000)
         # Spend
@@ -394,7 +408,9 @@ def inflated_app(
 
 @pytest.fixture
 def inflated_handler(inflated_app: MagicMock, mock_client: MagicMock) -> CommandHandler:
-    return CommandHandler(inflated_app, mock_client, logging.getLogger("test.cmd.inflated"))
+    return CommandHandler(
+        inflated_app, mock_client, logging.getLogger("test.cmd.inflated")
+    )
 
 
 class TestInflationReachesHandlers:
@@ -440,5 +456,7 @@ class TestInflationReachesHandlers:
         row = await database.get_queue_spend_request("req-inflation-001")
         assert row["cost_z"] == result["data"]["cost_z"]
         # cost must exceed the base tier price (inflation applied)
-        base_label, base_cost = inflated_handler._app.spending_engine.get_price_tier(600)
+        base_label, base_cost = inflated_handler._app.spending_engine.get_price_tier(
+            600
+        )
         assert result["data"]["cost_z"] > base_cost

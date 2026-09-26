@@ -176,7 +176,9 @@ class TriviaClient:
                     difficulty=item["difficulty"],
                     question=html.unescape(item["question"]),
                     correct_answer=html.unescape(item["correct_answer"]),
-                    incorrect_answers=[html.unescape(a) for a in item["incorrect_answers"]],
+                    incorrect_answers=[
+                        html.unescape(a) for a in item["incorrect_answers"]
+                    ],
                 )
             )
 

@@ -1,0 +1,23 @@
+Generic single-database configuration for kryten-economy (PostgreSQL).
+
+This directory is the single schema authority for the PostgreSQL backend
+(Sprint 12 decision). There is no hand-rolled `sql/` directory and no custom
+`schema_version` table: Alembic's `alembic_version` table tracks applied revisions.
+
+`env.py` is schema-only. It does not import the asyncpg data layer, because the
+economy store is written directly against asyncpg rather than a SQLAlchemy ORM.
+
+Usage
+-----
+    # Apply migrations to the configured database
+    uv run alembic upgrade head
+
+    # Create a new revision after editing models/explicit DDL
+    uv run alembic revision -m "describe the change"
+
+    # Inspect SQL without connecting
+    uv run alembic upgrade head --sql
+
+The database URL is never stored in `alembic.ini` (it may contain a secret).
+It is resolved at runtime from `KRYTEN_ECONOMY_ALEMBIC_URL`, or from the
+service's `database.postgres` config block via `KRYTEN_ECONOMY_CONFIG`.

@@ -168,7 +168,9 @@ async def test_mentioned_self_no_earn(
     # alice should not earn mention reward for self-mention
     # (she may earn other triggers, so check transactions)
     txns = await database.get_recent_transactions("alice", CH, 50)
-    mention_txns = [t for t in txns if t.get("trigger_id") == "social.mentioned_by_other"]
+    mention_txns = [
+        t for t in txns if t.get("trigger_id") == "social.mentioned_by_other"
+    ]
     assert len(mention_txns) == 0
 
 
@@ -207,7 +209,9 @@ async def test_mentioned_by_other_hourly_cap(
     )
 
     txns = await database.get_recent_transactions("alice", CH, 50)
-    mention_txns = [t for t in txns if t.get("trigger_id") == "social.mentioned_by_other"]
+    mention_txns = [
+        t for t in txns if t.get("trigger_id") == "social.mentioned_by_other"
+    ]
     assert len(mention_txns) == 5  # capped at 5
 
 
@@ -258,7 +262,9 @@ async def test_mentioned_ignored_user(
     await engine.evaluate_chat_message("alice", CH, "hey IgnoredBot", NOW)
 
     txns = await database.get_recent_transactions("IgnoredBot", CH, 50)
-    mention_txns = [t for t in txns if t.get("trigger_id") == "social.mentioned_by_other"]
+    mention_txns = [
+        t for t in txns if t.get("trigger_id") == "social.mentioned_by_other"
+    ]
     assert len(mention_txns) == 0
 
 

@@ -47,7 +47,9 @@ class TestGreetingHandler:
 
         # Insert a custom greeting via the database
         await database.get_or_create_account("alice", "testchannel")
-        await database.set_vanity_item("alice", "testchannel", "custom_greeting", "Hello world!")
+        await database.set_vanity_item(
+            "alice", "testchannel", "custom_greeting", "Hello world!"
+        )
 
         announcer = EventAnnouncer(
             config=sample_config,
@@ -93,7 +95,9 @@ class TestGreetingHandler:
         presence._last_departure[("alice", "testchannel")] = recent
 
         await database.get_or_create_account("alice", "testchannel")
-        await database.set_vanity_item("alice", "testchannel", "custom_greeting", "Hey!")
+        await database.set_vanity_item(
+            "alice", "testchannel", "custom_greeting", "Hey!"
+        )
 
         announcer = EventAnnouncer(
             config=sample_config,
@@ -265,7 +269,9 @@ class TestGreetingHandler:
         # No _last_departure entry → was_absent_longer_than returns True
 
         await database.get_or_create_account("newuser", "testchannel")
-        await database.set_vanity_item("newuser", "testchannel", "custom_greeting", "I'm new!")
+        await database.set_vanity_item(
+            "newuser", "testchannel", "custom_greeting", "I'm new!"
+        )
 
         announcer = EventAnnouncer(
             config=sample_config,
@@ -337,7 +343,9 @@ class TestGreetingHandler:
         presence._last_departure[("alice", "testchannel")] = past
 
         await database.get_or_create_account("Alice", "testchannel")
-        await database.set_vanity_item("Alice", "testchannel", "custom_greeting", "Case works!")
+        await database.set_vanity_item(
+            "Alice", "testchannel", "custom_greeting", "Case works!"
+        )
 
         announcer = EventAnnouncer(
             config=sample_config,

@@ -27,7 +27,9 @@ def tracker(
 class TestBridgeBonus:
     """Weekend→weekday bridge bonus logic."""
 
-    async def test_weekend_only_no_bonus(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_weekend_only_no_bonus(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Being seen only on weekend should not trigger bridge."""
         await database.get_or_create_account("alice", "testchannel")
         # 2026-01-03 is Saturday
@@ -35,7 +37,9 @@ class TestBridgeBonus:
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 0
 
-    async def test_weekday_only_no_bonus(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_weekday_only_no_bonus(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Being seen only on weekday should not trigger bridge."""
         await database.get_or_create_account("alice", "testchannel")
         # 2026-01-05 is Monday
@@ -43,7 +47,9 @@ class TestBridgeBonus:
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 0
 
-    async def test_bridge_awarded(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_bridge_awarded(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Seen on both weekend and weekday in same week should award bridge."""
         await database.get_or_create_account("alice", "testchannel")
         # 2026-01-05 is Monday (W02), 2026-01-10 is Saturday (W02) — same ISO week
@@ -58,12 +64,16 @@ class TestBridgeBonus:
         """Bridge should only be claimed once per week."""
         await database.get_or_create_account("alice", "testchannel")
         await tracker._evaluate_bridge("alice", "testchannel", "2026-01-05")  # Mon W02
-        await tracker._evaluate_bridge("alice", "testchannel", "2026-01-10")  # Sat W02 (claims)
+        await tracker._evaluate_bridge(
+            "alice", "testchannel", "2026-01-10"
+        )  # Sat W02 (claims)
         await tracker._evaluate_bridge("alice", "testchannel", "2026-01-11")  # Sun W02
         balance = await database.get_balance("alice", "testchannel")
         assert balance == 500  # Not doubled
 
-    async def test_new_week_resets(self, tracker: PresenceTracker, database: EconomyDatabase):
+    async def test_new_week_resets(
+        self, tracker: PresenceTracker, database: EconomyDatabase
+    ):
         """Different ISO week should reset bridge tracking."""
         await database.get_or_create_account("alice", "testchannel")
         # Week 2 (2026-W02): Mon Jan 5 + Sat Jan 10 → bridge
@@ -78,7 +88,10 @@ class TestBridgeBonus:
         assert balance == 1000  # 500 per week × 2
 
     async def test_bridge_pm_sent(
-        self, tracker: PresenceTracker, database: EconomyDatabase, mock_client: MagicMock
+        self,
+        tracker: PresenceTracker,
+        database: EconomyDatabase,
+        mock_client: MagicMock,
     ):
         """Bridge bonus should trigger a PM notification."""
         await database.get_or_create_account("alice", "testchannel")

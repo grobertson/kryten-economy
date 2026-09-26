@@ -49,7 +49,9 @@ async def _make_account(
 
 @pytest.mark.asyncio
 async def test_gambling_disabled(
-    gambling_engine: GamblingEngine, database: EconomyDatabase, sample_config: EconomyConfig
+    gambling_engine: GamblingEngine,
+    database: EconomyDatabase,
+    sample_config: EconomyConfig,
 ):
     """All games return error when gambling.enabled = false."""
     gambling_engine._config.gambling.enabled = False
@@ -63,7 +65,9 @@ async def test_gambling_disabled(
 
 
 @pytest.mark.asyncio
-async def test_min_account_age_enforced(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_min_account_age_enforced(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """New account (< 60 min old) → rejected."""
     await _make_account(database, "NewUser", age_minutes=10)
 
@@ -85,7 +89,9 @@ async def test_min_account_age_satisfied(
 
 
 @pytest.mark.asyncio
-async def test_economy_banned_rejected(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_economy_banned_rejected(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Banned user → rejected."""
     await _make_account(database, "Banned", banned=True)
 
@@ -94,7 +100,9 @@ async def test_economy_banned_rejected(gambling_engine: GamblingEngine, database
 
 
 @pytest.mark.asyncio
-async def test_insufficient_balance(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_insufficient_balance(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Balance < wager → rejected."""
     await _make_account(database, "Poor", balance=10)
 
@@ -103,7 +111,9 @@ async def test_insufficient_balance(gambling_engine: GamblingEngine, database: E
 
 
 @pytest.mark.asyncio
-async def test_min_wager_enforced(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_min_wager_enforced(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Wager below minimum → rejected."""
     await _make_account(database, "Alice")
 
@@ -112,7 +122,9 @@ async def test_min_wager_enforced(gambling_engine: GamblingEngine, database: Eco
 
 
 @pytest.mark.asyncio
-async def test_max_wager_enforced(gambling_engine: GamblingEngine, database: EconomyDatabase):
+async def test_max_wager_enforced(
+    gambling_engine: GamblingEngine, database: EconomyDatabase
+):
     """Wager above maximum → rejected."""
     await _make_account(database, "Alice")
 

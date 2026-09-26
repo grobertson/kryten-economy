@@ -93,7 +93,9 @@ class EventAnnouncer:
         try:
             message = template.format(**variables)
         except (KeyError, IndexError) as exc:
-            self._logger.warning("Template render failed for '%s': %s", template_key, exc)
+            self._logger.warning(
+                "Template render failed for '%s': %s", template_key, exc
+            )
             return
 
         # Dedup + queue
@@ -118,7 +120,10 @@ class EventAnnouncer:
         """Return True if this exact message was sent recently."""
         msg_hash = hash((channel, message))
         now = datetime.now(timezone.utc).timestamp()
-        if any(h == msg_hash and now - t < self._dedup_window_seconds for h, t in self._recent):
+        if any(
+            h == msg_hash and now - t < self._dedup_window_seconds
+            for h, t in self._recent
+        ):
             return True
         self._recent.append((msg_hash, now))
         return False
@@ -148,7 +153,9 @@ class EventAnnouncer:
 
             # Rate limit
             if sent_this_minute >= self._max_per_minute:
-                self._logger.warning("Announcement rate limit hit, dropping: %s", message[:60])
+                self._logger.warning(
+                    "Announcement rate limit hit, dropping: %s", message[:60]
+                )
                 continue
 
             # Brief batch delay

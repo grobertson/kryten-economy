@@ -178,7 +178,9 @@ def test_media_comment_cap_scales(channel_state):
 
 def test_media_comment_cap_no_scale(sample_config_dict):
     """scale=false → base cap."""
-    sample_config_dict["content_triggers"]["comment_during_media"]["scale_with_duration"] = False
+    sample_config_dict["content_triggers"]["comment_during_media"][
+        "scale_with_duration"
+    ] = False
     from kryten_economy.config import EconomyConfig
 
     config = EconomyConfig(**sample_config_dict)

@@ -146,7 +146,9 @@ class TestWelcomeWallet:
         first_balance = await database.get_balance("NewUser", "testchannel")
 
         # Force session removal and rejoin (genuine)
-        old_time = tracker._sessions[("newuser", "testchannel")].connected_at - timedelta(hours=1)
+        old_time = tracker._sessions[
+            ("newuser", "testchannel")
+        ].connected_at - timedelta(hours=1)
         tracker._last_departure[("newuser", "testchannel")] = old_time
         del tracker._sessions[("newuser", "testchannel")]
 
@@ -189,7 +191,9 @@ class TestCumulativeMinutesRestoration:
         today = now_utc().strftime("%Y-%m-%d")
         # Pre-populate 45 minutes in DB
         await database.get_or_create_account("Alice", "testchannel")
-        await database.increment_daily_minutes_present("Alice", "testchannel", today, 45)
+        await database.increment_daily_minutes_present(
+            "Alice", "testchannel", today, 45
+        )
 
         users = [{"name": "Alice", "rank": 0}]
         count = await tracker.seed_initial_users("testchannel", users)
@@ -254,7 +258,9 @@ class TestCumulativeMinutesRestoration:
         """handle_user_join (genuine) should restore cumulative_minutes_today from DB."""
         today = now_utc().strftime("%Y-%m-%d")
         await database.get_or_create_account("Alice", "testchannel")
-        await database.increment_daily_minutes_present("Alice", "testchannel", today, 30)
+        await database.increment_daily_minutes_present(
+            "Alice", "testchannel", today, 30
+        )
         # Push last_seen back so _is_genuine_arrival returns True
         old_time = now_utc() - timedelta(hours=1)
         await database.update_last_seen("Alice", "testchannel")
@@ -282,7 +288,9 @@ class TestCumulativeMinutesRestoration:
         """handle_user_join (bounce) should restore cumulative_minutes_today from DB."""
         today = now_utc().strftime("%Y-%m-%d")
         await database.get_or_create_account("Alice", "testchannel")
-        await database.increment_daily_minutes_present("Alice", "testchannel", today, 20)
+        await database.increment_daily_minutes_present(
+            "Alice", "testchannel", today, 20
+        )
 
         # Set up a recent departure so the next join is a bounce
         await tracker.handle_user_join("Alice", "testchannel")

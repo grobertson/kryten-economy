@@ -56,7 +56,9 @@ async def test_multiple_triggers_fire(earning_engine, database):
 async def test_disabled_trigger_skipped(sample_config, database, channel_state):
     """Trigger with enabled: false → not evaluated."""
     sample_config.chat_triggers.long_message.enabled = False
-    engine = EarningEngine(sample_config, database, channel_state, logging.getLogger("test"))
+    engine = EarningEngine(
+        sample_config, database, channel_state, logging.getLogger("test")
+    )
 
     msg = "x" * 50
     outcome = await engine.evaluate_chat_message("alice", CH, msg, NOW)
@@ -108,5 +110,7 @@ async def test_empty_message_no_triggers(earning_engine, database):
     outcome = await earning_engine.evaluate_chat_message("alice", CH, "", NOW)
 
     # long_message should not fire
-    long_msg_results = [r for r in outcome.results if r.trigger_id == "chat.long_message"]
+    long_msg_results = [
+        r for r in outcome.results if r.trigger_id == "chat.long_message"
+    ]
     assert all(r.amount == 0 for r in long_msg_results)

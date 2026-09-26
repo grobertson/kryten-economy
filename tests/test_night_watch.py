@@ -18,7 +18,11 @@ from conftest import make_config_dict
 def night_config() -> EconomyConfig:
     """Config with night watch enabled."""
     d = make_config_dict()
-    d["presence"]["night_watch"] = {"enabled": True, "hours": [2, 3, 4], "multiplier": 2.0}
+    d["presence"]["night_watch"] = {
+        "enabled": True,
+        "hours": [2, 3, 4],
+        "multiplier": 2.0,
+    }
     return EconomyConfig(**d)
 
 

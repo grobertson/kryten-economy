@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator
@@ -86,7 +87,11 @@ def make_config_dict(**overrides) -> dict:
         },
         "balance_maintenance": {
             "mode": "interest",
-            "interest": {"daily_rate": 0.001, "max_daily_interest": 10, "min_balance_to_earn": 100},
+            "interest": {
+                "daily_rate": 0.001,
+                "max_daily_interest": 10,
+                "min_balance_to_earn": 100,
+            },
             "decay": {"enabled": False, "daily_rate": 0.005, "exempt_below": 50000},
         },
         "retention": {
@@ -113,7 +118,12 @@ def make_config_dict(**overrides) -> dict:
                 "self_excluded": True,
                 "hidden": True,
             },
-            "kudos_received": {"enabled": True, "reward": 3, "self_excluded": True, "hidden": True},
+            "kudos_received": {
+                "enabled": True,
+                "reward": 3,
+                "self_excluded": True,
+                "hidden": True,
+            },
             "first_message_of_day": {"enabled": True, "reward": 5, "hidden": True},
             "conversation_starter": {
                 "enabled": True,
@@ -143,7 +153,11 @@ def make_config_dict(**overrides) -> dict:
                 "reward": 5,
                 "hidden": True,
             },
-            "present_at_event_start": {"enabled": True, "default_reward": 100, "hidden": True},
+            "present_at_event_start": {
+                "enabled": True,
+                "default_reward": 100,
+                "hidden": True,
+            },
         },
         "social_triggers": {
             "greeted_newcomer": {
@@ -159,7 +173,12 @@ def make_config_dict(**overrides) -> dict:
                 "max_per_hour_same_user": 5,
                 "hidden": True,
             },
-            "bot_interaction": {"enabled": True, "reward": 2, "max_per_day": 10, "hidden": True},
+            "bot_interaction": {
+                "enabled": True,
+                "reward": 2,
+                "max_per_day": 10,
+                "hidden": True,
+            },
         },
     }
     base.update(overrides)
@@ -537,7 +556,9 @@ class MockKrytenClient:
     ) -> None:
         self._kv_store.setdefault(bucket_name, {})[key] = value
 
-    async def nats_request(self, subject: str, request: Any, timeout: float = 5) -> dict:
+    async def nats_request(
+        self, subject: str, request: Any, timeout: float = 5
+    ) -> dict:
         return {}
 
     async def connect(self) -> None:
@@ -555,11 +576,15 @@ class MockKrytenClient:
     async def subscribe_request_reply(self, subject: str, handler: Any) -> None:
         self._request_reply_handlers[subject] = handler
 
-    async def get_or_create_kv_store(self, bucket_name: str, description: str = "") -> Any:
+    async def get_or_create_kv_store(
+        self, bucket_name: str, description: str = ""
+    ) -> Any:
         self._kv_store.setdefault(bucket_name, {})
         return MagicMock()
 
-    def on(self, event_name: str, channel: str | None = None, domain: str | None = None):
+    def on(
+        self, event_name: str, channel: str | None = None, domain: str | None = None
+    ):
         """Match kryten-py's ``on()`` decorator signature."""
 
         def decorator(func):
@@ -677,3 +702,133 @@ async def db_with_accounts(tmp_path: Path) -> AsyncGenerator[EconomyDatabase, No
     await loop.run_in_executor(None, lambda: _insert(db._get_connection()))
 
     yield db
+
+
+# ── Sprint 12 / Sortie 5: PostgreSQL test wiring ─────────────
+#
+# The PostgreSQL backend is validated against a real server, never a mock: the
+# parity, concurrency, and ETL tests would pass against a fake pool while the
+# service failed against real asyncpg. Those tests are therefore marked
+# ``@pytest.mark.postgres`` and skip cleanly when no DSN is available, so a
+# developer machine without PostgreSQL still gets a green suite.
+#
+# Two variables are accepted, in precedence order:
+#
+#   KRYTEN_ECONOMY_TEST_DSN   preferred; set by CI and by the documented local
+#                             workflow. Points at a *disposable* database -
+#                             these tests write to it.
+#   KRYTEN_ECONOMY_PG_DSN     legacy name, still honoured from Sorties 3-4.
+#
+# Point these at a scratch database, never production: the suite creates and
+# drops rows (scoped to a per-test unique channel) and the ETL tests truncate
+# tables outright.
+
+_PG_DSN_ENV_VARS = ("KRYTEN_ECONOMY_TEST_DSN", "KRYTEN_ECONOMY_PG_DSN")
+
+
+def resolve_test_dsn() -> tuple[str, str] | None:
+    """Return ``(value, env_var_name)`` for the test DSN, or ``None`` if unset.
+
+    Exposed as a module function (rather than only a fixture) so it can be
+    imported by tests that need to decide at collection time, before fixtures
+    are available. The variable name is returned alongside the value because the
+    ETL resolves its target through an env-var *name*, not a raw DSN.
+    """
+    for var in _PG_DSN_ENV_VARS:
+        value = os.environ.get(var, "").strip()
+        if value:
+            return value, var
+    return None
+
+
+_resolved = resolve_test_dsn()
+PG_DSN: str | None = _resolved[0] if _resolved else None
+PG_DSN_ENV_VAR: str = _resolved[1] if _resolved else "KRYTEN_ECONOMY_TEST_DSN"
+PG_AVAILABLE: bool = PG_DSN is not None
+
+requires_postgres = pytest.mark.skipif(
+    not PG_AVAILABLE,
+    reason=(
+        "No PostgreSQL DSN; set KRYTEN_ECONOMY_TEST_DSN "
+        "(or KRYTEN_ECONOMY_PG_DSN) to run PostgreSQL backend tests"
+    ),
+)
+
+
+@pytest.fixture(scope="session")
+def pg_dsn() -> str:
+    """Return the PostgreSQL DSN, skipping the test when none is configured."""
+    if not PG_AVAILABLE:
+        pytest.skip(
+            "No PostgreSQL DSN; set KRYTEN_ECONOMY_TEST_DSN "
+            "(or KRYTEN_ECONOMY_PG_DSN) to run PostgreSQL backend tests"
+        )
+    assert PG_DSN is not None  # narrowed for type checkers
+    return PG_DSN
+
+
+@pytest_asyncio.fixture
+async def pg_pool(pg_dsn: str) -> AsyncGenerator[Any, None]:
+    """Yield an asyncpg pool against the test database, closed on teardown."""
+    import asyncpg
+
+    pool = await asyncpg.create_pool(pg_dsn, min_size=1, max_size=10)
+    try:
+        yield pool
+    finally:
+        await pool.close()
+
+
+# Tables any test can leave rows in, paired with the column that scopes a row to
+# a test's unique channel. Ordered so a delete cascades cleanly.
+#
+# ``service_metrics`` is the one table keyed only by ``date`` - it has neither
+# ``channel`` nor ``username`` - so it cannot be scoped to a test and is not
+# cleaned here. Its rows are a running counter series that individual tests
+# overwrite by date, so leftover values are harmless.
+_PG_TEST_TABLES: tuple[tuple[str, str], ...] = (
+    ("queue_spend_requests", "channel"),
+    ("vanity_items", "channel"),
+    ("pending_approvals", "channel"),
+    ("tip_history", "channel"),
+    ("transactions", "channel"),
+    ("daily_activity", "channel"),
+    ("hourly_milestones", "channel"),
+    ("streaks", "channel"),
+    ("trigger_cooldowns", "channel"),
+    ("gambling_stats", "channel"),
+    ("trivia_stats", "channel"),
+    ("blackjack_stats", "channel"),
+    ("race_bets", "channel"),
+    ("race_results", "channel"),
+    ("pending_challenges", "channel"),
+    ("economy_snapshots", "channel"),
+    ("bounties", "channel"),
+    ("banned_users", "channel"),
+    ("achievements", "channel"),
+    ("trigger_analytics", "channel"),
+)
+
+
+@pytest_asyncio.fixture
+async def pg_store(pg_pool: Any) -> AsyncGenerator[tuple[Any, str], None]:
+    """Yield ``(EconomyDatabasePg, channel)`` bound to a unique channel.
+
+    The channel is unique per test, so concurrent or repeated runs never
+    collide, and teardown deletes only the rows this test created.
+    """
+    import uuid
+
+    from kryten_economy.db.database_pg import EconomyDatabasePg
+
+    store = EconomyDatabasePg(pg_pool, logging.getLogger("test.pg_store"))
+    await store.initialize()
+    channel = f"pgtest_{uuid.uuid4().hex[:10]}"
+    try:
+        yield store, channel
+    finally:
+        async with pg_pool.acquire() as con:
+            for table, column in _PG_TEST_TABLES:
+                await con.execute(f"DELETE FROM {table} WHERE {column} = $1", channel)
+            # accounts last: other rows may reference them.
+            await con.execute("DELETE FROM accounts WHERE channel = $1", channel)
