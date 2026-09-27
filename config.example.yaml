@@ -331,10 +331,16 @@ gambling:
       # LLM back-end — used when mode is "llm" or "hybrid". Generates a themed
       # heist story (scenario + win/lose/push lines) in a single call, so the
       # resolution feels narratively consistent. Falls back to static on any error.
+      # NOTE: both narrators (heist.narrative.llm and race.commentary.llm) share
+      # one endpoint/model contract — set them to the same server. From inside a
+      # container, `localhost` is the container itself, not the host: use
+      # `host.containers.internal` (Podman) or `host.docker.internal` (Docker).
+      # An http:// URL with no explicit port is rejected at startup, because it
+      # silently resolves to port 80 and then fails every call.
       # llm:
-      #   endpoint: "http://localhost:1234/v1/chat/completions"
+      #   endpoint: "http://host.containers.internal:1234/v1/chat/completions"
       #   api_key: ""           # Bearer token (blank for local / LM Studio)
-      #   model: "llama3"       # any OpenAI-compatible model name
+      #   model: "gemma-4-26b-a4b-it-heretic"   # must match an id from <endpoint>/v1/models
       #   temperature: 1.0
       #   max_tokens: 600
       #   timeout_seconds: 10
@@ -376,10 +382,12 @@ gambling:
       # LLM back-end — used when mode is "llm" or "hybrid". Generates a themed
       # set of race-commentary lines once per race (start, lead_change, event,
       # finish) and falls back to the static pools on any failure.
+      # Keep this in step with gambling.heist.narrative.llm above — same server,
+      # same model. See that block for the container-hostname and port notes.
       # llm:
-      #   endpoint: "http://localhost:11434/v1/chat/completions"
-      #   api_key: ""           # Bearer token (blank for local Ollama)
-      #   model: "llama3"
+      #   endpoint: "http://host.containers.internal:1234/v1/chat/completions"
+      #   api_key: ""           # Bearer token (blank for local LM Studio / Ollama)
+      #   model: "gemma-4-26b-a4b-it-heretic"
       #   temperature: 1.0
       #   max_tokens: 400
       #   timeout_seconds: 10

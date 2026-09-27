@@ -236,10 +236,11 @@ class TestLLMGeneration:
         assert story is None
 
     async def test_bad_endpoint_returns_none(self) -> None:
-        # Unreachable port — fast fail with no retries
+        # Valid URL shape, nothing listening -> fast fail with no retries.
+        # (A malformed/out-of-range port is rejected at config load instead.)
         n = _narrator(
             "llm",
-            endpoint="http://localhost:9/v1/chat/completions",
+            endpoint="http://127.0.0.1:9/v1/chat/completions",
             timeout_seconds=1,
             max_retries=0,
         )
@@ -287,7 +288,12 @@ class TestLLMGeneration:
         assert story is None
 
     async def test_valid_story_parsed(self) -> None:
-        n = _narrator("llm")
+        # An explicit endpoint is required: the default is now empty (LLM off),
+        # and _generate_llm_story short-circuits before issuing a request.
+        n = _narrator(
+            "llm",
+            endpoint="http://host.containers.internal:1234/v1/chat/completions",
+        )
 
         payload = (
             '{"start": "Go!", "lead_change": "{racer} leads", '

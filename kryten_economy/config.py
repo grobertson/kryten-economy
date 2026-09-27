@@ -11,12 +11,49 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import yaml
 from kryten import KrytenConfig
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from . import __version__
+
+
+def _validate_llm_endpoint(value: str, *, field_name: str) -> str:
+    """Reject endpoints that cannot possibly work, at config-load time.
+
+    A malformed endpoint used to fail *silently*: ``http://localhost`` (no port)
+    resolves to the http default port 80, aiohttp raises ConnectionRefused, the
+    narrator catches it, logs a warning, and quietly uses static text forever.
+    The only symptom was a WARNING line that looked like noise.
+
+    Requiring an absolute http(s) URL with a host AND an explicit port (unless
+    the scheme is https, where 443 is the sane default) turns that class of
+    mistake into a startup error. An empty string is allowed: it means "LLM
+    disabled" and the narrator short-circuits before making any request.
+    """
+    if not value:
+        return value
+    parsed = urlparse(value)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            f"{field_name}: must be an absolute http(s) URL "
+            f"(got {value!r}); a bare host like 'localhost' silently resolves "
+            f"to port 80 and fails every call"
+        )
+    if not parsed.netloc or not parsed.hostname:
+        raise ValueError(f"{field_name}: missing host (got {value!r})")
+    if parsed.port is None and parsed.scheme == "http":
+        # http://localhost resolves to port 80, which is almost never what was
+        # meant for a local OpenAI-compatible server (LM Studio 1234, Ollama
+        # 11434). Catch it here rather than as an endless warning in the log.
+        raise ValueError(
+            f"{field_name}: missing explicit port (got {value!r}); "
+            f"'http://host' defaults to port 80. Use e.g. "
+            f"'http://host.containers.internal:1234/v1/chat/completions'"
+        )
+    return value
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -418,21 +455,49 @@ class DailyFreeSpinConfig(BaseModel):
     equivalent_wager: int = 50
 
 
-class HeistLLMConfig(BaseModel):
-    """LLM back-end for dynamic heist narrative generation."""
+class BaseNarratorLLMConfig(BaseModel):
+    """Shared LLM back-end fields for the heist and race narrators.
+
+    Both narrators previously declared their own copy of these fields with the
+    same defaults, which let their endpoints drift apart (one pointed at
+    :1234, the other at a port-less :80). A shared base makes a single config
+    edit apply to both and gives one place to validate the endpoint.
+    """
 
     endpoint: str = Field(
-        default="http://localhost:11434/v1/chat/completions",
-        description="OpenAI-compatible chat-completions URL",
+        default="",
+        description=(
+            "OpenAI-compatible chat-completions URL, e.g. "
+            "'http://host.containers.internal:1234/v1/chat/completions'. "
+            "Leave EMPTY to disable LLM narration and use the static library."
+        ),
     )
     api_key: str = Field(
         default="",
-        description="Bearer token (leave blank for local Ollama)",
+        description="Bearer token (leave blank for local LM Studio / Ollama)",
     )
     model: str = Field(
-        default="llama3",
-        description="Model name, e.g. 'gpt-4o-mini', 'llama3', 'mistral'",
+        default="gemma-4-26b-a4b-it-heretic",
+        description="Model name as reported by the endpoint's /v1/models",
     )
+    temperature: float = Field(
+        default=1.0, description="LLM sampling temperature (0.0–2.0)"
+    )
+    timeout_seconds: int = Field(default=10, description="HTTP timeout per request")
+    max_retries: int = Field(
+        default=1, description="Retry count on failure before falling back"
+    )
+
+    @field_validator("endpoint")
+    @classmethod
+    def _check_endpoint(cls, v: str) -> str:  # noqa: N805
+        return _validate_llm_endpoint(v, field_name=f"{cls.__name__}.endpoint")
+
+
+class HeistLLMConfig(BaseNarratorLLMConfig):
+    """LLM back-end for dynamic heist narrative generation."""
+
+    max_tokens: int = Field(default=600, description="Max tokens in LLM response")
     system_prompt: str = Field(
         default=(
             "You are a dramatic narrator for a heist game in a chat room. "
@@ -444,14 +509,6 @@ class HeistLLMConfig(BaseModel):
             '{"scenario":"...","win":"...","lose":"...","push":"..."}'
         ),
         description="System prompt sent to the LLM",
-    )
-    temperature: float = Field(
-        default=1.0, description="LLM sampling temperature (0.0–2.0)"
-    )
-    max_tokens: int = Field(default=600, description="Max tokens in LLM response")
-    timeout_seconds: int = Field(default=10, description="HTTP timeout per request")
-    max_retries: int = Field(
-        default=1, description="Retry count on failure before falling back"
     )
 
 
@@ -550,21 +607,9 @@ class RaceRacerNamesConfig(BaseModel):
     )
 
 
-class RaceLLMConfig(BaseModel):
+class RaceLLMConfig(BaseNarratorLLMConfig):
     """LLM back-end for dynamic race commentary generation."""
 
-    endpoint: str = Field(
-        default="http://localhost:11434/v1/chat/completions",
-        description="OpenAI-compatible chat-completions URL",
-    )
-    api_key: str = Field(
-        default="",
-        description="Bearer token (leave blank for local Ollama)",
-    )
-    model: str = Field(
-        default="llama3",
-        description="Model name, e.g. 'gpt-4o-mini', 'llama3', 'mistral'",
-    )
     system_prompt: str = Field(
         default=(
             "You are an energetic sports commentator for a chat-room racing game. "
@@ -577,14 +622,7 @@ class RaceLLMConfig(BaseModel):
         ),
         description="System prompt sent to the LLM",
     )
-    temperature: float = Field(
-        default=1.0, description="LLM sampling temperature (0.0–2.0)"
-    )
     max_tokens: int = Field(default=400, description="Max tokens in LLM response")
-    timeout_seconds: int = Field(default=10, description="HTTP timeout per request")
-    max_retries: int = Field(
-        default=1, description="Retry count on failure before falling back"
-    )
 
 
 class RaceCommentaryConfig(BaseModel):

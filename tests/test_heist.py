@@ -476,7 +476,9 @@ async def test_narrator_llm_fallback_on_failure(gambling_engine: GamblingEngine)
     hybrid_cfg = HeistNarrativeConfig(
         mode="hybrid",
         llm=HeistLLMConfig(
-            endpoint="http://localhost:99999/v1/chat/completions",
+            # Valid URL shape but nothing listening -> exercises the runtime
+            # fallback. (An out-of-range port is now rejected at config load.)
+            endpoint="http://127.0.0.1:9/v1/chat/completions",
             timeout_seconds=1,
             max_retries=0,
         ),
