@@ -30,5 +30,5 @@ RUN mkdir -p /etc/kryten/kryten-economy /var/lib/kryten/kryten-economy \
 
 USER kryten
 
-ENTRYPOINT ["python -m kryten_economy"]
+ENTRYPOINT ["python", "-m", "kryten_economy"]
 CMD ["--config", "/etc/kryten/kryten-economy/config.yaml"]
