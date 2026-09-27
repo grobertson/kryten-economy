@@ -13,7 +13,7 @@ import logging
 import math
 import sqlite3
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Sequence
 
 
 class EconomyDatabase:
@@ -1837,6 +1837,44 @@ class EconomyDatabase:
                     (race_id, username, channel, color, amount, payout, phase),
                 )
                 conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _sync)
+
+    async def save_race_resolution(
+        self,
+        race_id: str,
+        channel: str,
+        winner_color: str,
+        total_pool: int,
+        participants: int,
+        bets: Sequence[tuple[str, str, str, int, int, str]],
+    ) -> None:
+        """Persist a race result and all of its bets atomically.
+
+        Mirrors :meth:`kryten_economy.db.database_pg.PostgresDatabase.save_race_resolution`.
+        The result row is written first because ``race_bets.race_id`` references
+        it; a single transaction means a mid-way failure cannot persist a result
+        with only some of its bets.
+        """
+        loop = asyncio.get_running_loop()
+
+        def _sync() -> None:
+            conn = self._get_connection()
+            try:
+                with conn:
+                    conn.execute(
+                        "INSERT INTO race_results (race_id, channel, winner_color, total_pool, participants) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (race_id, channel, winner_color, total_pool, participants),
+                    )
+                    for username, color, amount, payout, phase in bets:
+                        conn.execute(
+                            "INSERT INTO race_bets (race_id, username, channel, color, amount, payout, phase) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (race_id, username, channel, color, amount, payout, phase),
+                        )
             finally:
                 conn.close()
 

@@ -805,6 +805,18 @@ class GamblingConfig(BaseModel):
         default=60,
         description="Shared cooldown between spectacle games (heist, race, trivia)",
     )
+    spectacle_max_duration_seconds: int = Field(
+        default=1800,
+        ge=0,
+        description=(
+            "Hard ceiling on how long one spectacle game may hold the channel "
+            "lock before SpectacleManager reclaims it as abandoned. This is a "
+            "safety net: a crashed resolution loop would otherwise block every "
+            "spectacle game in that channel until the service restarts. Set "
+            "comfortably above the longest legitimate game (race betting "
+            "window + duration), or 0 to disable the reaper."
+        ),
+    )
     spin: SpinConfig = Field(default_factory=SpinConfig)
     flip: FlipConfig = Field(default_factory=FlipConfig)
     challenge: ChallengeConfig = Field(default_factory=ChallengeConfig)

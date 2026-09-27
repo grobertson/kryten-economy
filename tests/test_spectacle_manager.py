@@ -17,6 +17,9 @@ CH = "test-channel"
 def manager() -> SpectacleManager:
     config = MagicMock()
     config.gambling.spectacle_cooldown_seconds = 30
+    # Long enough that no lock acquired during a test is ever considered stale;
+    # the TTL/reaper itself is covered in test_spectacle_lock.py.
+    config.gambling.spectacle_max_duration_seconds = 1800
     return SpectacleManager(config, logging.getLogger("test"))
 
 

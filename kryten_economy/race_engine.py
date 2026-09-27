@@ -816,6 +816,18 @@ class RaceEngine:
                     payout = int(bet.amount * odds * (1.0 - cfg.house_rake_pct))
                 winner_payouts.append((bet, payout, payout - bet.amount))
 
+        # ── Persist the race result and its bets ──────────────
+        # race_bets.race_id REFERENCES race_results(race_id), so the parent row
+        # must be written before any bet row. Writing bets first raised
+        # ForeignKeyViolationError on PostgreSQL (SQLite does not enforce FKs by
+        # default, which hid it), and that failure aborted resolution before the
+        # spectacle lock was released, wedging the channel.
+        #
+        # Both writes go through save_race_resolution, which inserts the result
+        # row first and every bet in the same transaction. A race with no bets
+        # still needs its result row, so the method is always called.
+        bet_rows: list[tuple[str, str, str, int, int, str]] = []
+
         # Credit winners + record stats
         for bet, payout, net in winner_payouts:
             reason = (
@@ -844,15 +856,7 @@ class RaceEngine:
             await self._db.increment_daily_gambled(
                 bet.username, channel, today, bet.amount, payout
             )
-            await self._db.save_race_bet(
-                race.race_id,
-                bet.username,
-                channel,
-                bet.color,
-                bet.amount,
-                payout,
-                bet.phase,
-            )
+            bet_rows.append((bet.username, bet.color, bet.amount, payout, bet.phase))
             suffix = "" if cfg.odds_mode == "pool" else f" at {odds:.1f}x"
             per_user_pm[bet.username] = (
                 f"✅ {winner.emoji} {winner_color} wins! "
@@ -874,27 +878,21 @@ class RaceEngine:
             await self._db.increment_daily_gambled(
                 bet.username, channel, today, bet.amount, 0
             )
-            await self._db.save_race_bet(
-                race.race_id,
-                bet.username,
-                channel,
-                bet.color,
-                bet.amount,
-                0,
-                bet.phase,
-            )
+            bet_rows.append((bet.username, bet.color, bet.amount, 0, bet.phase))
             per_user_pm[bet.username] = (
                 f"❌ {winner.emoji} {winner_color} wins — your bet on "
                 f"{bet.color} lost {bet.amount:,} {self._symbol}."
             )
 
-        # Persist race result
-        await self._db.save_race_result(
+        # Persist the result and every bet for this race in a single transaction,
+        # so a mid-way failure cannot leave a result with only some of its bets.
+        await self._db.save_race_resolution(
             race.race_id,
             channel,
             winner_color,
             total_pool,
             len(race.bets),
+            bet_rows,
         )
 
         # ── Build public announcement lines ──────────────────

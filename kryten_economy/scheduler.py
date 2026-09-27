@@ -283,9 +283,14 @@ class Scheduler:
                         # Capture heist wager total before resolution
                         heist_total_wagered = sum(heist.participants.values())
                         heist_participants = list(heist.participants.keys())
-                        result = await self._gambling_engine.resolve_heist(channel)
-                        if self._spectacle_manager:
-                            self._spectacle_manager.release(channel)
+                        # The spectacle lock MUST be released even if resolution
+                        # or announcement raises, or the channel stays blocked
+                        # for every other spectacle game until a restart.
+                        try:
+                            result = await self._gambling_engine.resolve_heist(channel)
+                        finally:
+                            if self._spectacle_manager:
+                                self._spectacle_manager.release(channel)
                         if result:
                             if self._metrics:
                                 # Count one heist per participant
@@ -379,9 +384,15 @@ class Scheduler:
         """Resolve a finished race and deliver paced announcements off the loop."""
         try:
             await asyncio.sleep(1)  # brief dramatic pause
-            result = await self._race_engine.resolve_race(channel)
-            if self._spectacle_manager:
-                self._spectacle_manager.release(channel)
+            # Release the spectacle lock in a finally: a failure in
+            # resolve_race (e.g. a DB error during payout) previously left the
+            # channel permanently blocked with "A race is currently in
+            # progress." and no way to recover but a restart.
+            try:
+                result = await self._race_engine.resolve_race(channel)
+            finally:
+                if self._spectacle_manager:
+                    self._spectacle_manager.release(channel)
             if not result:
                 return
             lines, _bets, per_user_pm = result
@@ -410,9 +421,12 @@ class Scheduler:
                     if not trivia or trivia.resolved:
                         continue
                     if now > trivia.answer_deadline:
-                        result = await self._trivia_engine.resolve_trivia(channel)
-                        if self._spectacle_manager:
-                            self._spectacle_manager.release(channel)
+                        # Release the spectacle lock even if resolution raises.
+                        try:
+                            result = await self._trivia_engine.resolve_trivia(channel)
+                        finally:
+                            if self._spectacle_manager:
+                                self._spectacle_manager.release(channel)
                         if result:
                             # Offload paced announcements so a chatty channel
                             # can't delay resolving others past their deadline.

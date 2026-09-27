@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 import asyncpg
 
@@ -1291,6 +1291,7 @@ class EconomyDatabasePg:
                 INSERT INTO race_results
                     (race_id, channel, winner_color, total_pool, participants)
                 VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (race_id) DO NOTHING
                 """,
                 race_id,
                 channel,
@@ -1298,6 +1299,56 @@ class EconomyDatabasePg:
                 total_pool,
                 participants,
             )
+
+    async def save_race_resolution(
+        self,
+        race_id: str,
+        channel: str,
+        winner_color: str,
+        total_pool: int,
+        participants: int,
+        bets: Sequence[tuple[str, str, str, int, int, str]],
+    ) -> None:
+        """Persist a race result and all of its bets atomically.
+
+        ``race_bets.race_id`` references ``race_results.race_id``, so the parent
+        row must be inserted before any bet row. Doing both in one transaction
+        also means a failure part-way through cannot leave a result with a
+        partial set of bets (or the reverse).
+
+        Args:
+            bets: sequence of ``(username, color, amount, payout, phase)``
+                tuples — the channel is the same for every bet in a race.
+        """
+        async with self._pool.acquire() as con, con.transaction():
+            await con.execute(
+                """
+                INSERT INTO race_results
+                    (race_id, channel, winner_color, total_pool, participants)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (race_id) DO NOTHING
+                """,
+                race_id,
+                channel,
+                winner_color,
+                total_pool,
+                participants,
+            )
+            for username, color, amount, payout, phase in bets:
+                await con.execute(
+                    """
+                    INSERT INTO race_bets
+                        (race_id, username, channel, color, amount, payout, phase)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    """,
+                    race_id,
+                    username,
+                    channel,
+                    color,
+                    amount,
+                    payout,
+                    phase,
+                )
 
     async def save_race_bet(
         self,
